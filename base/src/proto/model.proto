@@ -1,0 +1,53 @@
+syntax = "proto3";
+
+package base.model;
+
+message Point2 {
+  float x = 1;
+  float y = 2;
+}
+
+message Point3 {
+  float x = 1;
+  float y = 2;
+  float z = 3;
+}
+
+message RgbColor {
+  float r = 1;
+  float g = 2;
+  float b = 3;
+}
+
+message Image {
+  enum Type {
+    NONE = 0;
+    PNG = 1;
+  }
+
+  Type type = 1;
+  uint32 width = 2;
+  uint32 height = 3;
+  bytes data = 4;
+}
+
+message Vertex {
+  Point3 geometry = 1;
+  Point2 texture = 2;
+}
+
+message Face {
+  uint32 a = 1;
+  uint32 b = 2;
+  uint32 c = 3;
+}
+
+message Element {
+  repeated Vertex verticies = 1;
+  repeated Face mesh = 2;
+  Image texture = 3;
+}
+
+message Model {
+  repeated Element elements = 1;
+}

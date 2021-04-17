@@ -1,0 +1,10 @@
+[package]
+name = "composer"
+description = "Fitsme model composer"
+version = "0.1.0"
+authors = ["Simon Prykhodko <semion.ababo@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+base = { path = "../base" }
+clap = "3.0.0-beta.2"

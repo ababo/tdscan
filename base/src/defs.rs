@@ -1,6 +1,8 @@
 #[derive(Debug)]
 pub enum Error {
     IoError(std::io::Error),
+    MalformedData(String),
+    ParseFloatError(String),
 }
 
 impl From<std::io::Error> for Error {

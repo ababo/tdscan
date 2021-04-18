@@ -14,7 +14,7 @@ message Point3 {
 }
 
 message Vertex {
-  Point3 texture = 1;
+  Point2 texture = 1;
 }
 
 message Face {
@@ -56,7 +56,6 @@ message State {
 }
 
 message Model {
-  uint32 version = 1;
-  repeated Element elements = 2;
-  repeated State states = 3;
+  repeated Element elements = 1;
+  repeated State states = 2;
 }

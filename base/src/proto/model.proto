@@ -13,16 +13,6 @@ message Point3 {
   float z = 3;
 }
 
-message Vertex {
-  Point2 texture = 1;
-}
-
-message Face {
-  uint32 a = 1;
-  uint32 b = 2;
-  uint32 c = 3;
-}
-
 message Image {
   enum Type {
     NONE = 0;
@@ -31,24 +21,29 @@ message Image {
   }
 
   Type type = 1;
-  uint32 width = 2;
-  uint32 height = 3;
-  bytes data = 4;
+  bytes data = 2;
+  uint32 width = 3;
+  uint32 height = 4;
+}
+
+message Face {
+  uint32 vertex1 = 1;
+  uint32 vertex2 = 2;
+  uint32 vertex3 = 3;
+  uint32 texture1 = 4;
+  uint32 texture2 = 5;
+  uint32 texture3 = 6;
 }
 
 message Element {
-  repeated Vertex vertices = 1;
-  repeated Face faces = 2;
-  Image texture = 3;
-}
-
-message VertexState {
-  Point3 location = 1;
-  Point3 normal = 2;
+  Image texture = 1;
+  repeated Point2 texture_points = 2;
+  repeated Face faces = 3;
 }
 
 message ElementState {
-  repeated VertexState vertices = 1;
+  repeated Point3 vertices = 1;
+  repeated Point3 normals = 2;
 }
 
 message State {

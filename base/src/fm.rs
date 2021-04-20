@@ -1,15 +1,18 @@
 use std::io::{Read, Write};
+use std::str::FromStr;
+use structopt::StructOpt;
 
 use brotli;
 use prost::Message;
 
 use crate::defs::Result;
-use std::str::FromStr;
-
 use crate::model::Model;
 
 const VERSION: u32 = 1;
 const MAGIC: u32 = 0x01C3ADF8;
+
+const DEFAULT_COMPRESSION: &'static str = "brotli";
+const DEFAULT_BROTLI_QUALITY: &'static str = "6";
 
 #[derive(Clone, Copy)]
 pub enum Compression {
@@ -29,16 +32,27 @@ impl FromStr for Compression {
     }
 }
 
+#[derive(StructOpt)]
 pub struct Params {
+    #[structopt(
+        name = "fm-compression",
+        default_value = DEFAULT_COMPRESSION,
+        long
+    )]
     pub compression: Compression,
+    #[structopt(
+        name = "fm-brotli-quality",
+        default_value = DEFAULT_BROTLI_QUALITY,
+        long
+    )]
     pub brotli_quality: u32,
 }
 
 impl Default for Params {
     fn default() -> Self {
         Self {
-            compression: Compression::Brotli,
-            brotli_quality: 11,
+            compression: Compression::from_str(DEFAULT_COMPRESSION).unwrap(),
+            brotli_quality: DEFAULT_BROTLI_QUALITY.parse::<u32>().unwrap(),
         }
     }
 }
@@ -60,13 +74,13 @@ pub fn encode<W: Write>(
             let _ = writer.write(&buf)?;
         }
         Compression::Brotli => {
-            let mut bwriter = brotli::CompressorWriter::new(
+            let mut compressor = brotli::CompressorWriter::new(
                 writer,
                 0,
                 params.brotli_quality,
                 0,
             );
-            let _ = bwriter.write(&buf)?;
+            let _ = compressor.write(&buf)?;
         }
     }
 

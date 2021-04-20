@@ -1,22 +1,21 @@
 mod import_obj;
 
-use clap::{AppSettings, Clap};
+use structopt::StructOpt;
 
-#[derive(Clap)]
-#[clap(about = "Fitsme model composer")]
-#[clap(setting = AppSettings::ColoredHelp)]
+#[derive(StructOpt)]
+#[structopt(about = "Fitsme model composer")]
 struct Opts {
-    #[clap(subcommand)]
+    #[structopt(subcommand)]
     command: Command,
 }
 
-#[derive(Clap)]
+#[derive(StructOpt)]
 enum Command {
     ImportObj(import_obj::ImportObjParams),
 }
 
 fn main() {
-    let opts: Opts = Opts::parse();
+    let opts: Opts = Opts::from_args();
 
     let res = match opts.command {
         Command::ImportObj(params) => import_obj::import_obj(&params),

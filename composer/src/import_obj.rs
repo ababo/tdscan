@@ -1,39 +1,33 @@
 use std::io::{BufRead, BufReader};
 
-use clap::Clap;
+use structopt::StructOpt;
 
 use base::defs::{Error, Result};
 use base::fm;
 use base::model;
 use base::util::fs;
 
-#[derive(Clap)]
-#[clap(about = "Import data from Wavefront .obj file")]
+const MAX_NUM_FACE_VERTICES: usize = 10;
+
+#[derive(StructOpt)]
+#[structopt(about = "Import data from Wavefront .obj file")]
 pub struct ImportObjParams {
-    #[clap(about = "Input .obj filename (STDIN if omitted)")]
+    #[structopt(about = "Input .obj filename (STDIN if omitted)")]
     in_filename: Option<String>,
-    #[clap(about = "Output .fm filename (STDOUT if omitted)", long, short)]
+    #[structopt(
+        about = "Output .fm filename (STDOUT if omitted)",
+        long,
+        short
+    )]
     out_filename: Option<String>,
-    #[clap(
-        about = "Type of output data compression",
-        default_value = "brotli",
-        long
-    )]
-    compression: fm::Compression,
-    #[clap(
-        about = "Quality for Brotli compression",
-        default_value = "11",
-        long
-    )]
-    brotli_quality: u32,
+    #[structopt(flatten)]
+    fm_params: fm::Params,
 }
 
 #[derive(Default)]
 struct ImportState {
     line: usize,
-    num_vs: usize,
-    num_vns: usize,
-    num_vts: usize,
+    normals: Vec<model::Point3>,
 }
 
 pub fn import_obj(params: &ImportObjParams) -> Result<()> {
@@ -60,6 +54,7 @@ pub fn import_obj(params: &ImportObjParams) -> Result<()> {
             let parts: Vec<&str> = line.split_whitespace().collect();
             if parts.len() > 0 {
                 match parts[0] {
+                    "f" => import_f(&mut model, &mut import, &parts)?,
                     "v" => import_v(&mut model, &mut import, &parts)?,
                     "vn" => import_vn(&mut model, &mut import, &parts)?,
                     "vt" => import_vt(&mut model, &mut import, &parts)?,
@@ -70,11 +65,67 @@ pub fn import_obj(params: &ImportObjParams) -> Result<()> {
     }
 
     let mut writer = fs::open_file_or_stdout(&params.out_filename.as_deref())?;
-    let fm_params = fm::Params {
-        compression: params.compression,
-        brotli_quality: params.brotli_quality,
-    };
-    fm::encode(&model, &fm_params, &mut writer)
+    fm::encode(&model, &params.fm_params, &mut writer)
+}
+
+fn import_f(
+    model: &mut model::Model,
+    import: &mut ImportState,
+    parts: &Vec<&str>,
+) -> Result<()> {
+    if parts.len() < 4 {
+        return Err(Error::MalformedData(format!(
+            "bad number of vertices in f-statement at line {}",
+            import.line
+        )));
+    }
+
+    let mut face_vertices = [(0, 0, 0); MAX_NUM_FACE_VERTICES];
+
+    let whats = [
+        "location number of f-statement",
+        "texture number of f-statement",
+        "normal number of f-statement",
+    ];
+
+    for (i, part) in parts[1..].iter().enumerate() {
+        let mut nums: [u32; 3] = [0, 0, 0];
+        for (j, istr) in part.split("/").enumerate() {
+            if j > 2 {
+                return Err(Error::MalformedData(format!(
+                    "bad number of numbers of f-statement vertex {} at line {}",
+                    i + 1,
+                    import.line
+                )));
+            }
+            if j != 1 || !istr.is_empty() {
+                nums[j] = parse_num(whats[j], import.line, i + 1, istr)?;
+            }
+        }
+
+        face_vertices[i] = (nums[0], nums[1], nums[2]);
+    }
+
+    let len = parts.len() - 1;
+    for (i, (l, t, n)) in face_vertices[..len - 2].iter().cloned().enumerate() {
+        let (l2, t2, n2) = face_vertices[i + 1];
+        let (l3, t3, n3) = face_vertices[len - 1];
+
+        add_normal(model, import, l, n)?;
+        add_normal(model, import, l2, n2)?;
+        add_normal(model, import, l3, n3)?;
+
+        model.elements[0].faces.push(model::Face {
+            vertex1: l,
+            vertex2: l2,
+            vertex3: l3,
+            texture1: t,
+            texture2: t2,
+            texture3: t3,
+        })
+    }
+
+    Ok(())
 }
 
 fn import_v(
@@ -89,19 +140,19 @@ fn import_v(
         )));
     }
 
-    let x = parse_float("x-coordinate of v-statement", import.line, parts[1])?;
-    let y = parse_float("y-coordinate of v-statement", import.line, parts[2])?;
-    let z = parse_float("z-coordinate of v-statement", import.line, parts[3])?;
+    let x = parse_coord("x-coordinate of v-statement", import.line, parts[1])?;
+    let y = parse_coord("y-coordinate of v-statement", import.line, parts[2])?;
+    let z = parse_coord("z-coordinate of v-statement", import.line, parts[3])?;
 
-    let vertex = get_vertex_state(model, import.num_vs);
-    vertex.location = Some(model::Point3 { x, y, z });
-    import.num_vs += 1;
+    model.states[0].elements[0]
+        .vertices
+        .push(model::Point3 { x, y, z });
 
     Ok(())
 }
 
 fn import_vn(
-    model: &mut model::Model,
+    _model: &mut model::Model,
     import: &mut ImportState,
     parts: &Vec<&str>,
 ) -> Result<()> {
@@ -112,13 +163,11 @@ fn import_vn(
         )));
     }
 
-    let x = parse_float("x-coordinate of vn-statement", import.line, parts[1])?;
-    let y = parse_float("y-coordinate of vn-statement", import.line, parts[2])?;
-    let z = parse_float("z-coordinate of vn-statement", import.line, parts[3])?;
+    let x = parse_coord("x-coordinate of vn-statement", import.line, parts[1])?;
+    let y = parse_coord("y-coordinate of vn-statement", import.line, parts[2])?;
+    let z = parse_coord("z-coordinate of vn-statement", import.line, parts[3])?;
 
-    let vertex = get_vertex_state(model, import.num_vns);
-    vertex.normal = Some(model::Point3 { x, y, z });
-    import.num_vns += 1;
+    import.normals.push(model::Point3 { x, y, z });
 
     Ok(())
 }
@@ -135,54 +184,79 @@ fn import_vt(
         )));
     }
 
-    let x = parse_float("x-coordinate of vt-statement", import.line, parts[1])?;
-    let y = parse_float("y-coordinate of vt-statement", import.line, parts[2])?;
+    let x = parse_coord("x-coordinate of vt-statement", import.line, parts[1])?;
+    let y = parse_coord("y-coordinate of vt-statement", import.line, parts[2])?;
 
-    let vertex = get_vertex(model, import.num_vts);
-    vertex.texture = Some(model::Point2 { x, y });
-    import.num_vts += 1;
+    model.elements[0]
+        .texture_points
+        .push(model::Point2 { x, y });
 
     Ok(())
 }
 
-fn get_vertex_state<'a>(
-    model: &'a mut model::Model,
-    index: usize,
-) -> &'a mut model::VertexState {
-    let vertices = &mut model.states[0].elements[0].vertices;
-    if vertices.len() <= index {
-        vertices.resize(
-            index + 1,
-            model::VertexState {
-                ..Default::default()
-            },
-        );
-    }
-    &mut vertices[index]
-}
-
-fn get_vertex<'a>(
-    model: &'a mut model::Model,
-    index: usize,
-) -> &'a mut model::Vertex {
-    let vertices = &mut model.elements[0].vertices;
-    if vertices.len() <= index {
-        vertices.resize(
-            index + 1,
-            model::Vertex {
-                ..Default::default()
-            },
-        );
-    }
-    &mut vertices[index]
-}
-
-fn parse_float(what: &str, line: usize, str: &str) -> Result<f32> {
+fn parse_coord(what: &str, line: usize, str: &str) -> Result<f32> {
     match str.parse::<f32>() {
         Ok(val) => Ok(val),
-        Err(_) => Err(Error::ParseFloatError(format!(
+        Err(_) => Err(Error::MalformedData(format!(
             "failed to parse {} at line {}",
             what, line
         ))),
     }
+}
+
+fn parse_num(what: &str, line: usize, vertex: usize, str: &str) -> Result<u32> {
+    match str.parse::<u32>() {
+        Ok(val) => {
+            if val > 0 {
+                Ok(val)
+            } else {
+                Err(Error::MalformedData(format!(
+                    "zero {} vertex {} at line {}",
+                    what, vertex, line
+                )))
+            }
+        }
+        Err(_) => Err(Error::MalformedData(format!(
+            "failed to parse {} vertex {} at line {}",
+            what, vertex, line
+        ))),
+    }
+}
+
+fn add_normal(
+    model: &mut model::Model,
+    import: &mut ImportState,
+    vertex: u32,
+    normal: u32,
+) -> Result<()> {
+    let vi = (vertex - 1) as usize;
+    if model.states[0].elements[0].vertices.len() <= vi {
+        return Err(Error::MalformedData(format!(
+            "mention of unknown vertex {} at line {}",
+            vertex, import.line
+        )));
+    }
+
+    const ZERO: model::Point3 = model::Point3 {
+        x: 0.0,
+        y: 0.0,
+        z: 0.0,
+    };
+
+    let normals = &mut model.states[0].elements[0].normals;
+    if normals.len() <= vi {
+        normals.resize(vi + 1, ZERO);
+    }
+
+    let ni = (normal - 1) as usize;
+    if normals[vi] == ZERO {
+        normals[vi] = import.normals[ni].clone();
+    } else if normals[vi] != import.normals[ni] {
+        return Err(Error::MalformedData(format!(
+            "more than one normal for vertex {} at line {}",
+            vertex, import.line
+        )));
+    }
+
+    Ok(())
 }

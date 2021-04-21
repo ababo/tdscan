@@ -2,7 +2,7 @@ use std::io::{BufRead, BufReader};
 
 use structopt::StructOpt;
 
-use base::defs::{Error, Result};
+use base::defs::{Error, ErrorKind::*, Result};
 use base::fm;
 use base::model;
 use base::util::fs;
@@ -74,10 +74,13 @@ fn import_f(
     parts: &Vec<&str>,
 ) -> Result<()> {
     if parts.len() < 4 {
-        return Err(Error::MalformedData(format!(
-            "bad number of vertices in f-statement at line {}",
-            import.line
-        )));
+        return Err(Error::new(
+            MalformedData,
+            format!(
+                "bad number of vertices in f-statement at line {}",
+                import.line
+            ),
+        ));
     }
 
     let mut face_vertices = [(0, 0, 0); MAX_NUM_FACE_VERTICES];
@@ -92,11 +95,14 @@ fn import_f(
         let mut nums: [u32; 3] = [0, 0, 0];
         for (j, istr) in part.split("/").enumerate() {
             if j > 2 {
-                return Err(Error::MalformedData(format!(
+                return Err(Error::new(
+                    MalformedData,
+                    format!(
                     "bad number of numbers of f-statement vertex {} at line {}",
                     i + 1,
                     import.line
-                )));
+                ),
+                ));
             }
             if j != 1 || !istr.is_empty() {
                 nums[j] = parse_num(whats[j], import.line, i + 1, istr)?;
@@ -134,10 +140,10 @@ fn import_v(
     parts: &Vec<&str>,
 ) -> Result<()> {
     if parts.len() < 4 || parts.len() > 5 {
-        return Err(Error::MalformedData(format!(
-            "malformed v-statement at line {}",
-            import.line
-        )));
+        return Err(Error::new(
+            MalformedData,
+            format!("malformed v-statement at line {}", import.line),
+        ));
     }
 
     let x = parse_coord("x-coordinate of v-statement", import.line, parts[1])?;
@@ -157,10 +163,10 @@ fn import_vn(
     parts: &Vec<&str>,
 ) -> Result<()> {
     if parts.len() != 4 {
-        return Err(Error::MalformedData(format!(
-            "malformed vn-statement at line {}",
-            import.line
-        )));
+        return Err(Error::new(
+            MalformedData,
+            format!("malformed vn-statement at line {}", import.line),
+        ));
     }
 
     let x = parse_coord("x-coordinate of vn-statement", import.line, parts[1])?;
@@ -178,10 +184,10 @@ fn import_vt(
     parts: &Vec<&str>,
 ) -> Result<()> {
     if parts.len() < 3 || parts.len() > 4 {
-        return Err(Error::MalformedData(format!(
-            "malformed vt-statement at line {}",
-            import.line
-        )));
+        return Err(Error::new(
+            MalformedData,
+            format!("malformed vt-statement at line {}", import.line),
+        ));
     }
 
     let x = parse_coord("x-coordinate of vt-statement", import.line, parts[1])?;
@@ -197,10 +203,10 @@ fn import_vt(
 fn parse_coord(what: &str, line: usize, str: &str) -> Result<f32> {
     match str.parse::<f32>() {
         Ok(val) => Ok(val),
-        Err(_) => Err(Error::MalformedData(format!(
-            "failed to parse {} at line {}",
-            what, line
-        ))),
+        Err(_) => Err(Error::new(
+            MalformedData,
+            format!("failed to parse {} at line {}", what, line),
+        )),
     }
 }
 
@@ -210,16 +216,19 @@ fn parse_num(what: &str, line: usize, vertex: usize, str: &str) -> Result<u32> {
             if val > 0 {
                 Ok(val)
             } else {
-                Err(Error::MalformedData(format!(
-                    "zero {} vertex {} at line {}",
-                    what, vertex, line
-                )))
+                Err(Error::new(
+                    MalformedData,
+                    format!("zero {} vertex {} at line {}", what, vertex, line),
+                ))
             }
         }
-        Err(_) => Err(Error::MalformedData(format!(
-            "failed to parse {} vertex {} at line {}",
-            what, vertex, line
-        ))),
+        Err(_) => Err(Error::new(
+            MalformedData,
+            format!(
+                "failed to parse {} vertex {} at line {}",
+                what, vertex, line
+            ),
+        )),
     }
 }
 
@@ -231,10 +240,13 @@ fn add_normal(
 ) -> Result<()> {
     let vi = (vertex - 1) as usize;
     if model.states[0].elements[0].vertices.len() <= vi {
-        return Err(Error::MalformedData(format!(
-            "mention of unknown vertex {} at line {}",
-            vertex, import.line
-        )));
+        return Err(Error::new(
+            MalformedData,
+            format!(
+                "mention of unknown vertex {} at line {}",
+                vertex, import.line
+            ),
+        ));
     }
 
     const ZERO: model::Point3 = model::Point3 {
@@ -252,10 +264,13 @@ fn add_normal(
     if normals[vi] == ZERO {
         normals[vi] = import.normals[ni].clone();
     } else if normals[vi] != import.normals[ni] {
-        return Err(Error::MalformedData(format!(
-            "more than one normal for vertex {} at line {}",
-            vertex, import.line
-        )));
+        return Err(Error::new(
+            MalformedData,
+            format!(
+                "more than one normal for vertex {} at line {}",
+                vertex, import.line
+            ),
+        ));
     }
 
     Ok(())

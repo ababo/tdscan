@@ -5,7 +5,7 @@ use structopt::StructOpt;
 use brotli;
 use prost::Message;
 
-use crate::defs::Result;
+use crate::defs::{IntoResult, Result};
 use crate::model::Model;
 
 const VERSION: u32 = 1;
@@ -62,16 +62,24 @@ pub fn encode<W: Write>(
     params: &Params,
     writer: &mut W,
 ) -> Result<()> {
-    let _ = writer.write(&MAGIC.to_le_bytes())?;
-    let _ = writer.write(&VERSION.to_le_bytes())?;
-    let _ = writer.write(&(params.compression as i32).to_le_bytes())?;
+    let _ = writer
+        .write(&MAGIC.to_le_bytes())
+        .res("failed to write .fm magic".to_string())?;
+    let _ = writer
+        .write(&VERSION.to_le_bytes())
+        .res("failed to write .fm version".to_string())?;
+    let _ = writer
+        .write(&(params.compression as i32).to_le_bytes())
+        .res("failed to write .fm compression".to_string())?;
 
     let mut buf = Vec::with_capacity(model.encoded_len());
     model.encode(&mut buf).unwrap();
 
     match params.compression {
         Compression::None => {
-            let _ = writer.write(&buf)?;
+            let _ = writer
+                .write(&buf)
+                .res("failed to write .fm model".to_string())?;
         }
         Compression::Brotli => {
             let mut compressor = brotli::CompressorWriter::new(
@@ -80,7 +88,9 @@ pub fn encode<W: Write>(
                 params.brotli_quality,
                 0,
             );
-            let _ = compressor.write(&buf)?;
+            let _ = compressor.write(&buf).res(
+                "failed to write Brotli-compressed .fm model".to_string(),
+            )?;
         }
     }
 

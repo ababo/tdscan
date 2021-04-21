@@ -22,7 +22,7 @@ fn main() {
     };
 
     if let Err(err) = res {
-        eprintln!("error: {:?}", err);
+        eprintln!("error: {}", err);
         std::process::exit(1);
     }
 }

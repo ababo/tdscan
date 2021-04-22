@@ -1,15 +1,17 @@
-pub type InnerError = Box<dyn std::error::Error>;
+use std::error::Error as StdError;
 
+#[derive(Debug)]
 pub enum ErrorKind {
     IoError,
     MalformedData,
     FeatureNotSupported,
 }
 
+#[derive(Debug)]
 pub struct Error {
     pub kind: ErrorKind,
     pub description: String,
-    pub inner_error: Option<InnerError>,
+    pub source: Option<Box<dyn StdError>>,
 }
 
 impl Error {
@@ -17,29 +19,35 @@ impl Error {
         Error {
             kind,
             description,
-            inner_error: None,
+            source: None,
         }
     }
 
-    pub fn with_error(
+    pub fn with_source<E: std::error::Error + 'static>(
         kind: ErrorKind,
         description: String,
-        inner_error: InnerError,
+        source: E,
     ) -> Error {
         Error {
             kind,
             description,
-            inner_error: Some(inner_error),
+            source: Some(Box::new(source)),
         }
     }
 }
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match &self.inner_error {
+        match &self.source {
             Some(err) => write!(f, "{}: {}", self.description, err),
             None => write!(f, "{}", self.description),
         }
+    }
+}
+
+impl StdError for Error {
+    fn source(&self) -> Option<&(dyn StdError + 'static)> {
+        self.source.as_deref()
     }
 }
 
@@ -51,8 +59,6 @@ pub trait IntoResult<T> {
 
 impl<T> IntoResult<T> for std::result::Result<T, std::io::Error> {
     fn res(self, description: String) -> Result<T> {
-        self.map_err(|e| {
-            Error::with_error(ErrorKind::IoError, description, Box::new(e))
-        })
+        self.map_err(|e| Error::with_source(ErrorKind::IoError, description, e))
     }
 }

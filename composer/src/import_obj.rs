@@ -1,11 +1,12 @@
-use std::io::{BufRead, BufReader};
+use std::io::{stdin, stdout, BufRead, BufReader, Read, Write};
+use std::path::PathBuf;
 
 use structopt::StructOpt;
 
 use base::defs::{Error, ErrorKind::*, Result};
 use base::fm;
 use base::model;
-use base::util::fs;
+use base::util::fs::{create_file, open_file};
 
 const MAX_NUM_FACE_VERTICES: usize = 10;
 
@@ -13,13 +14,13 @@ const MAX_NUM_FACE_VERTICES: usize = 10;
 #[structopt(about = "Import data from Wavefront .obj file")]
 pub struct ImportObjParams {
     #[structopt(about = "Input .obj filename (STDIN if omitted)")]
-    in_filename: Option<String>,
+    obj_filename: Option<PathBuf>,
     #[structopt(
         about = "Output .fm filename (STDOUT if omitted)",
         long,
-        short
+        short = "o"
     )]
-    out_filename: Option<String>,
+    fm_filename: Option<PathBuf>,
     #[structopt(flatten)]
     fm_params: fm::Params,
 }
@@ -46,8 +47,13 @@ pub fn import_obj(params: &ImportObjParams) -> Result<()> {
         ..Default::default()
     };
 
-    let read = fs::open_file_or_stdin(&params.in_filename.as_deref())?;
-    for line_res in BufReader::new(read).lines() {
+    let reader = if let Some(filename) = &params.obj_filename {
+        open_file(filename)
+    } else {
+        Ok(Box::new(stdin()) as Box<dyn Read>)
+    }?;
+
+    for line_res in BufReader::new(reader).lines() {
         if let Ok(line) = line_res {
             import.line += 1;
 
@@ -64,7 +70,12 @@ pub fn import_obj(params: &ImportObjParams) -> Result<()> {
         }
     }
 
-    let mut writer = fs::open_file_or_stdout(&params.out_filename.as_deref())?;
+    let mut writer = if let Some(filename) = &params.fm_filename {
+        create_file(filename)
+    } else {
+        Ok(Box::new(stdout()) as Box<dyn Write>)
+    }?;
+
     fm::encode(&model, &params.fm_params, &mut writer)
 }
 

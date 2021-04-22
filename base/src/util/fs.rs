@@ -1,4 +1,4 @@
-use std::fs::File;
+use std::fs::{read, File};
 use std::io::{Read, Write};
 use std::path::Path;
 
@@ -26,4 +26,14 @@ pub fn create_file<P: AsRef<Path>>(path: P) -> Result<Box<dyn Write>> {
         },
     )?);
     Ok(writer)
+}
+
+pub fn read_file<P: AsRef<Path>>(path: P) -> Result<Vec<u8>> {
+    let path = path.as_ref();
+    let data = read(path).res(if let Some(filename) = path.to_str() {
+        format!("failed to read file '{}'", filename)
+    } else {
+        format!("failed to read file")
+    })?;
+    Ok(data)
 }

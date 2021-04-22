@@ -22,8 +22,6 @@ message Image {
 
   Type type = 1;
   bytes data = 2;
-  uint32 width = 3;
-  uint32 height = 4;
 }
 
 message Face {

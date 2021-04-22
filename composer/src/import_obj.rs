@@ -6,7 +6,7 @@ use structopt::StructOpt;
 use base::defs::{Error, ErrorKind::*, Result};
 use base::fm;
 use base::model;
-use base::util::fs::{create_file, open_file};
+use base::util::fs::{create_file, open_file, read_file};
 
 const MAX_NUM_FACE_VERTICES: usize = 10;
 
@@ -15,6 +15,8 @@ const MAX_NUM_FACE_VERTICES: usize = 10;
 pub struct ImportObjParams {
     #[structopt(about = "Input .obj filename (STDIN if omitted)")]
     obj_filename: Option<PathBuf>,
+    #[structopt(about = "Input .mtl filename", long)]
+    mtl_filename: Option<PathBuf>,
     #[structopt(
         about = "Output .fm filename (STDOUT if omitted)",
         long,
@@ -29,6 +31,7 @@ pub struct ImportObjParams {
 struct ImportState {
     line: usize,
     normals: Vec<model::Point3>,
+    mtl_dir: PathBuf,
 }
 
 pub fn import_obj(params: &ImportObjParams) -> Result<()> {
@@ -69,6 +72,8 @@ pub fn import_obj(params: &ImportObjParams) -> Result<()> {
             }
         }
     }
+
+    import_mtl(params, &mut model, &mut import)?;
 
     let mut writer = if let Some(filename) = &params.fm_filename {
         create_file(filename)
@@ -283,6 +288,92 @@ fn add_normal(
             ),
         ));
     }
+
+    Ok(())
+}
+
+fn import_mtl(
+    params: &ImportObjParams,
+    model: &mut model::Model,
+    import: &mut ImportState,
+) -> Result<()> {
+    let path = if let Some(filename) = &params.mtl_filename {
+        filename.clone()
+    } else if let Some(filename) = &params.obj_filename {
+        let mut filename = filename.clone();
+        filename.set_extension("mtl");
+        if filename.exists() {
+            filename
+        } else {
+            return Ok(());
+        }
+    } else {
+        return Ok(());
+    };
+
+    let reader = open_file(&path)?;
+
+    import.line = 0;
+    import.mtl_dir = path.parent().unwrap().to_path_buf();
+
+    for line_res in BufReader::new(reader).lines() {
+        if let Ok(line) = line_res {
+            import.line += 1;
+
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if !parts.is_empty() {
+                match parts[0] {
+                    "map_Ka" => import_map_ka(model, import, &parts)?,
+                    _ => (),
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn import_map_ka(
+    model: &mut model::Model,
+    import: &ImportState,
+    parts: &Vec<&str>,
+) -> Result<()> {
+    if parts.len() != 2 {
+        return Err(Error::new(
+            MalformedData,
+            format!("malformed map_Ka-statement at line {}", import.line),
+        ));
+    }
+
+    let path = import.mtl_dir.join(parts[1]);
+
+    let ext = path
+        .extension()
+        .unwrap_or_default()
+        .to_str()
+        .unwrap()
+        .to_lowercase();
+
+    let image_type = match ext.as_str() {
+        "png" => model::image::Type::Png,
+        "jpg" => model::image::Type::Jpeg,
+        _ => {
+            return Err(Error::new(
+                FeatureNotSupported,
+                format!(
+                    "unknown type of file '{}' in map_Ka-statement at line {}",
+                    path.to_str().unwrap(),
+                    import.line
+                ),
+            ));
+        }
+    };
+
+    let texture = model::Image {
+        r#type: image_type as i32,
+        data: read_file(path)?,
+    };
+    model.elements[0].texture = Some(texture);
 
     Ok(())
 }

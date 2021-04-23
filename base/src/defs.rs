@@ -62,3 +62,11 @@ impl<T> IntoResult<T> for std::result::Result<T, std::io::Error> {
         self.map_err(|e| Error::with_source(ErrorKind::IoError, description, e))
     }
 }
+
+impl<T> IntoResult<T> for std::result::Result<T, prost::DecodeError> {
+    fn res(self, description: String) -> Result<T> {
+        self.map_err(|e| {
+            Error::with_source(ErrorKind::MalformedData, description, e)
+        })
+    }
+}

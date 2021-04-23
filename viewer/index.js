@@ -8,7 +8,8 @@ document.addEventListener('DOMContentLoaded', async event => {
     throw 'failed to fetch a model';
   }
 
-  let view = viewer.Viewer.fromModelBuffer(model.arrayBuffer());
+  let buf = await model.arrayBuffer();
+  let view = viewer.Viewer.fromModelBuffer(buf);
 
   let doc = document.documentElement;
   let canvas = document.getElementById('canvas');

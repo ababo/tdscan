@@ -5,11 +5,11 @@ use structopt::StructOpt;
 use brotli;
 use prost::Message;
 
-use crate::defs::{IntoResult, Result};
+use crate::defs::{Error, ErrorKind::*, IntoResult, Result};
 use crate::model::Model;
 
-const VERSION: u32 = 1;
 const MAGIC: u32 = 0x01C3ADF8;
+const VERSION: u32 = 1;
 
 const DEFAULT_COMPRESSION: &'static str = "brotli";
 const DEFAULT_BROTLI_QUALITY: &'static str = "6";
@@ -60,7 +60,7 @@ impl Default for Params {
 pub fn encode<W: Write>(
     model: &Model,
     params: &Params,
-    writer: &mut W,
+    mut writer: W,
 ) -> Result<()> {
     let _ = writer
         .write(&MAGIC.to_le_bytes())
@@ -82,13 +82,13 @@ pub fn encode<W: Write>(
                 .res("failed to write .fm model".to_string())?;
         }
         Compression::Brotli => {
-            let mut compressor = brotli::CompressorWriter::new(
+            let mut writer = brotli::CompressorWriter::new(
                 writer,
                 0,
                 params.brotli_quality,
                 0,
             );
-            let _ = compressor.write(&buf).res(
+            let _ = writer.write(&buf).res(
                 "failed to write Brotli-compressed .fm model".to_string(),
             )?;
         }
@@ -97,8 +97,57 @@ pub fn encode<W: Write>(
     Ok(())
 }
 
-pub fn decode<R: Read>(_reader: &mut R) -> Result<Model> {
-    Ok(Model {
-        ..Default::default()
-    })
+pub fn decode<R: Read>(mut reader: R) -> Result<Model> {
+    let mut buf = [0; 4];
+
+    reader
+        .read(&mut buf)
+        .res("failed to read .fm magic".to_string())?;
+    let val = u32::from_le_bytes(buf);
+    if val != MAGIC {
+        return Err(Error::new(
+            MalformedData,
+            format!("bad .fm magic '{:#X}'", val),
+        ));
+    }
+
+    reader
+        .read(&mut buf)
+        .res("failed to read .fm magic".to_string())?;
+    let val = u32::from_le_bytes(buf);
+    if val != VERSION {
+        return Err(Error::new(
+            FeatureNotSupported,
+            format!("unsupported .fm version '{}'", val),
+        ));
+    }
+
+    reader
+        .read(&mut buf)
+        .res("failed to read .fm magic".to_string())?;
+    let val = i32::from_le_bytes(buf);
+
+    const COMPRESSION_NONE: i32 = Compression::None as i32;
+    const COMPRESSION_BROTLI: i32 = Compression::Brotli as i32;
+    let mut buf = vec![];
+
+    match val {
+        COMPRESSION_NONE => {
+            reader
+                .read_to_end(&mut buf)
+                .res("failed to read .fm model".to_string())?;
+        }
+        COMPRESSION_BROTLI => {}
+        _ => {
+            let mut reader = brotli::Decompressor::new(reader, 0);
+            reader.read_to_end(&mut buf).res(
+                "failed to read Brotli-compressed .fm model".to_string(),
+            )?;
+        }
+    }
+
+    let model = Model::decode(buf.as_slice())
+        .res("failed to decode .fm model".to_string())?;
+
+    Ok(model)
 }

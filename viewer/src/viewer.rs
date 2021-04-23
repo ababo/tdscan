@@ -1,6 +1,8 @@
 use wasm_bindgen::prelude::*;
 
 use crate::console_log;
+use crate::err_to_jsvalue;
+use base::fm;
 use base::model;
 
 #[wasm_bindgen]
@@ -10,12 +12,13 @@ pub struct Viewer {}
 impl Viewer {
     #[wasm_bindgen(js_name = fromModelBuffer)]
     pub fn from_model_buffer(
-        _buffer: &js_sys::ArrayBuffer,
+        buffer: &js_sys::ArrayBuffer,
     ) -> Result<Viewer, JsValue> {
         console_log!("Viewer::from_model_buffer");
-        let model = model::Model {
-            ..Default::default()
-        };
+
+        let data = js_sys::Uint8Array::new(buffer).to_vec();
+        let model = fm::decode(data.as_slice()).map_err(err_to_jsvalue)?;
+
         Self::from_model(&model)
     }
 

@@ -6,7 +6,7 @@
 PROJECT_PATH=$(dirname "$0")
 
 cd $PROJECT_PATH/viewer
-wasm-pack build --target web
+wasm-pack build --target web "$@"
 STATUS=$?
 cd ..
 exit $STATUS

@@ -75,13 +75,13 @@ pub fn encode<W: Write>(
 ) -> Result<()> {
     writer
         .write(&MAGIC.to_le_bytes())
-        .res("failed to write .fm magic".to_string())?;
+        .res(|| format!("failed to write .fm magic"))?;
     writer
         .write(&VERSION.to_le_bytes())
-        .res("failed to write .fm version".to_string())?;
+        .res(|| format!("failed to write .fm version"))?;
     writer
         .write(&(params.compression as i32).to_le_bytes())
-        .res("failed to write .fm compression".to_string())?;
+        .res(|| format!("failed to write .fm compression"))?;
 
     let mut enc_writer: Box<dyn Write>;
 
@@ -100,7 +100,7 @@ pub fn encode<W: Write>(
     model.encode(&mut buf).unwrap();
 
     copy(&mut buf.as_slice(), &mut enc_writer)
-        .res("failed to write .fm model".to_string())?;
+        .res(|| format!("failed to write .fm model"))?;
 
     Ok(())
 }
@@ -110,7 +110,7 @@ pub fn decode<R: Read>(mut reader: R) -> Result<Model> {
 
     reader
         .read(&mut buf)
-        .res("failed to read .fm magic".to_string())?;
+        .res(|| format!("failed to read .fm magic"))?;
     let val = u32::from_le_bytes(buf);
     if val != MAGIC {
         return Err(Error::new(
@@ -121,7 +121,7 @@ pub fn decode<R: Read>(mut reader: R) -> Result<Model> {
 
     reader
         .read(&mut buf)
-        .res("failed to read .fm version".to_string())?;
+        .res(|| format!("failed to read .fm version"))?;
     let val = u32::from_le_bytes(buf);
     if val != VERSION {
         return Err(Error::new(
@@ -132,7 +132,7 @@ pub fn decode<R: Read>(mut reader: R) -> Result<Model> {
 
     reader
         .read(&mut buf)
-        .res("failed to read .fm compression".to_string())?;
+        .res(|| format!("failed to read .fm compression"))?;
     let val = i32::from_le_bytes(buf);
 
     const COMPRESSION_NONE: i32 = Compression::None as i32;
@@ -157,10 +157,10 @@ pub fn decode<R: Read>(mut reader: R) -> Result<Model> {
 
     let mut buf = vec![];
     copy(&mut dec_reader, &mut buf)
-        .res("failed to read .fm model".to_string())?;
+        .res(|| format!("failed to read .fm model"))?;
 
     let model = Model::decode(buf.as_slice())
-        .res("failed to decode .fm model".to_string())?;
+        .res(|| format!("failed to decode .fm model"))?;
 
     Ok(model)
 }

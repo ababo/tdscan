@@ -54,19 +54,19 @@ impl StdError for Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 pub trait IntoResult<T> {
-    fn res(self, description: String) -> Result<T>;
+    fn res<F: FnOnce() -> String>(self, desc_fn: F) -> Result<T>;
 }
 
 impl<T> IntoResult<T> for std::result::Result<T, std::io::Error> {
-    fn res(self, description: String) -> Result<T> {
-        self.map_err(|e| Error::with_source(ErrorKind::IoError, description, e))
+    fn res<F: FnOnce() -> String>(self, desc_fn: F) -> Result<T> {
+        self.map_err(|e| Error::with_source(ErrorKind::IoError, desc_fn(), e))
     }
 }
 
 impl<T> IntoResult<T> for std::result::Result<T, prost::DecodeError> {
-    fn res(self, description: String) -> Result<T> {
+    fn res<F: FnOnce() -> String>(self, desc_fn: F) -> Result<T> {
         self.map_err(|e| {
-            Error::with_source(ErrorKind::MalformedData, description, e)
+            Error::with_source(ErrorKind::MalformedData, desc_fn(), e)
         })
     }
 }

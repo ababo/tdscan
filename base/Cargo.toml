@@ -6,7 +6,7 @@ authors = ["Simon Prykhodko <semion.ababo@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-brotli = "3.3.0"
+flate2 = "1.0"
 prost = "0.7"
 structopt = "0.3"
 

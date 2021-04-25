@@ -1,7 +1,6 @@
 use wasm_bindgen::prelude::*;
 
-use crate::console_log;
-use crate::err_to_jsvalue;
+use crate::util::err_jsval;
 use base::fm;
 use base::model;
 
@@ -14,10 +13,10 @@ impl Viewer {
     pub fn from_model_buffer(
         buffer: &js_sys::ArrayBuffer,
     ) -> Result<Viewer, JsValue> {
-        console_log!("Viewer::from_model_buffer");
+        info!("Viewer::from_model_buffer");
 
         let data = js_sys::Uint8Array::new(buffer).to_vec();
-        let model = fm::decode(data.as_slice()).map_err(err_to_jsvalue)?;
+        let model = fm::decode(data.as_slice()).map_err(err_jsval)?;
 
         Self::from_model(&model)
     }
@@ -30,7 +29,7 @@ impl Viewer {
         &mut self,
         _canvas: &web_sys::HtmlCanvasElement,
     ) -> Result<(), JsValue> {
-        console_log!("Viewer::start");
+        info!("Viewer::start");
         Ok(())
     }
 }

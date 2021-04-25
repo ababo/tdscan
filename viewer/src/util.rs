@@ -1,14 +1,7 @@
 use wasm_bindgen::prelude::*;
 
-#[wasm_bindgen]
-extern "C" {
-    // Use `js_namespace` here to bind `console.log(..)` instead of just
-    // `log(..)`
-    #[wasm_bindgen(js_namespace = console)]
-    pub fn log(s: &str);
-}
+use base::defs::Error;
 
-#[macro_export]
-macro_rules! console_log {
-    ($($t:tt)*) => (crate::util::log(&format_args!($($t)*).to_string()))
+pub fn err_jsval(error: Error) -> JsValue {
+    JsValue::from_str(error.to_string().as_str())
 }

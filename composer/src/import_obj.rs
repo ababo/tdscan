@@ -1,4 +1,5 @@
 use std::io::{stdin, stdout, BufRead, BufReader, Read, Write};
+use std::mem::take;
 use std::path::PathBuf;
 
 use structopt::StructOpt;
@@ -17,6 +18,8 @@ pub struct ImportObjParams {
     obj_filename: Option<PathBuf>,
     #[structopt(about = "Input .mtl filename", long)]
     mtl_filename: Option<PathBuf>,
+    #[structopt(about = "Output element ID", long)]
+    element_id: Option<String>,
     #[structopt(
         about = "Output .fm filename (STDOUT if omitted)",
         long,
@@ -24,77 +27,104 @@ pub struct ImportObjParams {
     )]
     fm_filename: Option<PathBuf>,
     #[structopt(flatten)]
-    fm_params: fm::Params,
+    fm_write_params: fm::WriteParams,
 }
 
 #[derive(Default)]
 struct ImportState {
     line: usize,
+    view: model::ElementView,
+    view_state: model::ElementViewState,
     normals: Vec<model::Point3>,
     mtl_dir: PathBuf,
 }
 
 pub fn import_obj(params: &ImportObjParams) -> Result<()> {
-    let mut model = model::Model {
-        elements: vec![model::Element {
-            ..Default::default()
-        }],
-        states: vec![model::State {
-            elements: vec![model::ElementState {
-                ..Default::default()
-            }],
-        }],
-    };
-
-    let mut import = ImportState {
-        ..Default::default()
-    };
-
     let reader = if let Some(filename) = &params.obj_filename {
         open_file(filename)
     } else {
         Ok(Box::new(stdin()) as Box<dyn Read>)
     }?;
 
+    let writer = if let Some(filename) = &params.fm_filename {
+        create_file(filename)
+    } else {
+        Ok(Box::new(stdout()) as Box<dyn Write>)
+    }?;
+
+    let mut writer = fm::Writer::from_writer(writer, &params.fm_write_params)?;
+
+    let id = if let Some(id) = &params.element_id {
+        id.clone()
+    } else if let Some(filename) = &params.obj_filename {
+        filename
+            .file_stem()
+            .unwrap_or_default()
+            .to_str()
+            .unwrap_or_default()
+            .to_string()
+    } else {
+        String::default()
+    };
+
+    let mut state = ImportState {
+        view: model::ElementView {
+            element: id.clone(),
+            ..Default::default()
+        },
+        view_state: model::ElementViewState {
+            element: id.clone(),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+
     for line_res in BufReader::new(reader).lines() {
         if let Ok(line) = line_res {
-            import.line += 1;
+            state.line += 1;
 
             let parts: Vec<&str> = line.split_whitespace().collect();
             if parts.len() > 0 {
                 match parts[0] {
-                    "f" => import_f(&mut model, &mut import, &parts)?,
-                    "v" => import_v(&mut model, &mut import, &parts)?,
-                    "vn" => import_vn(&mut model, &mut import, &parts)?,
-                    "vt" => import_vt(&mut model, &mut import, &parts)?,
+                    "f" => import_f(&mut state, &parts)?,
+                    "v" => import_v(&mut state, &parts)?,
+                    "vn" => import_vn(&mut state, &parts)?,
+                    "vt" => import_vt(&mut state, &parts)?,
                     _ => (),
                 }
             }
         }
     }
 
-    import_mtl(params, &mut model, &mut import)?;
+    import_mtl(params, &mut state)?;
 
-    let mut writer = if let Some(filename) = &params.fm_filename {
-        create_file(filename)
-    } else {
-        Ok(Box::new(stdout()) as Box<dyn Write>)
-    }?;
+    use model::record::Type;
 
-    fm::encode(&model, &params.fm_params, &mut writer)
+    writer.write_record(model::Record {
+        r#type: Some(Type::Element(model::Element {
+            id,
+            composite: String::default(),
+        })),
+    })?;
+
+    writer.write_record(model::Record {
+        r#type: Some(Type::ElementView(take(&mut state.view))),
+    })?;
+
+    writer.write_record(model::Record {
+        r#type: Some(Type::ElementViewState(take(&mut state.view_state))),
+    })?;
+
+    Ok(())
 }
 
-fn import_f(
-    model: &mut model::Model,
-    import: &mut ImportState,
-    parts: &Vec<&str>,
-) -> Result<()> {
+fn import_f(state: &mut ImportState, parts: &Vec<&str>) -> Result<()> {
     if parts.len() < 4 {
         return Err(Error::new(
             MalformedData,
             format!(
                 "bad number of vertices in f-statement at line {}",
-                import.line
+                state.line
             ),
         ));
     }
@@ -116,12 +146,12 @@ fn import_f(
                     format!(
                     "bad number of numbers of f-statement vertex {} at line {}",
                     i + 1,
-                    import.line
+                    state.line
                 ),
                 ));
             }
             if j != 1 || !istr.is_empty() {
-                nums[j] = parse_num(whats[j], import.line, i + 1, istr)?;
+                nums[j] = parse_num(whats[j], state.line, i + 1, istr)?;
             }
         }
 
@@ -133,11 +163,11 @@ fn import_f(
         let (l2, t2, n2) = face_vertices[i + 1];
         let (l3, t3, n3) = face_vertices[len - 1];
 
-        add_normal(model, import, l, n)?;
-        add_normal(model, import, l2, n2)?;
-        add_normal(model, import, l3, n3)?;
+        add_normal(state, l, n)?;
+        add_normal(state, l2, n2)?;
+        add_normal(state, l3, n3)?;
 
-        model.elements[0].faces.push(model::Face {
+        state.view.faces.push(model::element_view::Face {
             vertex1: l,
             vertex2: l2,
             vertex3: l3,
@@ -150,68 +180,52 @@ fn import_f(
     Ok(())
 }
 
-fn import_v(
-    model: &mut model::Model,
-    import: &mut ImportState,
-    parts: &Vec<&str>,
-) -> Result<()> {
+fn import_v(state: &mut ImportState, parts: &Vec<&str>) -> Result<()> {
     if parts.len() < 4 || parts.len() > 5 {
         return Err(Error::new(
             MalformedData,
-            format!("malformed v-statement at line {}", import.line),
+            format!("malformed v-statement at line {}", state.line),
         ));
     }
 
-    let x = parse_coord("x-coordinate of v-statement", import.line, parts[1])?;
-    let y = parse_coord("y-coordinate of v-statement", import.line, parts[2])?;
-    let z = parse_coord("z-coordinate of v-statement", import.line, parts[3])?;
+    let x = parse_coord("x-coordinate of v-statement", state.line, parts[1])?;
+    let y = parse_coord("y-coordinate of v-statement", state.line, parts[2])?;
+    let z = parse_coord("z-coordinate of v-statement", state.line, parts[3])?;
 
-    model.states[0].elements[0]
-        .vertices
-        .push(model::Point3 { x, y, z });
+    state.view_state.vertices.push(model::Point3 { x, y, z });
 
     Ok(())
 }
 
-fn import_vn(
-    _model: &mut model::Model,
-    import: &mut ImportState,
-    parts: &Vec<&str>,
-) -> Result<()> {
+fn import_vn(state: &mut ImportState, parts: &Vec<&str>) -> Result<()> {
     if parts.len() != 4 {
         return Err(Error::new(
             MalformedData,
-            format!("malformed vn-statement at line {}", import.line),
+            format!("malformed vn-statement at line {}", state.line),
         ));
     }
 
-    let x = parse_coord("x-coordinate of vn-statement", import.line, parts[1])?;
-    let y = parse_coord("y-coordinate of vn-statement", import.line, parts[2])?;
-    let z = parse_coord("z-coordinate of vn-statement", import.line, parts[3])?;
+    let x = parse_coord("x-coordinate of vn-statement", state.line, parts[1])?;
+    let y = parse_coord("y-coordinate of vn-statement", state.line, parts[2])?;
+    let z = parse_coord("z-coordinate of vn-statement", state.line, parts[3])?;
 
-    import.normals.push(model::Point3 { x, y, z });
+    state.normals.push(model::Point3 { x, y, z });
 
     Ok(())
 }
 
-fn import_vt(
-    model: &mut model::Model,
-    import: &mut ImportState,
-    parts: &Vec<&str>,
-) -> Result<()> {
+fn import_vt(state: &mut ImportState, parts: &Vec<&str>) -> Result<()> {
     if parts.len() < 3 || parts.len() > 4 {
         return Err(Error::new(
             MalformedData,
-            format!("malformed vt-statement at line {}", import.line),
+            format!("malformed vt-statement at line {}", state.line),
         ));
     }
 
-    let x = parse_coord("x-coordinate of vt-statement", import.line, parts[1])?;
-    let y = parse_coord("y-coordinate of vt-statement", import.line, parts[2])?;
+    let x = parse_coord("x-coordinate of vt-statement", state.line, parts[1])?;
+    let y = parse_coord("y-coordinate of vt-statement", state.line, parts[2])?;
 
-    model.elements[0]
-        .texture_points
-        .push(model::Point2 { x, y });
+    state.view.texture_points.push(model::Point2 { x, y });
 
     Ok(())
 }
@@ -248,19 +262,14 @@ fn parse_num(what: &str, line: usize, vertex: usize, str: &str) -> Result<u32> {
     }
 }
 
-fn add_normal(
-    model: &mut model::Model,
-    import: &mut ImportState,
-    vertex: u32,
-    normal: u32,
-) -> Result<()> {
+fn add_normal(state: &mut ImportState, vertex: u32, normal: u32) -> Result<()> {
     let vi = (vertex - 1) as usize;
-    if model.states[0].elements[0].vertices.len() <= vi {
+    if state.view_state.vertices.len() <= vi {
         return Err(Error::new(
             MalformedData,
             format!(
                 "mention of unknown vertex {} at line {}",
-                vertex, import.line
+                vertex, state.line
             ),
         ));
     }
@@ -271,20 +280,20 @@ fn add_normal(
         z: 0.0,
     };
 
-    let normals = &mut model.states[0].elements[0].normals;
+    let normals = &mut state.view_state.normals;
     if normals.len() <= vi {
         normals.resize(vi + 1, ZERO);
     }
 
     let ni = (normal - 1) as usize;
     if normals[vi] == ZERO {
-        normals[vi] = import.normals[ni].clone();
-    } else if normals[vi] != import.normals[ni] {
+        normals[vi] = state.normals[ni].clone();
+    } else if normals[vi] != state.normals[ni] {
         return Err(Error::new(
             MalformedData,
             format!(
                 "more than one normal for vertex {} at line {}",
-                vertex, import.line
+                vertex, state.line
             ),
         ));
     }
@@ -292,11 +301,7 @@ fn add_normal(
     Ok(())
 }
 
-fn import_mtl(
-    params: &ImportObjParams,
-    model: &mut model::Model,
-    import: &mut ImportState,
-) -> Result<()> {
+fn import_mtl(params: &ImportObjParams, state: &mut ImportState) -> Result<()> {
     let path = if let Some(filename) = &params.mtl_filename {
         filename.clone()
     } else if let Some(filename) = &params.obj_filename {
@@ -313,17 +318,17 @@ fn import_mtl(
 
     let reader = open_file(&path)?;
 
-    import.line = 0;
-    import.mtl_dir = path.parent().unwrap().to_path_buf();
+    state.line = 0;
+    state.mtl_dir = path.parent().unwrap().to_path_buf();
 
     for line_res in BufReader::new(reader).lines() {
         if let Ok(line) = line_res {
-            import.line += 1;
+            state.line += 1;
 
             let parts: Vec<&str> = line.split_whitespace().collect();
             if !parts.is_empty() {
                 match parts[0] {
-                    "map_Ka" => import_map_ka(model, import, &parts)?,
+                    "map_Ka" => import_map_ka(state, &parts)?,
                     _ => (),
                 }
             }
@@ -333,19 +338,15 @@ fn import_mtl(
     Ok(())
 }
 
-fn import_map_ka(
-    model: &mut model::Model,
-    import: &ImportState,
-    parts: &Vec<&str>,
-) -> Result<()> {
+fn import_map_ka(state: &mut ImportState, parts: &Vec<&str>) -> Result<()> {
     if parts.len() != 2 {
         return Err(Error::new(
             MalformedData,
-            format!("malformed map_Ka-statement at line {}", import.line),
+            format!("malformed map_Ka-statement at line {}", state.line),
         ));
     }
 
-    let path = import.mtl_dir.join(parts[1]);
+    let path = state.mtl_dir.join(parts[1]);
 
     let ext = path
         .extension()
@@ -363,7 +364,7 @@ fn import_map_ka(
                 format!(
                     "unknown type of file '{}' in map_Ka-statement at line {}",
                     path.to_str().unwrap(),
-                    import.line
+                    state.line
                 ),
             ));
         }
@@ -373,7 +374,7 @@ fn import_map_ka(
         r#type: image_type as i32,
         data: read_file(path)?,
     };
-    model.elements[0].texture = Some(texture);
+    state.view.texture = Some(texture);
 
     Ok(())
 }

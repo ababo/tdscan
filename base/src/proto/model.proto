@@ -24,31 +24,43 @@ message Image {
   bytes data = 2;
 }
 
-message Face {
-  uint32 vertex1 = 1;
-  uint32 vertex2 = 2;
-  uint32 vertex3 = 3;
-  uint32 texture1 = 4;
-  uint32 texture2 = 5;
-  uint32 texture3 = 6;
+message Composite {
+  string id = 1;
 }
 
 message Element {
-  Image texture = 1;
-  repeated Point2 texture_points = 2;
-  repeated Face faces = 3;
+  string id = 1;
+  string composite = 2;
 }
 
-message ElementState {
-  repeated Point3 vertices = 1;
-  repeated Point3 normals = 2;
+message ElementView {
+  message Face {
+    uint32 vertex1 = 1;
+    uint32 vertex2 = 2;
+    uint32 vertex3 = 3;
+    uint32 texture1 = 4;
+    uint32 texture2 = 5;
+    uint32 texture3 = 6;
+  }
+
+  string element = 1;
+  Image texture = 2;
+  repeated Point2 texture_points = 3;
+  repeated Face faces = 4;
 }
 
-message State {
-  repeated ElementState elements = 1;
+message ElementViewState {
+  string element = 1;
+  int64 time = 2;
+  repeated Point3 vertices = 3;
+  repeated Point3 normals = 4;
 }
 
-message Model {
-  repeated Element elements = 1;
-  repeated State states = 2;
+message Record {
+  oneof type {
+    Composite composite = 1;
+    Element element = 2;
+    ElementView element_view = 3;
+    ElementViewState element_view_state = 4;
+  }
 }

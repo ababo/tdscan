@@ -1,5 +1,6 @@
 #[macro_use]
 mod log;
+mod defs;
 mod util;
 mod viewer;
 

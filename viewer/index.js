@@ -17,4 +17,6 @@ document.addEventListener('DOMContentLoaded', async event => {
   let doc = document.documentElement;
   canvas.setAttribute('height', doc.clientHeight);
   canvas.setAttribute('width', doc.clientWidth);
+
+  viewer.seek(0);
 });

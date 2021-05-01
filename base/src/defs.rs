@@ -5,6 +5,8 @@ pub enum ErrorKind {
     IoError,
     MalformedData,
     FeatureNotSupported,
+    JsError,
+    WebGlError,
 }
 
 #[derive(Debug)]

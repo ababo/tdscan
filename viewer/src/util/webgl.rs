@@ -1,13 +1,12 @@
-use wasm_bindgen::prelude::*;
 use web_sys::{WebGlProgram, WebGlRenderingContext, WebGlShader};
 
-use crate::defs::JsResult;
+use base::defs::{Error, ErrorKind::WebGlError, Result};
 
 pub fn compile_shader(
     context: &WebGlRenderingContext,
     shader_type: u32,
     source: &str,
-) -> JsResult<WebGlShader> {
+) -> Result<WebGlShader> {
     let shader = context.create_shader(shader_type).unwrap();
 
     context.shader_source(&shader, source);
@@ -18,10 +17,9 @@ pub fn compile_shader(
         .as_bool()
         .unwrap_or(false)
     {
-        let err_str = context.get_shader_info_log(&shader).unwrap();
-        return Err(JsValue::from_str(
-            format!("failed to create shader: {}", err_str).as_str(),
-        ));
+        let msg = context.get_shader_info_log(&shader).unwrap();
+        let desc = format!("failed to create shader: {}", msg);
+        return Err(Error::new(WebGlError, desc));
     }
 
     Ok(shader)
@@ -31,7 +29,7 @@ pub fn link_program(
     context: &WebGlRenderingContext,
     vert_shader: &WebGlShader,
     frag_shader: &WebGlShader,
-) -> JsResult<WebGlProgram> {
+) -> Result<WebGlProgram> {
     let program = context.create_program().unwrap();
 
     context.attach_shader(&program, vert_shader);
@@ -43,10 +41,9 @@ pub fn link_program(
         .as_bool()
         .unwrap_or(false)
     {
-        let err_str = context.get_program_info_log(&program).unwrap();
-        return Err(JsValue::from_str(
-            format!("failed to link program: {}", err_str).as_str(),
-        ));
+        let msg = context.get_program_info_log(&program).unwrap();
+        let desc = format!("failed to link program: {}", msg);
+        return Err(Error::new(WebGlError, desc));
     }
 
     Ok(program)

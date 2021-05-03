@@ -6,6 +6,7 @@ authors = ["Simon Prykhodko <semion.ababo@gmail.com>"]
 edition = "2018"
 
 [dependencies]
+arrayvec = "0.7.0"
 base = { path = "../base" }
 
 # The `console_error_panic_hook` crate provides better debugging of panics by

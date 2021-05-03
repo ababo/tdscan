@@ -5,6 +5,7 @@ use crate::controller::Adapter;
 use crate::defs::IntoResult;
 use crate::util::webgl::{compile_shader, link_program};
 use base::defs::{Error, ErrorKind::JsError, Result};
+use base::model;
 
 pub struct WebGlAdapter {
     context: WebGlRenderingContext,
@@ -50,4 +51,12 @@ impl WebGlAdapter {
     }
 }
 
-impl Adapter for WebGlAdapter {}
+impl Adapter for WebGlAdapter {
+    fn set_texture(
+        &mut self,
+        _index: usize,
+        _image: model::Image,
+    ) -> Result<()> {
+        Ok(())
+    }
+}

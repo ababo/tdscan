@@ -1,12 +1,13 @@
 use std::error::Error as StdError;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum ErrorKind {
     IoError,
     MalformedData,
     FeatureNotSupported,
     JsError,
     WebGlError,
+    InconsistentState,
 }
 
 #[derive(Debug)]
@@ -44,6 +45,12 @@ impl std::fmt::Display for Error {
             Some(err) => write!(f, "{}: {}", self.description, err),
             None => write!(f, "{}", self.description),
         }
+    }
+}
+
+impl PartialEq for Error {
+    fn eq(&self, other: &Error) -> bool {
+        self.kind == other.kind && self.description == other.description
     }
 }
 

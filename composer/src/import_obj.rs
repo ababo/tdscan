@@ -1,6 +1,6 @@
 use std::io::{stdin, stdout, BufRead, BufReader, Read, Write};
 use std::mem::take;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use structopt::StructOpt;
 
@@ -14,20 +14,71 @@ const MAX_NUM_FACE_VERTICES: usize = 10;
 #[derive(StructOpt)]
 #[structopt(about = "Import data from Wavefront .obj file")]
 pub struct ImportObjParams {
-    #[structopt(about = "Input .obj filename (STDIN if omitted)")]
-    obj_filename: Option<PathBuf>,
-    #[structopt(about = "Input .mtl filename", long)]
-    mtl_filename: Option<PathBuf>,
-    #[structopt(about = "Output element ID", long)]
+    #[structopt(help = "Input .obj file (STDIN if omitted)")]
+    obj_path: Option<PathBuf>,
+    #[structopt(help = "Input .mtl file", long)]
+    mtl_path: Option<PathBuf>,
+    #[structopt(help = "Element ID for imported data", long)]
     element_id: Option<String>,
     #[structopt(
-        about = "Output .fm filename (STDOUT if omitted)",
+        help = "Output .fm file (STDOUT if omitted)",
         long,
         short = "o"
     )]
-    fm_filename: Option<PathBuf>,
+    fm_path: Option<PathBuf>,
     #[structopt(flatten)]
     fm_write_params: fm::WriteParams,
+}
+
+pub fn import_obj_with_params(params: &ImportObjParams) -> Result<()> {
+    let obj_reader = if let Some(path) = &params.obj_path {
+        open_file(path)
+    } else {
+        Ok(Box::new(stdin()) as Box<dyn Read>)
+    }?;
+
+    let fm_writer = if let Some(path) = &params.fm_path {
+        create_file(path)
+    } else {
+        Ok(Box::new(stdout()) as Box<dyn Write>)
+    }?;
+
+    let fm_writer =
+        fm::Writer::from_writer(fm_writer, &params.fm_write_params)?;
+
+    let element_id = if let Some(id) = &params.element_id {
+        id.clone()
+    } else if let Some(path) = &params.obj_path {
+        path.file_stem()
+            .unwrap_or_default()
+            .to_str()
+            .unwrap_or_default()
+            .to_string()
+    } else {
+        String::default()
+    };
+
+    let mtl_path = if let Some(path) = &params.mtl_path {
+        Some(path.clone())
+    } else if let Some(path) = &params.obj_path {
+        let mut path = path.clone();
+        path.set_extension("mtl");
+        if path.exists() {
+            Some(path)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    import_obj(
+        obj_reader,
+        mtl_path,
+        read_file,
+        fm_writer,
+        element_id.as_str(),
+    )
 }
 
 #[derive(Default)]
@@ -39,47 +90,26 @@ struct ImportState {
     mtl_dir: PathBuf,
 }
 
-pub fn import_obj(params: &ImportObjParams) -> Result<()> {
-    let reader = if let Some(filename) = &params.obj_filename {
-        open_file(filename)
-    } else {
-        Ok(Box::new(stdin()) as Box<dyn Read>)
-    }?;
-
-    let writer = if let Some(filename) = &params.fm_filename {
-        create_file(filename)
-    } else {
-        Ok(Box::new(stdout()) as Box<dyn Write>)
-    }?;
-
-    let mut writer = fm::Writer::from_writer(writer, &params.fm_write_params)?;
-
-    let id = if let Some(id) = &params.element_id {
-        id.clone()
-    } else if let Some(filename) = &params.obj_filename {
-        filename
-            .file_stem()
-            .unwrap_or_default()
-            .to_str()
-            .unwrap_or_default()
-            .to_string()
-    } else {
-        String::default()
-    };
-
+pub fn import_obj<R: Read, P: AsRef<Path>, F: Fn(P) -> Result<Vec<u8>>>(
+    obj_reader: R,
+    mtl_path: Option<P>,
+    read_file: F,
+    mut fm_writer: fm::Writer,
+    element_id: &str,
+) -> Result<()> {
     let mut state = ImportState {
         view: model::ElementView {
-            element: id.clone(),
+            element: element_id.to_string(),
             ..Default::default()
         },
         view_state: model::ElementViewState {
-            element: id.clone(),
+            element: element_id.to_string(),
             ..Default::default()
         },
         ..Default::default()
     };
 
-    for line_res in BufReader::new(reader).lines() {
+    for line_res in BufReader::new(obj_reader).lines() {
         if let Ok(line) = line_res {
             state.line += 1;
 
@@ -96,22 +126,24 @@ pub fn import_obj(params: &ImportObjParams) -> Result<()> {
         }
     }
 
-    import_mtl(params, &mut state)?;
+    if let Some(path) = mtl_path {
+        import_mtl(path, read_file, &mut state)?;
+    }
 
     use model::record::Type;
 
-    writer.write_record(model::Record {
+    fm_writer.write_record(model::Record {
         r#type: Some(Type::Element(model::Element {
-            id,
+            id: element_id.to_string(),
             composite: String::default(),
         })),
     })?;
 
-    writer.write_record(model::Record {
+    fm_writer.write_record(model::Record {
         r#type: Some(Type::ElementView(take(&mut state.view))),
     })?;
 
-    writer.write_record(model::Record {
+    fm_writer.write_record(model::Record {
         r#type: Some(Type::ElementViewState(take(&mut state.view_state))),
     })?;
 
@@ -301,27 +333,16 @@ fn add_normal(state: &mut ImportState, vertex: u32, normal: u32) -> Result<()> {
     Ok(())
 }
 
-fn import_mtl(params: &ImportObjParams, state: &mut ImportState) -> Result<()> {
-    let path = if let Some(filename) = &params.mtl_filename {
-        filename.clone()
-    } else if let Some(filename) = &params.obj_filename {
-        let mut filename = filename.clone();
-        filename.set_extension("mtl");
-        if filename.exists() {
-            filename
-        } else {
-            return Ok(());
-        }
-    } else {
-        return Ok(());
-    };
-
-    let reader = open_file(&path)?;
-
+fn import_mtl<P: AsRef<Path>, F: Fn(P) -> Result<Vec<u8>>>(
+    mtl_path: P,
+    read_file: F,
+    state: &mut ImportState,
+) -> Result<()> {
     state.line = 0;
-    state.mtl_dir = path.parent().unwrap().to_path_buf();
+    state.mtl_dir = mtl_path.as_ref().parent().unwrap().to_path_buf();
 
-    for line_res in BufReader::new(reader).lines() {
+    let mtl_data = read_file(mtl_path)?;
+    for line_res in BufReader::new(mtl_data.as_slice()).lines() {
         if let Ok(line) = line_res {
             state.line += 1;
 

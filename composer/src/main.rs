@@ -18,7 +18,9 @@ fn main() {
     let opts: Opts = Opts::from_args();
 
     let res = match opts.command {
-        Command::ImportObj(params) => import_obj::import_obj(&params),
+        Command::ImportObj(params) => {
+            import_obj::import_obj_with_params(&params)
+        }
     };
 
     if let Err(err) = res {

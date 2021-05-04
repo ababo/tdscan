@@ -46,12 +46,14 @@ fn validate_gzip_level(value: String) -> std::result::Result<(), String> {
 pub struct WriteParams {
     #[structopt(
         name = "fm-compression",
+        help = "Type of compression for output .fm file",
         default_value = DEFAULT_COMPRESSION,
         long
     )]
     pub compression: Compression,
     #[structopt(
         name = "fm-gzip-level",
+        help = "Level of gzip-compression for output .fm file",
         default_value = DEFAULT_GZIP_LEVEL,
         long,
         validator = validate_gzip_level

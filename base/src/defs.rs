@@ -4,7 +4,7 @@ use std::error::Error as StdError;
 pub enum ErrorKind {
     IoError,
     MalformedData,
-    FeatureNotSupported,
+    UnsupportedFeature,
     JsError,
     WebGlError,
     InconsistentState,

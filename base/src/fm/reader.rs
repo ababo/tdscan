@@ -33,7 +33,7 @@ impl Reader {
         let val = u32::from_le_bytes(buf);
         if val != VERSION {
             return Err(Error::new(
-                FeatureNotSupported,
+                UnsupportedFeature,
                 format!("unsupported .fm version '{}'", val),
             ));
         }

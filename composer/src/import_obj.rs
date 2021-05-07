@@ -1,4 +1,5 @@
-use std::io::{stdin, stdout, BufRead, BufReader, Read, Write};
+use std::io;
+use std::io::{stdin, stdout, BufRead, BufReader};
 use std::mem::take;
 use std::path::{Path, PathBuf};
 
@@ -25,24 +26,24 @@ pub struct ImportObjParams {
     )]
     fm_path: Option<PathBuf>,
     #[structopt(flatten)]
-    fm_write_params: fm::WriteParams,
+    fm_write_params: fm::WriterParams,
 }
 
 pub fn import_obj_with_params(params: &ImportObjParams) -> Result<()> {
-    let obj_reader = if let Some(path) = &params.obj_path {
-        fs::open_file(path)
+    let mut obj_reader = if let Some(path) = &params.obj_path {
+        Box::new(fs::open_file(path)?) as Box<dyn io::Read>
     } else {
-        Ok(Box::new(stdin()) as Box<dyn Read>)
-    }?;
+        Box::new(stdin()) as Box<dyn io::Read>
+    };
 
-    let fm_writer = if let Some(path) = &params.fm_path {
-        fs::create_file(path)
+    let mut fm_writer = if let Some(path) = &params.fm_path {
+        let writer =
+            fm::Writer::new(fs::create_file(path)?, &params.fm_write_params)?;
+        Box::new(writer) as Box<dyn fm::Write>
     } else {
-        Ok(Box::new(stdout()) as Box<dyn Write>)
-    }?;
-
-    let fm_writer =
-        fm::Writer::from_writer(fm_writer, &params.fm_write_params)?;
+        let writer = fm::Writer::new(stdout(), &params.fm_write_params)?;
+        Box::new(writer) as Box<dyn fm::Write>
+    };
 
     let element_id = if let Some(id) = &params.element_id {
         id.clone()
@@ -64,19 +65,19 @@ pub fn import_obj_with_params(params: &ImportObjParams) -> Result<()> {
         .unwrap_or(".".as_ref());
 
     import_obj(
-        obj_reader,
+        &mut obj_reader,
         |p| fs::read_file(p),
         mtl_dir,
-        fm_writer,
+        fm_writer.as_mut(),
         element_id.as_str(),
     )
 }
 
-pub fn import_obj<R: Read, F: Fn(&Path) -> Result<Vec<u8>>>(
-    obj_reader: R,
+pub fn import_obj<F: Fn(&Path) -> Result<Vec<u8>>>(
+    obj_reader: &mut dyn io::Read,
     read_file: F,
     mtl_dir: &Path,
-    mut fm_writer: fm::Writer,
+    fm_writer: &mut dyn fm::Write,
     element_id: &str,
 ) -> Result<()> {
     let mut state = ImportState::default();

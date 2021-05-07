@@ -1,22 +1,41 @@
-use std::io::{ErrorKind::UnexpectedEof, Read};
+use std::io;
+use std::io::Read as _;
 
-use flate2;
+use flate2::read::GzDecoder;
 use prost::Message;
 
 use crate::defs::{Error, ErrorKind::*, IntoResult, Result};
 use crate::fm::{Compression, MAGIC, VERSION};
 use crate::model::Record;
 
-pub struct Reader {
-    reader: Box<dyn Read>,
+pub trait Read {
+    fn read_record(&mut self) -> Result<Option<Record>>;
+}
+
+enum RawReader<R: io::Read> {
+    Plain(R),
+    Gzip(GzDecoder<R>),
+}
+
+impl<R: io::Read> io::Read for RawReader<R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match self {
+            RawReader::Plain(inner) => inner.read(buf),
+            RawReader::Gzip(decoder) => decoder.read(buf),
+        }
+    }
+}
+
+pub struct Reader<R: io::Read> {
+    reader: RawReader<R>,
     buffer: Vec<u8>,
 }
 
-impl Reader {
-    pub fn from_reader<R: Read + 'static>(mut reader: R) -> Result<Self> {
+impl<R: io::Read> Reader<R> {
+    pub fn new(mut inner: R) -> Result<Self> {
         let mut buf = [0; 4];
 
-        reader
+        inner
             .read_exact(&mut buf)
             .res(|| format!("failed to read .fm magic"))?;
         let val = u32::from_le_bytes(buf);
@@ -27,7 +46,7 @@ impl Reader {
             ));
         }
 
-        reader
+        inner
             .read_exact(&mut buf)
             .res(|| format!("failed to read .fm version"))?;
         let val = u32::from_le_bytes(buf);
@@ -38,7 +57,7 @@ impl Reader {
             ));
         }
 
-        reader
+        inner
             .read_exact(&mut buf)
             .res(|| format!("failed to read .fm compression"))?;
         let val = i32::from_le_bytes(buf);
@@ -46,34 +65,28 @@ impl Reader {
         const COMPRESSION_NONE: i32 = Compression::None as i32;
         const COMPRESSION_GZIP: i32 = Compression::Gzip as i32;
 
-        let dec_reader: Box<dyn Read>;
-
-        match val {
-            COMPRESSION_NONE => {
-                dec_reader = Box::new(reader);
-            }
-            COMPRESSION_GZIP => {
-                dec_reader = Box::new(flate2::read::GzDecoder::new(reader));
-            }
-            _ => {
-                return Err(Error::new(
-                    MalformedData,
-                    format!("unknown compression '{}'", val),
-                ));
-            }
-        }
+        let reader = match val {
+            COMPRESSION_NONE => Ok(RawReader::Plain(inner)),
+            COMPRESSION_GZIP => Ok(RawReader::Gzip(GzDecoder::new(inner))),
+            _ => Err(Error::new(
+                UnsupportedFeature,
+                format!("unsupported compression '{}'", val),
+            )),
+        }?;
 
         Ok(Self {
-            reader: dec_reader,
+            reader,
             buffer: Vec::<u8>::with_capacity(0),
         })
     }
+}
 
-    pub fn read_record(&mut self) -> Result<Option<Record>> {
+impl<R: io::Read> Read for Reader<R> {
+    fn read_record(&mut self) -> Result<Option<Record>> {
         let mut buf = [0; 4];
         match self.reader.read_exact(&mut buf) {
             Err(e) => {
-                return if e.kind() == UnexpectedEof {
+                return if e.kind() == io::ErrorKind::UnexpectedEof {
                     Ok(None)
                 } else {
                     Err(Error::with_source(

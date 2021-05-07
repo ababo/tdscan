@@ -6,7 +6,8 @@ use web_sys::HtmlCanvasElement;
 use crate::controller::Controller;
 use crate::defs::{IntoJsResult, JsResult};
 use crate::webgl_adapter::WebGlAdapter;
-use base::fm::Reader;
+use base::fm;
+use base::fm::Read as _;
 
 #[wasm_bindgen]
 pub struct Viewer {
@@ -33,7 +34,7 @@ impl Viewer {
         self.controller.clear();
 
         let data = js_sys::Uint8Array::new(buffer).to_vec();
-        let mut reader = Reader::from_reader(Cursor::new(data)).res()?;
+        let mut reader = fm::Reader::new(Cursor::new(data)).res()?;
 
         loop {
             match reader.read_record().res()? {

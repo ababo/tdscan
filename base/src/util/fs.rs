@@ -1,41 +1,37 @@
 use std::fs::{read, File};
-use std::io::{Read, Write};
 use std::path::Path;
 
 use crate::defs::{IntoResult, Result};
 
-pub fn open_file<P: AsRef<Path>>(path: P) -> Result<Box<dyn Read>> {
+pub fn open_file<P: AsRef<Path>>(path: P) -> Result<File> {
     let path = path.as_ref();
-    let reader: Box<dyn Read> = Box::new(File::open(path).res(|| {
-        if let Some(filename) = path.to_str() {
-            format!("failed to open file '{}'", filename)
+    File::open(path).res(|| {
+        if let Some(path) = path.to_str() {
+            format!("failed to open file '{}'", path)
         } else {
             format!("failed to open file")
         }
-    })?);
-    Ok(reader)
+    })
 }
 
-pub fn create_file<P: AsRef<Path>>(path: P) -> Result<Box<dyn Write>> {
+pub fn create_file<P: AsRef<Path>>(path: P) -> Result<File> {
     let path = path.as_ref();
-    let writer: Box<dyn Write> = Box::new(File::create(path).res(|| {
-        if let Some(filename) = path.to_str() {
-            format!("failed to create file '{}'", filename)
+    File::create(path).res(|| {
+        if let Some(path) = path.to_str() {
+            format!("failed to create file '{}'", path)
         } else {
             format!("failed to create file")
         }
-    })?);
-    Ok(writer)
+    })
 }
 
 pub fn read_file<P: AsRef<Path>>(path: P) -> Result<Vec<u8>> {
     let path = path.as_ref();
-    let data = read(path).res(|| {
-        if let Some(filename) = path.to_str() {
-            format!("failed to read file '{}'", filename)
+    read(path).res(|| {
+        if let Some(path) = path.to_str() {
+            format!("failed to read file '{}'", path)
         } else {
             format!("failed to read file")
         }
-    })?;
-    Ok(data)
+    })
 }

@@ -43,7 +43,7 @@ fn validate_gzip_level(value: String) -> std::result::Result<(), String> {
 }
 
 #[derive(StructOpt)]
-pub struct WriteParams {
+pub struct WriterParams {
     #[structopt(
         name = "fm-compression",
         help = "Type of compression for output .fm file",
@@ -61,7 +61,7 @@ pub struct WriteParams {
     pub gzip_level: u32,
 }
 
-impl Default for WriteParams {
+impl Default for WriterParams {
     fn default() -> Self {
         Self {
             compression: Compression::from_str(DEFAULT_COMPRESSION).unwrap(),

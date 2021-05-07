@@ -13,6 +13,7 @@ pub trait Write {
     fn write_record(&mut self, record: Record) -> Result<()>;
 }
 
+#[derive(Debug)]
 pub enum RawWriter<W: io::Write> {
     Plain(W),
     Gzip(GzEncoder<W>),
@@ -25,7 +26,7 @@ impl<W: io::Write> RawWriter<W> {
             RawWriter::Gzip(mut encoder) => {
                 if let Err(err) = encoder
                     .try_finish()
-                    .res(|| format!("failed to finish encoding"))
+                    .into_result(|| format!("failed to finish encoding"))
                 {
                     return Err((RawWriter::Gzip(encoder), err));
                 }
@@ -51,6 +52,7 @@ impl<W: io::Write> io::Write for RawWriter<W> {
     }
 }
 
+#[derive(Debug)]
 pub struct Writer<W: io::Write> {
     writer: RawWriter<W>,
     buffer: Vec<u8>,
@@ -60,13 +62,13 @@ impl<W: io::Write> Writer<W> {
     pub fn new(mut inner: W, params: &WriterParams) -> Result<Self> {
         inner
             .write_all(&MAGIC.to_le_bytes())
-            .res(|| format!("failed to write .fm magic"))?;
+            .into_result(|| format!("failed to write .fm magic"))?;
         inner
             .write_all(&VERSION.to_le_bytes())
-            .res(|| format!("failed to write .fm version"))?;
+            .into_result(|| format!("failed to write .fm version"))?;
         inner
             .write_all(&(params.compression as i32).to_le_bytes())
-            .res(|| format!("failed to write .fm compression"))?;
+            .into_result(|| format!("failed to write .fm compression"))?;
 
         let writer = match params.compression {
             Compression::None => RawWriter::Plain(inner),
@@ -101,7 +103,7 @@ impl<W: io::Write> Write for Writer<W> {
         let size = record.encoded_len();
         self.writer
             .write_all(&(size as u32).to_le_bytes())
-            .res(|| format!("failed to write .fm record size"))?;
+            .into_result(|| format!("failed to write .fm record size"))?;
 
         self.buffer.resize(0, 0);
         self.buffer.reserve(size);
@@ -109,6 +111,6 @@ impl<W: io::Write> Write for Writer<W> {
 
         self.writer
             .write_all(&self.buffer)
-            .res(|| format!("failed to write .fm record"))
+            .into_result(|| format!("failed to write .fm record"))
     }
 }

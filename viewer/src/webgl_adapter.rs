@@ -13,7 +13,7 @@ pub struct WebGlAdapter {
 
 impl WebGlAdapter {
     pub fn create(canvas: &HtmlCanvasElement) -> Result<WebGlAdapter> {
-        let context = canvas.get_context("webgl").res()?;
+        let context = canvas.get_context("webgl").into_result()?;
         if context.is_none() {
             let desc = format!("failed to get WebGL context from canvas");
             return Err(Error::new(JsError, desc));

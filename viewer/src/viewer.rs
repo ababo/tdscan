@@ -20,7 +20,7 @@ impl Viewer {
         #[cfg(feature = "console_error_panic_hook")]
         console_error_panic_hook::set_once();
 
-        let adapter = WebGlAdapter::create(canvas).res()?;
+        let adapter = WebGlAdapter::create(canvas).into_result()?;
         let controller = Controller::new(adapter);
 
         Ok(Viewer { controller })
@@ -34,11 +34,11 @@ impl Viewer {
         self.controller.clear();
 
         let data = js_sys::Uint8Array::new(buffer).to_vec();
-        let mut reader = fm::Reader::new(Cursor::new(data)).res()?;
+        let mut reader = fm::Reader::new(Cursor::new(data)).into_result()?;
 
         loop {
-            match reader.read_record().res()? {
-                Some(rec) => self.controller.add_record(rec).res()?,
+            match reader.read_record().into_result()? {
+                Some(rec) => self.controller.add_record(rec).into_result()?,
                 None => break,
             }
         }

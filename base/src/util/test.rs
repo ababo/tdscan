@@ -24,3 +24,14 @@ impl<Args, Ret> Drop for MethodMock<Args, Ret> {
         assert!(self.rets.is_empty());
     }
 }
+
+#[macro_export]
+macro_rules! record_variant {
+    ($variant:path, $record:expr) => {
+        match $record.r#type.unwrap() {
+            $variant(val) => Some(val),
+            _ => None,
+        }
+        .unwrap()
+    };
+}

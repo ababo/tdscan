@@ -19,11 +19,11 @@ pub fn jsval_to_err(value: JsValue) -> Error {
 }
 
 pub trait IntoResult<T> {
-    fn res(self) -> Result<T>;
+    fn into_result(self) -> Result<T>;
 }
 
 impl<T> IntoResult<T> for JsResult<T> {
-    fn res(self) -> Result<T> {
+    fn into_result(self) -> Result<T> {
         self.map_err(jsval_to_err)
     }
 }
@@ -33,11 +33,11 @@ pub fn err_to_jsval(error: Error) -> JsValue {
 }
 
 pub trait IntoJsResult<T> {
-    fn res(self) -> JsResult<T>;
+    fn into_result(self) -> JsResult<T>;
 }
 
 impl<T> IntoJsResult<T> for Result<T> {
-    fn res(self) -> JsResult<T> {
+    fn into_result(self) -> JsResult<T> {
         self.map_err(err_to_jsval)
     }
 }

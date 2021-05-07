@@ -5,7 +5,7 @@ use crate::defs::{IntoResult, Result};
 
 pub fn open_file<P: AsRef<Path>>(path: P) -> Result<File> {
     let path = path.as_ref();
-    File::open(path).res(|| {
+    File::open(path).into_result(|| {
         if let Some(path) = path.to_str() {
             format!("failed to open file '{}'", path)
         } else {
@@ -16,7 +16,7 @@ pub fn open_file<P: AsRef<Path>>(path: P) -> Result<File> {
 
 pub fn create_file<P: AsRef<Path>>(path: P) -> Result<File> {
     let path = path.as_ref();
-    File::create(path).res(|| {
+    File::create(path).into_result(|| {
         if let Some(path) = path.to_str() {
             format!("failed to create file '{}'", path)
         } else {
@@ -27,7 +27,7 @@ pub fn create_file<P: AsRef<Path>>(path: P) -> Result<File> {
 
 pub fn read_file<P: AsRef<Path>>(path: P) -> Result<Vec<u8>> {
     let path = path.as_ref();
-    read(path).res(|| {
+    read(path).into_result(|| {
         if let Some(path) = path.to_str() {
             format!("failed to read file '{}'", path)
         } else {

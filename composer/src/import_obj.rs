@@ -18,7 +18,7 @@ pub struct ImportObjParams {
     #[structopt(help = "Input .obj file (STDIN if omitted)")]
     obj_path: Option<PathBuf>,
     #[structopt(help = "Element ID for imported data", long)]
-    element_id: Option<String>,
+    element: Option<String>,
     #[structopt(
         help = "Output .fm file (STDOUT if omitted)",
         long,
@@ -45,7 +45,7 @@ pub fn import_obj_with_params(params: &ImportObjParams) -> Result<()> {
         Box::new(writer) as Box<dyn fm::Write>
     };
 
-    let element_id = if let Some(id) = &params.element_id {
+    let element = if let Some(id) = &params.element {
         id.clone()
     } else if let Some(path) = &params.obj_path {
         path.file_stem()
@@ -69,7 +69,7 @@ pub fn import_obj_with_params(params: &ImportObjParams) -> Result<()> {
         |p| fs::read_file(p),
         mtl_dir,
         fm_writer.as_mut(),
-        element_id.as_str(),
+        element.as_str(),
     )
 }
 
@@ -78,9 +78,19 @@ pub fn import_obj<F: Fn(&Path) -> Result<Vec<u8>>>(
     read_file: F,
     mtl_dir: &Path,
     fm_writer: &mut dyn fm::Write,
-    element_id: &str,
+    element: &str,
 ) -> Result<()> {
-    let mut state = ImportState::default();
+    let mut state = ImportState {
+        view: model::ElementView {
+            element: element.to_string(),
+            ..Default::default()
+        },
+        view_state: model::ElementViewState {
+            element: element.to_string(),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
 
     for line_res in BufReader::new(obj_reader).lines() {
         if let Ok(line) = line_res {
@@ -107,7 +117,7 @@ pub fn import_obj<F: Fn(&Path) -> Result<Vec<u8>>>(
 
     fm_writer.write_record(model::Record {
         r#type: Some(Type::Element(model::Element {
-            id: element_id.to_string(),
+            id: element.to_string(),
             composite: String::default(),
         })),
     })?;
@@ -401,5 +411,157 @@ fn parse_coord(what: &str, line: usize, str: &str) -> Result<f32> {
             MalformedData,
             format!("failed to parse {} at line {}", what, line),
         )),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use base::fm::Read as _;
+    use base::record_variant;
+    use model::record::Type::*;
+
+    fn face(
+        v1: u32,
+        v2: u32,
+        v3: u32,
+        t1: u32,
+        t2: u32,
+        t3: u32,
+    ) -> model::element_view::Face {
+        model::element_view::Face {
+            vertex1: v1,
+            vertex2: v2,
+            vertex3: v3,
+            texture1: t1,
+            texture2: t2,
+            texture3: t3,
+        }
+    }
+
+    fn point3(x: f32, y: f32, z: f32) -> model::Point3 {
+        model::Point3 { x, y, z }
+    }
+
+    #[test]
+    fn test_valid_obj() {
+        let obj = r#"
+            mtllib foo.mtl
+            usemtl bar
+
+            # Vertices.
+            v 0.00 0.01 0.02 0.03
+            v 0.03 0.04 0.05
+            v 0.06 0.07 0.08
+            v 0.09 0.10 0.11
+            v 0.12 0.13 0.14
+            v 0.15 0.14 0.15
+
+            # Normals.
+            vn 0.20 0.21 0.22
+            vn 0.23 0.24 0.25
+            vn 0.26 0.27 0.28
+            vn 0.29 0.30 0.31
+            vn 0.32 0.33 0.34
+            vn 0.35 0.36 0.37
+
+            # Texture points.
+            vt 0.40 0.41 0.42
+            vt 0.42 0.43
+            vt 0.44 0.45
+
+            # Faces.
+            f 1/1/6 2/2/5 3/3/4 4/1/3 5/2/2 6/3/1
+            f 2/1/5 3/2/4 4/3/3 5/1/2
+            f 3/2/4 4/3/3 5/1/2
+        "#;
+
+        let mtl = r#"
+            # Foo materials.
+
+            newmtl bar
+            map_Ka bar.jpg
+        "#;
+
+        let mut obj_reader = obj.as_bytes();
+
+        let mut fm_writer =
+            fm::Writer::new(Vec::<u8>::new(), &fm::WriterParams::default())
+                .unwrap();
+
+        let read_file = |p: &Path| {
+            if p == &Path::new("obj-path").join("foo.mtl") {
+                Ok(mtl.as_bytes().to_vec())
+            } else if p == &Path::new("obj-path").join("bar.jpg") {
+                Ok(vec![1, 2, 3])
+            } else {
+                Err(Error::new(IoError, format!("bad file path")))
+            }
+        };
+
+        import_obj(
+            &mut obj_reader,
+            read_file,
+            "obj-path".as_ref(),
+            &mut fm_writer,
+            "buzz",
+        )
+        .unwrap();
+
+        let fm_data = fm_writer.into_inner().unwrap();
+        let mut fm_reader = fm_data.as_slice();
+        let mut fm_reader = fm::Reader::new(&mut fm_reader).unwrap();
+
+        let record = fm_reader.read_record().unwrap().unwrap();
+        let element = record_variant!(Element, record);
+        assert_eq!(element.id, format!("buzz"));
+        assert!(element.composite.is_empty());
+
+        let record = fm_reader.read_record().unwrap().unwrap();
+        let view = record_variant!(ElementView, record);
+        assert_eq!(view.element, format!("buzz"));
+
+        let texture = view.texture.unwrap();
+        assert_eq!(texture.r#type, model::image::r#Type::Jpeg as i32);
+        assert_eq!(texture.data, vec![1, 2, 3]);
+
+        let texture_points = view.texture_points;
+        assert_eq!(texture_points.len(), 3);
+        assert_eq!(texture_points[0], model::Point2 { x: 0.40, y: 0.41 });
+        assert_eq!(texture_points[1], model::Point2 { x: 0.42, y: 0.43 });
+        assert_eq!(texture_points[2], model::Point2 { x: 0.44, y: 0.45 });
+
+        let faces = view.faces;
+        assert_eq!(faces.len(), 7);
+        assert_eq!(faces[0], face(1, 2, 6, 1, 2, 3));
+        assert_eq!(faces[1], face(2, 3, 6, 2, 3, 3));
+        assert_eq!(faces[2], face(3, 4, 6, 3, 1, 3));
+        assert_eq!(faces[3], face(4, 5, 6, 1, 2, 3));
+        assert_eq!(faces[4], face(2, 3, 5, 1, 2, 1));
+        assert_eq!(faces[5], face(3, 4, 5, 2, 3, 1));
+        assert_eq!(faces[6], face(3, 4, 5, 2, 3, 1));
+
+        let record = fm_reader.read_record().unwrap().unwrap();
+        let state = record_variant!(ElementViewState, record);
+        assert_eq!(state.element, format!("buzz"));
+        assert_eq!(state.time, 0);
+
+        let vertices = state.vertices;
+        assert_eq!(vertices.len(), 6);
+        assert_eq!(vertices[0], point3(0.00, 0.01, 0.02));
+        assert_eq!(vertices[1], point3(0.03, 0.04, 0.05));
+        assert_eq!(vertices[2], point3(0.06, 0.07, 0.08));
+        assert_eq!(vertices[3], point3(0.09, 0.10, 0.11));
+        assert_eq!(vertices[4], point3(0.12, 0.13, 0.14));
+        assert_eq!(vertices[5], point3(0.15, 0.14, 0.15));
+
+        let normals = state.normals;
+        assert_eq!(normals.len(), 6);
+        assert_eq!(normals[0], point3(0.35, 0.36, 0.37));
+        assert_eq!(normals[1], point3(0.32, 0.33, 0.34));
+        assert_eq!(normals[2], point3(0.29, 0.30, 0.31));
+        assert_eq!(normals[3], point3(0.26, 0.27, 0.28));
+        assert_eq!(normals[4], point3(0.23, 0.24, 0.25));
+        assert_eq!(normals[5], point3(0.20, 0.21, 0.22));
     }
 }

@@ -12,6 +12,7 @@ pub trait Read {
     fn read_record(&mut self) -> Result<Option<Record>>;
 }
 
+#[derive(Debug)]
 enum RawReader<R: io::Read> {
     Plain(R),
     Gzip(GzDecoder<R>),
@@ -26,6 +27,7 @@ impl<R: io::Read> io::Read for RawReader<R> {
     }
 }
 
+#[derive(Debug)]
 pub struct Reader<R: io::Read> {
     reader: RawReader<R>,
     buffer: Vec<u8>,
@@ -37,7 +39,7 @@ impl<R: io::Read> Reader<R> {
 
         inner
             .read_exact(&mut buf)
-            .res(|| format!("failed to read .fm magic"))?;
+            .into_result(|| format!("failed to read .fm magic"))?;
         let val = u32::from_le_bytes(buf);
         if val != MAGIC {
             return Err(Error::new(
@@ -48,7 +50,7 @@ impl<R: io::Read> Reader<R> {
 
         inner
             .read_exact(&mut buf)
-            .res(|| format!("failed to read .fm version"))?;
+            .into_result(|| format!("failed to read .fm version"))?;
         let val = u32::from_le_bytes(buf);
         if val != VERSION {
             return Err(Error::new(
@@ -59,7 +61,7 @@ impl<R: io::Read> Reader<R> {
 
         inner
             .read_exact(&mut buf)
-            .res(|| format!("failed to read .fm compression"))?;
+            .into_result(|| format!("failed to read .fm compression"))?;
         let val = i32::from_le_bytes(buf);
 
         const COMPRESSION_NONE: i32 = Compression::None as i32;
@@ -104,10 +106,10 @@ impl<R: io::Read> Read for Reader<R> {
 
         self.reader
             .read_exact(&mut self.buffer)
-            .res(|| format!("failed to read .fm record"))?;
+            .into_result(|| format!("failed to read .fm record"))?;
 
         let rec = Record::decode(self.buffer.as_slice())
-            .res(|| format!("failed to decode .fm record"))?;
+            .into_result(|| format!("failed to decode .fm record"))?;
 
         Ok(Some(rec))
     }

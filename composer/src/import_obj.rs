@@ -221,13 +221,16 @@ fn import_mtllib<F: Fn(&Path) -> Result<Vec<u8>>>(
     parts: &Vec<&str>,
 ) -> Result<()> {
     let num_filenames_err_res = |kind, prop| {
-        let msg = "number of filenames in mtllib-statement at line";
+        let msg = "filenames in mtllib-statement at line";
         Err(Error::new(kind, format!("{} {} {}", prop, msg, state.line)))
     };
     if parts.len() < 2 {
-        return num_filenames_err_res(MalformedData, "bad");
+        return num_filenames_err_res(MalformedData, "no");
     } else if parts.len() > 2 {
-        return num_filenames_err_res(UnsupportedFeature, "unsupported");
+        return num_filenames_err_res(
+            UnsupportedFeature,
+            "unsupported number of",
+        );
     }
 
     let mtl_data = read_file(&mtl_dir.join(parts[1]))?;
@@ -326,13 +329,18 @@ fn import_mtl_newmtl(state: &mut ImportState, parts: &Vec<&str>) -> Result<()> {
 }
 
 fn add_normal(state: &mut ImportState, vertex: u32, normal: u32) -> Result<()> {
-    let vi = (vertex - 1) as usize;
-    if state.view_state.vertices.len() <= vi {
+    let line = state.line;
+    let bad_vertex_err_res = |prefix, vertex| {
         let desc = format!(
-            "reference to unknown vertex {} in f-statement at line {}",
-            vertex, state.line
+            "{} vertex {} in f-statement at line {}",
+            prefix, vertex, line
         );
         return Err(Error::new(InconsistentState, desc));
+    };
+
+    let vi = (vertex - 1) as usize;
+    if state.view_state.vertices.len() <= vi {
+        return bad_vertex_err_res("reference to unknown", vertex);
     }
 
     let normals = &mut state.view_state.normals;
@@ -341,14 +349,14 @@ fn add_normal(state: &mut ImportState, vertex: u32, normal: u32) -> Result<()> {
     }
 
     let ni = (normal - 1) as usize;
+    if ni >= state.normals.len() {
+        return bad_vertex_err_res("reference to unknown normal of", vertex);
+    }
+
     if normals[vi] == model::Point3::default() {
         normals[vi] = state.normals[ni].clone();
     } else if normals[vi] != state.normals[ni] {
-        let desc = format!(
-            "multiple normals for vertex {} in f-statement at line {}",
-            vertex, state.line
-        );
-        return Err(Error::new(InconsistentState, desc));
+        return bad_vertex_err_res("multiple normals for", vertex);
     }
 
     Ok(())
@@ -441,6 +449,171 @@ mod tests {
 
     fn point3(x: f32, y: f32, z: f32) -> model::Point3 {
         model::Point3 { x, y, z }
+    }
+
+    fn dont_read_file(_: &Path) -> Result<Vec<u8>> {
+        panic!("unexpected call to read_file");
+    }
+
+    fn create_read_mtl(
+        mtl: &'static str,
+    ) -> Box<dyn Fn(&Path) -> Result<Vec<u8>>> {
+        Box::new(move |p: &Path| {
+            if p == &Path::new("obj-path").join("foo.mtl") {
+                Ok(mtl.as_bytes().to_vec())
+            } else {
+                panic!("unexpected path passed to read_file");
+            }
+        })
+    }
+
+    fn import_obj_err<F: Fn(&Path) -> Result<Vec<u8>>>(
+        obj: &str,
+        read_file: F,
+    ) -> Error {
+        let mut obj_reader = obj.as_bytes();
+
+        let mut fm_writer =
+            fm::Writer::new(Vec::<u8>::new(), &fm::WriterParams::default())
+                .unwrap();
+
+        import_obj(
+            &mut obj_reader,
+            read_file,
+            "obj-path".as_ref(),
+            &mut fm_writer,
+            "buzz",
+        )
+        .unwrap_err()
+    }
+
+    #[test]
+    fn test_f_malformed_vertex() {
+        let objs = [
+            "f !/1/6 2/2/5 3/3/4",
+            "f 1//6 2/!/5 3/3/4",
+            "f 1/1/6 2/2/5 3/3/!",
+            "f 1/1/6 2/2/5 3/3/4 4/1/3/2",
+        ];
+
+        for (i, obj) in objs.iter().enumerate() {
+            let err = import_obj_err(obj, dont_read_file);
+            assert_eq!(err.kind, MalformedData);
+            assert_eq!(
+                err.description,
+                format!("malformed vertex {} in f-statement at line 1", i + 1)
+            );
+        }
+    }
+
+    #[test]
+    fn test_f_multiple_vertext_normals() {
+        let obj = r#"
+            v 0.01 0.02 0.03
+            v 0.04 0.05 0.06
+            v 0.07 0.08 0.09
+            vn 0.10 0.11 0.12
+            vn 0.13 0.14 0.15
+            vn 0.16 0.17 0.18
+            f 1//1 2//2 3//3
+            f 1//2 3//3 4//4
+        "#;
+        let err = import_obj_err(obj, dont_read_file);
+        assert_eq!(err.kind, InconsistentState);
+        assert_eq!(
+            err.description,
+            format!("multiple normals for vertex 1 in f-statement at line 9")
+        );
+    }
+
+    #[test]
+    fn test_f_unknown_normal() {
+        let obj = r#"
+            v 0.01 0.02 0.03
+            v 0.04 0.05 0.06
+            v 0.07 0.08 0.09
+            f 1//1 2//2 3//3
+            f 1//2 3//3 4//4
+        "#;
+        let err = import_obj_err(obj, dont_read_file);
+        assert_eq!(err.kind, InconsistentState);
+        assert_eq!(
+            err.description,
+            format!(concat!(
+                "reference to unknown normal ",
+                "of vertex 1 in f-statement at line 5"
+            ))
+        );
+    }
+
+    #[test]
+    fn test_f_unknown_vertex() {
+        let err = import_obj_err("f 1/1/6 2/2/5 3/3/4", dont_read_file);
+        assert_eq!(err.kind, InconsistentState);
+        assert_eq!(
+            err.description,
+            format!("reference to unknown vertex 1 in f-statement at line 1")
+        );
+    }
+
+    #[test]
+    fn test_f_with_bad_num_vertices() {
+        let err = import_obj_err("f 1/1/6 2/2/5", dont_read_file);
+        assert_eq!(err.kind, MalformedData);
+        assert_eq!(
+            err.description,
+            format!("bad number of vertices in f-statement at line 1")
+        );
+    }
+
+    #[test]
+    fn test_mtl_map_ka_malformed() {
+        let read_file = create_read_mtl("map_Ka bar.png buzz.jpg");
+        let err = import_obj_err("mtllib foo.mtl", read_file);
+        assert_eq!(err.kind, MalformedData);
+        assert_eq!(
+            err.description,
+            format!("malformed map_Ka-statement at line 1")
+        );
+    }
+
+    #[test]
+    fn test_mtl_map_ka_unknown_extension() {
+        let read_file = create_read_mtl("map_Ka bar.pdf");
+        let err = import_obj_err("mtllib foo.mtl", read_file);
+        assert_eq!(err.kind, UnsupportedFeature);
+        assert_eq!(
+            err.description,
+            format!(concat!(
+                "missing or unsupported file extension ",
+                "in map_Ka-statement at line 1"
+            ),)
+        );
+    }
+
+    #[test]
+    fn test_mtllib_no_filename() {
+        let err = import_obj_err("mtllib", dont_read_file);
+        assert_eq!(err.kind, MalformedData);
+        assert_eq!(
+            err.description,
+            format!("no filenames in mtllib-statement at line 1")
+        );
+    }
+
+    #[test]
+    fn test_mtl_newmtl_multiple_materials() {
+        let mtl = r#"
+            newmtl abc
+            newmtl def
+        "#;
+        let read_file = create_read_mtl(mtl);
+        let err = import_obj_err("mtllib foo.mtl", read_file);
+        assert_eq!(err.kind, UnsupportedFeature);
+        assert_eq!(
+            err.description,
+            format!("multiple materials are not supported, found at line 3")
+        );
     }
 
     #[test]
@@ -563,5 +736,131 @@ mod tests {
         assert_eq!(normals[3], point3(0.26, 0.27, 0.28));
         assert_eq!(normals[4], point3(0.23, 0.24, 0.25));
         assert_eq!(normals[5], point3(0.20, 0.21, 0.22));
+
+        assert!(fm_reader.read_record().unwrap().is_none());
+    }
+
+    #[test]
+    fn test_usemtl_malformed() {
+        let obj = r#"
+            mtllib foo.mtl
+            usemtl abc def
+        "#;
+
+        let read_file = create_read_mtl("newmtl abc");
+        let err = import_obj_err(obj, read_file);
+        assert_eq!(err.kind, MalformedData);
+        assert_eq!(
+            err.description,
+            format!("malformed usemtl-statement at line 3")
+        );
+    }
+
+    #[test]
+    fn test_usemtl_unknown_material() {
+        let obj = r#"
+            mtllib foo.mtl
+            usemtl def
+        "#;
+
+        let read_file = create_read_mtl("newmtl abc");
+        let err = import_obj_err(obj, read_file);
+        assert_eq!(err.kind, InconsistentState);
+        assert_eq!(
+            err.description,
+            format!("unknown material in usemtl-statement at line 3",)
+        );
+    }
+
+    #[test]
+    fn test_v_malformed() {
+        let err = import_obj_err("v 0.1 0.2 0.3 0.4 0.5", dont_read_file);
+        assert_eq!(err.kind, MalformedData);
+        assert_eq!(err.description, format!("malformed v-statement at line 1"));
+    }
+
+    #[test]
+    fn test_v_malformed_coord() {
+        let cases = [
+            ("v ! 0.2 0.3", "x"),
+            ("v 0.1 ! 0.3", "y"),
+            ("v 0.1 0.2 !", "z"),
+        ];
+        for (obj, coord) in &cases {
+            let err = import_obj_err(obj, dont_read_file);
+            assert_eq!(err.kind, MalformedData);
+            assert_eq!(
+                err.description,
+                format!(
+                    concat!(
+                        "failed to parse {}-coordinate ",
+                        "of v-statement at line 1"
+                    ),
+                    coord
+                )
+            );
+        }
+    }
+
+    #[test]
+    fn test_vn_malformed() {
+        let err = import_obj_err("vn 0.1 0.2 0.3 0.4 0.5", dont_read_file);
+        assert_eq!(err.kind, MalformedData);
+        assert_eq!(
+            err.description,
+            format!("malformed vn-statement at line 1")
+        );
+    }
+
+    #[test]
+    fn test_vn_malformed_coord() {
+        let cases = [
+            ("vn ! 0.2 0.3", "x"),
+            ("vn 0.1 ! 0.3", "y"),
+            ("vn 0.1 0.2 !", "z"),
+        ];
+        for (obj, coord) in &cases {
+            let err = import_obj_err(obj, dont_read_file);
+            assert_eq!(err.kind, MalformedData);
+            assert_eq!(
+                err.description,
+                format!(
+                    concat!(
+                        "failed to parse {}-coordinate ",
+                        "of vn-statement at line 1"
+                    ),
+                    coord
+                )
+            );
+        }
+    }
+
+    #[test]
+    fn test_vt_malformed() {
+        let err = import_obj_err("vt 0.1", dont_read_file);
+        assert_eq!(err.kind, MalformedData);
+        assert_eq!(
+            err.description,
+            format!("malformed vt-statement at line 1")
+        );
+    }
+
+    #[test]
+    fn test_vt_malformed_coord() {
+        let cases = [("vt ! 0.2", "x"), ("vt 0.1 !", "y")];
+        for (obj, coord) in &cases {
+            let err = import_obj_err(obj, dont_read_file);
+            assert_eq!(err.kind, MalformedData);
+            assert_eq!(
+                err.description,
+                format!(
+                    concat!(
+                        "failed to parse {}-coordinate ",
+                        "of vt-statement at line 1"
+                    ),
+                    coord
+                )
+            );
+        }
     }
 }

@@ -427,29 +427,8 @@ mod tests {
     use super::*;
     use base::fm::Read as _;
     use base::record_variant;
+    use base::util::test::{new_ev_face, new_point2, new_point3};
     use model::record::Type::*;
-
-    fn face(
-        v1: u32,
-        v2: u32,
-        v3: u32,
-        t1: u32,
-        t2: u32,
-        t3: u32,
-    ) -> model::element_view::Face {
-        model::element_view::Face {
-            vertex1: v1,
-            vertex2: v2,
-            vertex3: v3,
-            texture1: t1,
-            texture2: t2,
-            texture3: t3,
-        }
-    }
-
-    fn point3(x: f32, y: f32, z: f32) -> model::Point3 {
-        model::Point3 { x, y, z }
-    }
 
     fn dont_read_file(_: &Path) -> Result<Vec<u8>> {
         panic!("unexpected call to read_file");
@@ -700,19 +679,19 @@ mod tests {
 
         let texture_points = view.texture_points;
         assert_eq!(texture_points.len(), 3);
-        assert_eq!(texture_points[0], model::Point2 { x: 0.40, y: 0.41 });
-        assert_eq!(texture_points[1], model::Point2 { x: 0.42, y: 0.43 });
-        assert_eq!(texture_points[2], model::Point2 { x: 0.44, y: 0.45 });
+        assert_eq!(texture_points[0], new_point2(0.40, 0.41));
+        assert_eq!(texture_points[1], new_point2(0.42, 0.43));
+        assert_eq!(texture_points[2], new_point2(0.44, 0.45));
 
         let faces = view.faces;
         assert_eq!(faces.len(), 7);
-        assert_eq!(faces[0], face(1, 2, 6, 1, 2, 3));
-        assert_eq!(faces[1], face(2, 3, 6, 2, 3, 3));
-        assert_eq!(faces[2], face(3, 4, 6, 3, 1, 3));
-        assert_eq!(faces[3], face(4, 5, 6, 1, 2, 3));
-        assert_eq!(faces[4], face(2, 3, 5, 1, 2, 1));
-        assert_eq!(faces[5], face(3, 4, 5, 2, 3, 1));
-        assert_eq!(faces[6], face(3, 4, 5, 2, 3, 1));
+        assert_eq!(faces[0], new_ev_face(1, 2, 6, 1, 2, 3));
+        assert_eq!(faces[1], new_ev_face(2, 3, 6, 2, 3, 3));
+        assert_eq!(faces[2], new_ev_face(3, 4, 6, 3, 1, 3));
+        assert_eq!(faces[3], new_ev_face(4, 5, 6, 1, 2, 3));
+        assert_eq!(faces[4], new_ev_face(2, 3, 5, 1, 2, 1));
+        assert_eq!(faces[5], new_ev_face(3, 4, 5, 2, 3, 1));
+        assert_eq!(faces[6], new_ev_face(3, 4, 5, 2, 3, 1));
 
         let record = fm_reader.read_record().unwrap().unwrap();
         let state = record_variant!(ElementViewState, record);
@@ -721,21 +700,21 @@ mod tests {
 
         let vertices = state.vertices;
         assert_eq!(vertices.len(), 6);
-        assert_eq!(vertices[0], point3(0.00, 0.01, 0.02));
-        assert_eq!(vertices[1], point3(0.03, 0.04, 0.05));
-        assert_eq!(vertices[2], point3(0.06, 0.07, 0.08));
-        assert_eq!(vertices[3], point3(0.09, 0.10, 0.11));
-        assert_eq!(vertices[4], point3(0.12, 0.13, 0.14));
-        assert_eq!(vertices[5], point3(0.15, 0.14, 0.15));
+        assert_eq!(vertices[0], new_point3(0.00, 0.01, 0.02));
+        assert_eq!(vertices[1], new_point3(0.03, 0.04, 0.05));
+        assert_eq!(vertices[2], new_point3(0.06, 0.07, 0.08));
+        assert_eq!(vertices[3], new_point3(0.09, 0.10, 0.11));
+        assert_eq!(vertices[4], new_point3(0.12, 0.13, 0.14));
+        assert_eq!(vertices[5], new_point3(0.15, 0.14, 0.15));
 
         let normals = state.normals;
         assert_eq!(normals.len(), 6);
-        assert_eq!(normals[0], point3(0.35, 0.36, 0.37));
-        assert_eq!(normals[1], point3(0.32, 0.33, 0.34));
-        assert_eq!(normals[2], point3(0.29, 0.30, 0.31));
-        assert_eq!(normals[3], point3(0.26, 0.27, 0.28));
-        assert_eq!(normals[4], point3(0.23, 0.24, 0.25));
-        assert_eq!(normals[5], point3(0.20, 0.21, 0.22));
+        assert_eq!(normals[0], new_point3(0.35, 0.36, 0.37));
+        assert_eq!(normals[1], new_point3(0.32, 0.33, 0.34));
+        assert_eq!(normals[2], new_point3(0.29, 0.30, 0.31));
+        assert_eq!(normals[3], new_point3(0.26, 0.27, 0.28));
+        assert_eq!(normals[4], new_point3(0.23, 0.24, 0.25));
+        assert_eq!(normals[5], new_point3(0.20, 0.21, 0.22));
 
         assert!(fm_reader.read_record().unwrap().is_none());
     }

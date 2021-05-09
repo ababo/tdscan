@@ -8,6 +8,7 @@ use base::defs::{Error, ErrorKind::JsError, Result};
 use base::model;
 
 pub struct WebGlAdapter {
+    #[allow(dead_code)]
     context: WebGlRenderingContext,
 }
 

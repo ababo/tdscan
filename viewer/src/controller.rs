@@ -9,44 +9,58 @@ pub trait Adapter {
     fn set_texture(&mut self, index: usize, image: model::Image) -> Result<()>;
 }
 
+pub type Time = i64;
+
 #[derive(Default)]
 pub struct Vertex {
-    position: model::Point3,
-    normal: model::Point3,
+    #[allow(dead_code)]
     texture: model::Point2,
+    #[allow(dead_code)]
+    position: model::Point3,
+    #[allow(dead_code)]
+    normal: model::Point3,
 }
 
+#[derive(Debug, PartialEq)]
 pub struct Face {
+    #[allow(dead_code)]
     vertex1: u16,
+    #[allow(dead_code)]
     vertex2: u16,
+    #[allow(dead_code)]
     vertex3: u16,
 }
 
-pub struct State {
-    element: String,
-    vertices: Vec<model::Point3>,
-    normals: Vec<model::Point3>,
+struct ElementIndex {
+    base: u16,
+    vertices: Vec<u16>,
 }
 
-pub type Time = i64;
+#[derive(Default)]
+struct State {}
 
 pub struct Controller<A: Adapter> {
     adapter: A,
-    indices: HashMap<String, u16>,
+    index: HashMap<String, ElementIndex>,
     vertices: Vec<Vertex>,
     faces: Vec<Face>,
-    states: BTreeMap<Time, Vec<State>>,
+    states: BTreeMap<Time, State>,
 }
 
 impl<A: Adapter> Controller<A> {
     pub fn new(adapter: A) -> Self {
         Self {
             adapter,
-            indices: HashMap::new(),
-            vertices: vec![],
-            faces: vec![],
+            index: HashMap::new(),
+            vertices: Vec::new(),
+            faces: Vec::new(),
             states: BTreeMap::new(),
         }
+    }
+
+    #[allow(dead_code)]
+    pub fn adapter(&mut self) -> &mut A {
+        &mut self.adapter
     }
 
     pub fn clear(&mut self) {}
@@ -70,99 +84,96 @@ impl<A: Adapter> Controller<A> {
             return Err(Error::new(InconsistentState, desc));
         }
 
-        if self.indices.contains_key(&view.element) {
+        if self.index.contains_key(&view.element) {
             let desc = format!("duplicate view for element '{}'", view.element);
             return Err(Error::new(InconsistentState, desc));
         }
 
-        if view.faces.is_empty() {
-            let desc =
-                format!("no faces in view for element '{}'", view.element);
-            return Err(Error::new(InconsistentState, desc));
-        }
+        #[derive(PartialEq, PartialOrd, Ord, Eq)]
+        struct VertexDesc(u32, u32);
 
-        let num_vertices = self.vertices.len() as u16;
-        self.indices.insert(view.element.clone(), num_vertices);
-
-        self.extend_vertices(&view)?;
-
-        for face in view.faces {
-            self.faces.push(Face {
-                vertex1: num_vertices + face.vertex1 as u16 - 1,
-                vertex2: num_vertices + face.vertex2 as u16 - 1,
-                vertex3: num_vertices + face.vertex3 as u16 - 1,
-            })
-        }
-
-        if let Some(img) = view.texture {
-            self.adapter.set_texture(self.indices.len() - 1, img)?;
-        }
-
-        Ok(())
-    }
-
-    fn extend_vertices(&mut self, view: &model::ElementView) -> Result<()> {
-        let mut vertices: Vec<_> = view
+        let mut vertex_descs: Vec<_> = view
             .faces
             .iter()
             .flat_map(|f| {
                 ArrayVec::from([
-                    (f.vertex1, f.texture1),
-                    (f.vertex2, f.texture2),
-                    (f.vertex3, f.texture3),
+                    VertexDesc(f.vertex1, f.texture1),
+                    VertexDesc(f.vertex2, f.texture2),
+                    VertexDesc(f.vertex3, f.texture3),
                 ])
             })
             .collect();
-        vertices.sort_by_key(|v| v.0);
-        vertices.dedup();
+        vertex_descs.sort();
+        vertex_descs.dedup();
 
-        if self.vertices.len() + vertices.len() > u16::MAX as usize {
+        if self.vertices.len() + vertex_descs.len() > u16::MAX as usize {
             let desc = format!("too many vertices");
-            return Err(Error::new(InconsistentState, desc));
+            return Err(Error::new(UnsupportedFeature, desc));
         }
 
-        let mut pvi = 0;
-        for (vi, ti) in vertices {
-            if vi == 0 {
-                let desc = format!(
-                    "zero vertex number in view face for element '{}'",
-                    view.element
-                );
-                return Err(Error::new(InconsistentState, desc));
+        let mut index = ElementIndex {
+            base: self.vertices.len() as u16,
+            vertices: Vec::with_capacity(vertex_descs.len()),
+        };
+        let mut vertices = Vec::with_capacity(vertex_descs.len());
+        let mut faces = Vec::with_capacity(vertex_descs.len());
+
+        for face in &view.faces {
+            let v1 = VertexDesc(face.vertex1, face.texture1);
+            let v2 = VertexDesc(face.vertex2, face.texture2);
+            let v3 = VertexDesc(face.vertex3, face.texture3);
+            let v1i = vertex_descs.binary_search(&v1).unwrap();
+            let v2i = vertex_descs.binary_search(&v2).unwrap();
+            let v3i = vertex_descs.binary_search(&v3).unwrap();
+            faces.push(Face {
+                vertex1: index.base + v1i as u16,
+                vertex2: index.base + v2i as u16,
+                vertex3: index.base + v3i as u16,
+            })
+        }
+
+        let in_face_err_res = |what| {
+            let desc =
+                format!("{} in view face for element '{}'", what, view.element);
+            Err(Error::new(InconsistentState, desc))
+        };
+
+        let unknown_texture_point_ref_err_res =
+            || in_face_err_res("reference to unknown texture point number");
+
+        for VertexDesc(vn, tn) in vertex_descs {
+            if vn == 0 {
+                return in_face_err_res("zero vertex number");
             }
 
-            if vi == pvi {
-                let desc = format!(
-                    concat!(
-                        "multiple texture points for view vertex {} for ",
-                        "element '{}'"
-                    ),
-                    pvi, view.element
-                );
-                return Err(Error::new(InconsistentState, desc));
-            }
+            let tp = if view.texture.is_some() {
+                if tn == 0 {
+                    return in_face_err_res("zero texture point number");
+                } else if tn as usize > view.texture_points.len() {
+                    return unknown_texture_point_ref_err_res();
+                }
+                view.texture_points[tn as usize - 1].clone()
+            } else {
+                if tn != 0 {
+                    return unknown_texture_point_ref_err_res();
+                }
+                model::Point2::default()
+            };
 
-            if vi != pvi + 1 {
-                let desc = format!(
-                    "missing vertex {} in view for element '{}'",
-                    pvi + 1,
-                    view.element
-                );
-                return Err(Error::new(InconsistentState, desc));
-            }
-
-            self.vertices.push(Vertex {
-                texture: view
-                    .texture_points
-                    .get(ti as usize)
-                    .cloned()
-                    .unwrap_or_default(),
+            vertices.push(Vertex {
+                texture: tp,
                 ..Default::default()
             });
-
-            pvi = vi;
+            index.vertices.push(vn as u16);
         }
 
+        if let Some(img) = view.texture {
+            self.adapter.set_texture(self.index.len(), img)?;
+        }
+
+        self.index.insert(view.element, index);
+        self.vertices.append(&mut vertices);
+        self.faces.append(&mut faces);
         Ok(())
     }
 
@@ -172,16 +183,12 @@ impl<A: Adapter> Controller<A> {
     ) -> Result<()> {
         Ok(())
     }
-
-    pub fn adapter(&mut self) -> &mut A {
-        &mut self.adapter
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use base::util::test::MethodMock;
+    use base::util::test::{new_ev_face, new_point2, MethodMock};
 
     struct TestAdapter {
         set_texture_mock: MethodMock<(usize, model::Image), Result<()>>,
@@ -192,6 +199,10 @@ mod tests {
             TestAdapter {
                 set_texture_mock: MethodMock::new(),
             }
+        }
+
+        pub fn finish(&self) {
+            self.set_texture_mock.finish();
         }
     }
 
@@ -219,204 +230,194 @@ mod tests {
         })
     }
 
+    fn new_face(vertex1: u16, vertex2: u16, vertex3: u16) -> Face {
+        Face {
+            vertex1,
+            vertex2,
+            vertex3,
+        }
+    }
+
     #[test]
-    fn test_duplicate_view() {
+    fn test_add_view_after_state() {
+        let mut controller = Controller::new(TestAdapter::new());
+        controller.states.insert(0, State::default());
+
+        let rec = element_view_record(model::ElementView {
+            element: format!("a"),
+            texture: Some(model::Image::default()),
+            texture_points: vec![new_point2(0.0, 0.0)],
+            faces: vec![new_ev_face(1, 1, 1, 1, 1, 1)],
+            ..Default::default()
+        });
+
+        let res = controller.add_record(rec);
+        assert_eq!(
+            res,
+            inconsistent_state_result(
+                "view for element 'a' after element view states"
+            ),
+        );
+
+        controller.adapter.finish();
+    }
+
+    #[test]
+    fn test_add_view_duplicate() {
         let mut controller = Controller::new(TestAdapter::new());
 
         let rec = element_view_record(model::ElementView {
             element: format!("a"),
-            texture_points: vec![model::Point2 { x: 0.0, y: 0.0 }],
-            faces: vec![model::element_view::Face {
-                vertex1: 1,
-                vertex2: 1,
-                vertex3: 1,
-                texture1: 1,
-                texture2: 1,
-                texture3: 1,
-            }],
+            texture: Some(model::Image::default()),
+            texture_points: vec![new_point2(0.0, 0.0)],
+            faces: vec![new_ev_face(1, 1, 1, 1, 1, 1)],
             ..Default::default()
         });
 
+        controller.adapter().set_texture_mock.rets.push(Ok(()));
+
         let res = controller.add_record(rec.clone());
         assert_eq!(res, Ok(()));
+
+        let image = controller.adapter().set_texture_mock.args.pop();
+        assert_eq!(image, Some((0, model::Image::default())));
 
         let res = controller.add_record(rec);
         assert_eq!(
             res,
             inconsistent_state_result("duplicate view for element 'a'"),
         );
+
+        controller.adapter.finish();
     }
 
     #[test]
-    fn test_missing_vertex() {
+    fn test_add_view_unknown_texture_point_reference() {
         let mut controller = Controller::new(TestAdapter::new());
 
         let rec = element_view_record(model::ElementView {
             element: format!("a"),
-            texture_points: vec![model::Point2 { x: 0.0, y: 0.0 }],
-            faces: vec![model::element_view::Face {
-                vertex1: 1,
-                vertex2: 3,
-                vertex3: 3,
-                texture1: 1,
-                texture2: 1,
-                texture3: 1,
-            }],
+            texture: Some(model::Image::default()),
+            texture_points: vec![new_point2(0.0, 0.0)],
+            faces: vec![new_ev_face(1, 1, 1, 2, 1, 1)],
             ..Default::default()
         });
 
         let res = controller.add_record(rec);
         assert_eq!(
             res,
-            inconsistent_state_result(
-                "missing vertex 2 in view for element 'a'"
-            ),
+            inconsistent_state_result(concat!(
+                "reference to unknown texture point ",
+                "number in view face for element 'a'"
+            ))
         );
-    }
-
-    #[test]
-    fn test_multiple_texture_points_for_vertex() {
-        let mut controller = Controller::new(TestAdapter::new());
-
-        let rec = element_view_record(model::ElementView {
-            element: format!("a"),
-            texture_points: vec![
-                model::Point2 { x: 0.0, y: 0.0 },
-                model::Point2 { x: 1.0, y: 1.0 },
-            ],
-            faces: vec![model::element_view::Face {
-                vertex1: 1,
-                vertex2: 1,
-                vertex3: 1,
-                texture1: 1,
-                texture2: 1,
-                texture3: 2,
-            }],
-            ..Default::default()
-        });
-
-        let res = controller.add_record(rec);
-        assert_eq!(
-            res,
-            inconsistent_state_result(
-                "multiple texture points for view vertex 1 for element 'a'"
-            ),
-        );
-    }
-
-    #[test]
-    fn test_no_faces() {
-        let mut controller = Controller::new(TestAdapter::new());
-
-        let rec = element_view_record(model::ElementView {
-            element: format!("a"),
-            texture_points: vec![model::Point2 { x: 0.0, y: 0.0 }],
-            faces: vec![],
-            ..Default::default()
-        });
-
-        let res = controller.add_record(rec);
-        assert_eq!(
-            res,
-            inconsistent_state_result("no faces in view for element 'a'")
-        );
-    }
-
-    #[test]
-    fn test_set_testure() {
-        let mut controller = Controller::new(TestAdapter::new());
-
-        let rec = element_view_record(model::ElementView {
-            element: format!("a"),
-            texture: Some(model::Image {
-                r#type: model::image::Type::Png as i32,
-                data: vec![1, 2, 3],
-            }),
-            texture_points: vec![model::Point2 { x: 0.0, y: 0.0 }],
-            faces: vec![model::element_view::Face {
-                vertex1: 1,
-                vertex2: 1,
-                vertex3: 1,
-                texture1: 1,
-                texture2: 1,
-                texture3: 1,
-            }],
-            ..Default::default()
-        });
-
-        let err = Err(Error::new(WebGlError, format!("foo")));
-        controller.adapter().set_texture_mock.rets.push(err);
-
-        let res = controller.add_record(rec);
-        assert_eq!(res, Err(Error::new(WebGlError, format!("foo"))));
-
-        let args = controller.adapter().set_texture_mock.args.pop();
-        assert!(args.is_some());
-
-        let (index, image) = args.unwrap();
-        assert_eq!(index, 0);
-        assert_eq!(image.r#type, model::image::Type::Png as i32);
-        assert_eq!(image.data, vec![1, 2, 3]);
-    }
-
-    #[test]
-    fn test_too_many_verticies() {
-        let mut controller = Controller::new(TestAdapter::new());
-
-        let mut view = model::ElementView {
-            element: format!("a"),
-            texture_points: vec![model::Point2 { x: 0.0, y: 0.0 }],
-            ..Default::default()
-        };
-
-        for i in 1..(u16::MAX - 2) as u32 {
-            view.faces.push(model::element_view::Face {
-                vertex1: i,
-                vertex2: i + 1,
-                vertex3: i + 2,
-                texture1: 1,
-                texture2: 1,
-                texture3: 1,
-            });
-        }
-
-        let rec = element_view_record(view);
-        let res = controller.add_record(rec);
-        assert_eq!(res, Result::Ok(()));
 
         let rec = element_view_record(model::ElementView {
             element: format!("b"),
-            texture_points: vec![model::Point2 { x: 0.0, y: 0.0 }],
-            faces: vec![model::element_view::Face {
-                vertex1: u16::MAX as u32 + 1,
-                vertex2: 1,
-                vertex3: 1,
-                texture1: 1,
-                texture2: 1,
-                texture3: 1,
-            }],
+            faces: vec![new_ev_face(1, 1, 1, 0, 1, 1)],
             ..Default::default()
         });
 
         let res = controller.add_record(rec);
-        assert_eq!(res, inconsistent_state_result("too many vertices"));
+        assert_eq!(
+            res,
+            inconsistent_state_result(concat!(
+                "reference to unknown texture point ",
+                "number in view face for element 'b'"
+            ))
+        );
+
+        controller.adapter.finish();
     }
 
     #[test]
-    fn test_zero_vertex_number() {
+    fn test_add_view_valid() {
+        let mut controller = Controller::new(TestAdapter::new());
+
+        let png = model::image::Type::Png as i32;
+        let image = model::Image {
+            r#type: png,
+            data: vec![1, 2, 3],
+        };
+
+        let rec = element_view_record(model::ElementView {
+            element: format!("a"),
+            texture: Some(image),
+            texture_points: vec![
+                new_point2(0.1, 0.2),
+                new_point2(0.3, 0.4),
+                new_point2(0.5, 0.6),
+            ],
+            faces: vec![
+                new_ev_face(1, 2, 3, 1, 2, 3),
+                new_ev_face(2, 3, 4, 2, 3, 1),
+                new_ev_face(3, 4, 5, 3, 2, 1),
+            ],
+            ..Default::default()
+        });
+
+        controller.adapter().set_texture_mock.rets.push(Ok(()));
+
+        controller.add_record(rec).unwrap();
+
+        let index = &controller.index;
+        assert_eq!(index.len(), 1);
+        assert_eq!(index["a"].base, 0);
+        assert_eq!(index["a"].vertices, vec![1, 2, 3, 4, 4, 5]);
+
+        let vertices = &controller.vertices;
+        assert_eq!(vertices.len(), 6);
+        assert_eq!(vertices[0].texture, new_point2(0.1, 0.2));
+        assert_eq!(vertices[1].texture, new_point2(0.3, 0.4));
+        assert_eq!(vertices[2].texture, new_point2(0.5, 0.6));
+
+        let faces = &controller.faces;
+        assert_eq!(faces.len(), 3);
+        assert_eq!(faces[0], new_face(0, 1, 2));
+        assert_eq!(faces[1], new_face(1, 2, 3));
+        assert_eq!(faces[2], new_face(2, 4, 5));
+
+        let (index, image) =
+            controller.adapter().set_texture_mock.args.pop().unwrap();
+        assert_eq!(index, 0);
+        assert_eq!(image.r#type, png);
+        assert_eq!(image.data, vec![1, 2, 3]);
+
+        controller.adapter.finish();
+    }
+
+    #[test]
+    fn test_add_view_zero_texture_point_number() {
         let mut controller = Controller::new(TestAdapter::new());
 
         let rec = element_view_record(model::ElementView {
             element: format!("a"),
-            texture_points: vec![model::Point2 { x: 0.0, y: 0.0 }],
-            faces: vec![model::element_view::Face {
-                vertex1: 1,
-                vertex2: 1,
-                vertex3: 0,
-                texture1: 1,
-                texture2: 1,
-                texture3: 1,
-            }],
+            texture: Some(model::Image::default()),
+            texture_points: vec![new_point2(0.0, 0.0)],
+            faces: vec![new_ev_face(1, 1, 1, 0, 1, 1)],
+            ..Default::default()
+        });
+
+        let res = controller.add_record(rec);
+        assert_eq!(
+            res,
+            inconsistent_state_result(
+                "zero texture point number in view face for element 'a'"
+            ),
+        );
+
+        controller.adapter.finish();
+    }
+
+    #[test]
+    fn test_add_view_zero_vertex_number() {
+        let mut controller = Controller::new(TestAdapter::new());
+
+        let rec = element_view_record(model::ElementView {
+            element: format!("a"),
+            texture: Some(model::Image::default()),
+            texture_points: vec![new_point2(0.0, 0.0)],
+            faces: vec![new_ev_face(1, 1, 0, 1, 1, 1)],
             ..Default::default()
         });
 
@@ -427,5 +428,7 @@ mod tests {
                 "zero vertex number in view face for element 'a'"
             ),
         );
+
+        controller.adapter.finish();
     }
 }

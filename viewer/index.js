@@ -4,7 +4,8 @@ document.addEventListener('DOMContentLoaded', async event => {
   await fmViewer.default();
 
   let canvas = document.getElementById('canvas');
-  let viewer = fmViewer.Viewer.create(canvas);
+  let context = canvas.getContext('webgl');
+  let viewer = await fmViewer.Viewer.create(context);
 
   let resp = await fetch('./pkg/model.fm');
   if (!resp.ok) {
@@ -12,7 +13,7 @@ document.addEventListener('DOMContentLoaded', async event => {
   }
 
   let buf = await resp.arrayBuffer();
-  viewer.loadFmBuffer(buf);
+  await viewer.loadFmBuffer(buf);
 
   let doc = document.documentElement;
   canvas.setAttribute('height', doc.clientHeight);

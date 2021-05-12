@@ -1,48 +1,60 @@
 use std::io::Cursor;
+use std::rc::Rc;
 
+use js_sys::{ArrayBuffer, Promise};
 use wasm_bindgen::prelude::wasm_bindgen;
-use web_sys::HtmlCanvasElement;
+use wasm_bindgen::JsValue;
+use wasm_bindgen_futures::future_to_promise;
+use web_sys::WebGlRenderingContext;
 
 use crate::controller::Controller;
-use crate::defs::{IntoJsResult, JsResult};
+use crate::defs::IntoJsResult;
 use crate::webgl_adapter::WebGlAdapter;
 use base::fm;
 use base::fm::Read as _;
 
+// The async-syntax is avoided because of a known wasm-bindgen issue,
+// see https://github.com/rustwasm/wasm-bindgen/issues/2195.
+
 #[wasm_bindgen]
 pub struct Viewer {
-    controller: Controller<WebGlAdapter>,
+    controller: Rc<Controller<WebGlAdapter>>,
 }
 
 #[wasm_bindgen]
 impl Viewer {
-    pub fn create(canvas: &HtmlCanvasElement) -> JsResult<Viewer> {
+    pub fn create(context: WebGlRenderingContext) -> Promise {
         #[cfg(feature = "console_error_panic_hook")]
         console_error_panic_hook::set_once();
 
-        let adapter = WebGlAdapter::create(canvas).into_result()?;
-        let controller = Controller::new(adapter);
-
-        Ok(Viewer { controller })
+        future_to_promise(async move {
+            let adapter = WebGlAdapter::create(context).await.into_result()?;
+            let controller = Controller::new(adapter).await.into_result()?;
+            Ok(Viewer { controller }.into())
+        })
     }
 
     #[wasm_bindgen(js_name = loadFmBuffer)]
-    pub fn load_fm_buffer(
-        &mut self,
-        buffer: &js_sys::ArrayBuffer,
-    ) -> JsResult<()> {
-        self.controller.clear();
+    pub fn load_fm_buffer(&self, buffer: ArrayBuffer) -> Promise {
+        let buffer = js_sys::Uint8Array::new(&buffer).to_vec();
 
-        let data = js_sys::Uint8Array::new(buffer).to_vec();
-        let mut reader = fm::Reader::new(Cursor::new(data)).into_result()?;
+        let controller = self.controller.clone();
+        controller.clear();
 
-        loop {
-            match reader.read_record().into_result()? {
-                Some(rec) => self.controller.add_record(rec).into_result()?,
-                None => break,
+        future_to_promise(async move {
+            let mut reader =
+                fm::Reader::new(Cursor::new(buffer)).into_result()?;
+
+            loop {
+                match reader.read_record().into_result()? {
+                    Some(rec) => {
+                        controller.add_record(rec).await.into_result()?
+                    }
+                    None => break,
+                }
             }
-        }
 
-        Ok(())
+            Ok(JsValue::NULL)
+        })
     }
 }

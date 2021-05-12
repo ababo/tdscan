@@ -61,6 +61,8 @@ impl StdError for Error {
     }
 }
 
+unsafe impl Send for Error {}
+
 pub type Result<T> = result::Result<T, Error>;
 
 pub trait IntoResult<T> {

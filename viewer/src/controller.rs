@@ -1,12 +1,20 @@
+use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
+use std::rc::Rc;
 
 use arrayvec::ArrayVec;
+use async_trait::async_trait;
 
 use base::defs::{Error, ErrorKind::*, Result};
 use base::model;
 
+#[async_trait(?Send)]
 pub trait Adapter {
-    fn set_texture(&mut self, index: usize, image: model::Image) -> Result<()>;
+    async fn set_texture(
+        self: &Rc<Self>,
+        index: usize,
+        image: model::Image,
+    ) -> Result<()>;
 }
 
 pub type Time = i64;
@@ -31,52 +39,63 @@ pub struct Face {
     vertex3: u16,
 }
 
+#[derive(Default)]
 struct ElementIndex {
     base: u16,
     vertices: Vec<u16>,
 }
 
 #[derive(Default)]
-struct State {}
+struct ElementState {}
 
-pub struct Controller<A: Adapter> {
-    adapter: A,
+#[derive(Default)]
+struct ControllerState {
     index: HashMap<String, ElementIndex>,
     vertices: Vec<Vertex>,
     faces: Vec<Face>,
-    states: BTreeMap<Time, State>,
+    states: BTreeMap<Time, ElementState>,
+}
+
+pub struct Controller<A: Adapter> {
+    adapter: Rc<A>,
+    state: Rc<RefCell<ControllerState>>,
 }
 
 impl<A: Adapter> Controller<A> {
-    pub fn new(adapter: A) -> Self {
-        Self {
-            adapter,
-            index: HashMap::new(),
-            vertices: Vec::new(),
-            faces: Vec::new(),
-            states: BTreeMap::new(),
-        }
+    pub async fn new(adapter: Rc<A>) -> Result<Rc<Self>> {
+        Ok(Rc::new(Self {
+            adapter: adapter.clone(),
+            state: Rc::new(RefCell::new(ControllerState::default())),
+        }))
     }
 
     #[allow(dead_code)]
-    pub fn adapter(&mut self) -> &mut A {
-        &mut self.adapter
+    pub fn adapter(self: &Rc<Self>) -> Rc<A> {
+        self.adapter.clone()
     }
 
-    pub fn clear(&mut self) {}
+    pub fn clear(self: &Rc<Self>) {}
 
-    pub fn add_record(&mut self, record: model::Record) -> Result<()> {
+    pub async fn add_record(
+        self: &Rc<Self>,
+        record: model::Record,
+    ) -> Result<()> {
         use model::record::Type::*;
         match record.r#type {
-            Some(ElementView(v)) => self.add_element_view(v)?,
-            Some(ElementViewState(s)) => self.add_element_view_state(s)?,
+            Some(ElementView(v)) => self.add_element_view(v).await?,
+            Some(ElementViewState(s)) => self.add_element_view_state(s).await?,
             _ => (),
         }
         Ok(())
     }
 
-    fn add_element_view(&mut self, view: model::ElementView) -> Result<()> {
-        if !self.states.is_empty() {
+    async fn add_element_view(
+        self: &Rc<Self>,
+        view: model::ElementView,
+    ) -> Result<()> {
+        let mut state = self.state.borrow_mut();
+
+        if !state.states.is_empty() {
             let desc = format!(
                 "view for element '{}' after element view states",
                 view.element
@@ -84,7 +103,7 @@ impl<A: Adapter> Controller<A> {
             return Err(Error::new(InconsistentState, desc));
         }
 
-        if self.index.contains_key(&view.element) {
+        if state.index.contains_key(&view.element) {
             let desc = format!("duplicate view for element '{}'", view.element);
             return Err(Error::new(InconsistentState, desc));
         }
@@ -106,13 +125,13 @@ impl<A: Adapter> Controller<A> {
         vertex_descs.sort();
         vertex_descs.dedup();
 
-        if self.vertices.len() + vertex_descs.len() > u16::MAX as usize {
+        if state.vertices.len() + vertex_descs.len() > u16::MAX as usize {
             let desc = format!("too many vertices");
             return Err(Error::new(UnsupportedFeature, desc));
         }
 
         let mut index = ElementIndex {
-            base: self.vertices.len() as u16,
+            base: state.vertices.len() as u16,
             vertices: Vec::with_capacity(vertex_descs.len()),
         };
         let mut vertices = Vec::with_capacity(vertex_descs.len());
@@ -168,17 +187,17 @@ impl<A: Adapter> Controller<A> {
         }
 
         if let Some(img) = view.texture {
-            self.adapter.set_texture(self.index.len(), img)?;
+            self.adapter.set_texture(state.index.len(), img).await?;
         }
 
-        self.index.insert(view.element, index);
-        self.vertices.append(&mut vertices);
-        self.faces.append(&mut faces);
+        state.index.insert(view.element, index);
+        state.vertices.append(&mut vertices);
+        state.faces.append(&mut faces);
         Ok(())
     }
 
-    fn add_element_view_state(
-        &mut self,
+    async fn add_element_view_state(
+        self: &Rc<Self>,
         _state: model::ElementViewState,
     ) -> Result<()> {
         Ok(())
@@ -187,32 +206,43 @@ impl<A: Adapter> Controller<A> {
 
 #[cfg(test)]
 mod tests {
+    use wasm_bindgen_test::wasm_bindgen_test as test;
+
     use super::*;
     use base::util::test::{new_ev_face, new_point2, MethodMock};
 
-    struct TestAdapter {
+    struct TestAdapterState {
         set_texture_mock: MethodMock<(usize, model::Image), Result<()>>,
     }
 
+    struct TestAdapter {
+        state: RefCell<TestAdapterState>,
+    }
+
     impl TestAdapter {
-        pub fn new() -> Self {
-            TestAdapter {
-                set_texture_mock: MethodMock::new(),
-            }
+        pub fn new() -> Rc<Self> {
+            Rc::new(TestAdapter {
+                state: RefCell::new(TestAdapterState {
+                    set_texture_mock: MethodMock::new(),
+                }),
+            })
         }
 
         pub fn finish(&self) {
-            self.set_texture_mock.finish();
+            let state = self.state.borrow();
+            state.set_texture_mock.finish();
         }
     }
 
+    #[async_trait(?Send)]
     impl Adapter for TestAdapter {
-        fn set_texture(
-            &mut self,
+        async fn set_texture(
+            self: &Rc<Self>,
             index: usize,
             image: model::Image,
         ) -> Result<()> {
-            self.set_texture_mock.call((index, image))
+            let mut state = self.state.borrow_mut();
+            state.set_texture_mock.call((index, image))
         }
     }
 
@@ -239,9 +269,13 @@ mod tests {
     }
 
     #[test]
-    fn test_add_view_after_state() {
-        let mut controller = Controller::new(TestAdapter::new());
-        controller.states.insert(0, State::default());
+    async fn test_add_view_after_state() {
+        let controller = Controller::new(TestAdapter::new()).await.unwrap();
+
+        {
+            let mut state = controller.state.borrow_mut();
+            state.states.insert(0, ElementState::default());
+        }
 
         let rec = element_view_record(model::ElementView {
             element: format!("a"),
@@ -251,7 +285,7 @@ mod tests {
             ..Default::default()
         });
 
-        let res = controller.add_record(rec);
+        let res = controller.add_record(rec).await;
         assert_eq!(
             res,
             inconsistent_state_result(
@@ -263,8 +297,8 @@ mod tests {
     }
 
     #[test]
-    fn test_add_view_duplicate() {
-        let mut controller = Controller::new(TestAdapter::new());
+    async fn test_add_view_duplicate() {
+        let controller = Controller::new(TestAdapter::new()).await.unwrap();
 
         let rec = element_view_record(model::ElementView {
             element: format!("a"),
@@ -274,15 +308,23 @@ mod tests {
             ..Default::default()
         });
 
-        controller.adapter().set_texture_mock.rets.push(Ok(()));
+        {
+            let adapter = controller.adapter();
+            let mut state = adapter.state.borrow_mut();
+            state.set_texture_mock.rets.push(Ok(()));
+        }
 
-        let res = controller.add_record(rec.clone());
+        let res = controller.add_record(rec.clone()).await;
         assert_eq!(res, Ok(()));
 
-        let image = controller.adapter().set_texture_mock.args.pop();
-        assert_eq!(image, Some((0, model::Image::default())));
+        {
+            let adapter = controller.adapter();
+            let mut state = adapter.state.borrow_mut();
+            let image = state.set_texture_mock.args.pop();
+            assert_eq!(image, Some((0, model::Image::default())));
+        }
 
-        let res = controller.add_record(rec);
+        let res = controller.add_record(rec).await;
         assert_eq!(
             res,
             inconsistent_state_result("duplicate view for element 'a'"),
@@ -292,8 +334,8 @@ mod tests {
     }
 
     #[test]
-    fn test_add_view_unknown_texture_point_reference() {
-        let mut controller = Controller::new(TestAdapter::new());
+    async fn test_add_view_unknown_texture_point_reference() {
+        let controller = Controller::new(TestAdapter::new()).await.unwrap();
 
         let rec = element_view_record(model::ElementView {
             element: format!("a"),
@@ -303,7 +345,7 @@ mod tests {
             ..Default::default()
         });
 
-        let res = controller.add_record(rec);
+        let res = controller.add_record(rec).await;
         assert_eq!(
             res,
             inconsistent_state_result(concat!(
@@ -318,7 +360,7 @@ mod tests {
             ..Default::default()
         });
 
-        let res = controller.add_record(rec);
+        let res = controller.add_record(rec).await;
         assert_eq!(
             res,
             inconsistent_state_result(concat!(
@@ -331,8 +373,8 @@ mod tests {
     }
 
     #[test]
-    fn test_add_view_valid() {
-        let mut controller = Controller::new(TestAdapter::new());
+    async fn test_add_view_valid() {
+        let controller = Controller::new(TestAdapter::new()).await.unwrap();
 
         let png = model::image::Type::Png as i32;
         let image = model::Image {
@@ -356,39 +398,50 @@ mod tests {
             ..Default::default()
         });
 
-        controller.adapter().set_texture_mock.rets.push(Ok(()));
+        {
+            let adapter = controller.adapter();
+            let mut state = adapter.state.borrow_mut();
+            state.set_texture_mock.rets.push(Ok(()));
+        }
 
-        controller.add_record(rec).unwrap();
+        controller.add_record(rec).await.unwrap();
 
-        let index = &controller.index;
-        assert_eq!(index.len(), 1);
-        assert_eq!(index["a"].base, 0);
-        assert_eq!(index["a"].vertices, vec![1, 2, 3, 4, 4, 5]);
+        {
+            let state = controller.state.borrow_mut();
 
-        let vertices = &controller.vertices;
-        assert_eq!(vertices.len(), 6);
-        assert_eq!(vertices[0].texture, new_point2(0.1, 0.2));
-        assert_eq!(vertices[1].texture, new_point2(0.3, 0.4));
-        assert_eq!(vertices[2].texture, new_point2(0.5, 0.6));
+            let index = &state.index;
+            assert_eq!(index.len(), 1);
+            assert_eq!(index["a"].base, 0);
+            assert_eq!(index["a"].vertices, vec![1, 2, 3, 4, 4, 5]);
 
-        let faces = &controller.faces;
-        assert_eq!(faces.len(), 3);
-        assert_eq!(faces[0], new_face(0, 1, 2));
-        assert_eq!(faces[1], new_face(1, 2, 3));
-        assert_eq!(faces[2], new_face(2, 4, 5));
+            let vertices = &state.vertices;
+            assert_eq!(vertices.len(), 6);
+            assert_eq!(vertices[0].texture, new_point2(0.1, 0.2));
+            assert_eq!(vertices[1].texture, new_point2(0.3, 0.4));
+            assert_eq!(vertices[2].texture, new_point2(0.5, 0.6));
 
-        let (index, image) =
-            controller.adapter().set_texture_mock.args.pop().unwrap();
-        assert_eq!(index, 0);
-        assert_eq!(image.r#type, png);
-        assert_eq!(image.data, vec![1, 2, 3]);
+            let faces = &state.faces;
+            assert_eq!(faces.len(), 3);
+            assert_eq!(faces[0], new_face(0, 1, 2));
+            assert_eq!(faces[1], new_face(1, 2, 3));
+            assert_eq!(faces[2], new_face(2, 4, 5));
+        }
+
+        {
+            let adapter = controller.adapter();
+            let mut state = adapter.state.borrow_mut();
+            let (index, image) = state.set_texture_mock.args.pop().unwrap();
+            assert_eq!(index, 0);
+            assert_eq!(image.r#type, png);
+            assert_eq!(image.data, vec![1, 2, 3]);
+        }
 
         controller.adapter.finish();
     }
 
     #[test]
-    fn test_add_view_zero_texture_point_number() {
-        let mut controller = Controller::new(TestAdapter::new());
+    async fn test_add_view_zero_texture_point_number() {
+        let controller = Controller::new(TestAdapter::new()).await.unwrap();
 
         let rec = element_view_record(model::ElementView {
             element: format!("a"),
@@ -398,7 +451,7 @@ mod tests {
             ..Default::default()
         });
 
-        let res = controller.add_record(rec);
+        let res = controller.add_record(rec).await;
         assert_eq!(
             res,
             inconsistent_state_result(
@@ -410,8 +463,8 @@ mod tests {
     }
 
     #[test]
-    fn test_add_view_zero_vertex_number() {
-        let mut controller = Controller::new(TestAdapter::new());
+    async fn test_add_view_zero_vertex_number() {
+        let controller = Controller::new(TestAdapter::new()).await.unwrap();
 
         let rec = element_view_record(model::ElementView {
             element: format!("a"),
@@ -421,7 +474,7 @@ mod tests {
             ..Default::default()
         });
 
-        let res = controller.add_record(rec);
+        let res = controller.add_record(rec).await;
         assert_eq!(
             res,
             inconsistent_state_result(

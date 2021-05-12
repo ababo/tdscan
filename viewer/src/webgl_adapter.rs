@@ -1,30 +1,26 @@
-use wasm_bindgen::JsCast;
-use web_sys::{HtmlCanvasElement, WebGlRenderingContext};
+use std::rc::Rc;
+
+use async_trait::async_trait;
+use web_sys::{WebGlProgram, WebGlRenderingContext};
 
 use crate::controller::Adapter;
-use crate::defs::IntoResult;
-use crate::util::webgl::{compile_shader, link_program};
-use base::defs::{Error, ErrorKind::JsError, Result};
+#[allow(unused_imports)]
+use crate::util::js;
+use crate::util::webgl;
+use base::defs::Result;
 use base::model;
 
 pub struct WebGlAdapter {
     #[allow(dead_code)]
     context: WebGlRenderingContext,
+    #[allow(dead_code)]
+    program: WebGlProgram,
 }
 
 impl WebGlAdapter {
-    pub fn create(canvas: &HtmlCanvasElement) -> Result<WebGlAdapter> {
-        let context = canvas.get_context("webgl").into_result()?;
-        if context.is_none() {
-            let desc = format!("failed to get WebGL context from canvas");
-            return Err(Error::new(JsError, desc));
-        }
-
-        let context = context
-            .unwrap()
-            .dyn_into::<WebGlRenderingContext>()
-            .unwrap();
-
+    pub async fn create(
+        context: WebGlRenderingContext,
+    ) -> Result<Rc<WebGlAdapter>> {
         context.clear(
             WebGlRenderingContext::COLOR_BUFFER_BIT
                 | WebGlRenderingContext::DEPTH_BUFFER_BIT,
@@ -34,30 +30,33 @@ impl WebGlAdapter {
         context.front_face(WebGlRenderingContext::CCW);
         context.cull_face(WebGlRenderingContext::BACK);
 
-        let vert_shader = compile_shader(
+        let vert_shader = webgl::compile_shader(
             &context,
             WebGlRenderingContext::VERTEX_SHADER,
             include_str!("shader/vert.glsl"),
         )?;
 
-        let frag_shader = compile_shader(
+        let frag_shader = webgl::compile_shader(
             &context,
             WebGlRenderingContext::FRAGMENT_SHADER,
             include_str!("shader/frag.glsl"),
         )?;
 
-        let _program = link_program(&context, &vert_shader, &frag_shader)?;
+        let program =
+            webgl::link_program(&context, &vert_shader, &frag_shader)?;
 
-        Ok(WebGlAdapter { context })
+        Ok(Rc::new(Self { context, program }))
     }
 }
 
+#[async_trait(?Send)]
 impl Adapter for WebGlAdapter {
-    fn set_texture(
-        &mut self,
+    async fn set_texture(
+        self: &Rc<Self>,
         _index: usize,
         _image: model::Image,
     ) -> Result<()> {
+        info!("WebGlAdapter::set_texture");
         Ok(())
     }
 }

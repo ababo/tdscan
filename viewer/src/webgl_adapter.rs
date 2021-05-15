@@ -5,6 +5,7 @@ use web_sys::{WebGlProgram, WebGlRenderingContext};
 
 use crate::controller::Adapter;
 
+use crate::controller::Face;
 use crate::defs::IntoResult;
 use crate::util::web;
 use crate::util::webgl;
@@ -55,6 +56,10 @@ fn texture_num(index: usize) -> u32 {
 
 #[async_trait(?Send)]
 impl Adapter for WebGlAdapter {
+    async fn set_faces(self: &Rc<Self>, _faces: &[Face]) -> Result<()> {
+        Ok(())
+    }
+
     async fn set_texture(
         self: &Rc<Self>,
         index: usize,

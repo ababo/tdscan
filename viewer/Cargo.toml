@@ -44,7 +44,8 @@ features = [
 ]
 
 [dev-dependencies]
-wasm-bindgen-test = "0.3.24"
+async-attributes = "1.1.2"
+async-std = "1.9.0"
 
 [features]
 default = ["console_error_panic_hook"]

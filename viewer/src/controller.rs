@@ -13,11 +13,11 @@ pub type Time = i64;
 #[derive(Default)]
 pub struct Vertex {
     #[allow(dead_code)]
-    texture: model::Point2,
+    pub texture: model::Point2,
     #[allow(dead_code)]
-    position: model::Point3,
+    pub position: model::Point3,
     #[allow(dead_code)]
-    normal: model::Point3,
+    pub normal: model::Point3,
 }
 
 #[derive(Debug, PartialEq, Clone)]

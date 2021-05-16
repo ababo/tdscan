@@ -1,3 +1,6 @@
+use std::any::type_name;
+use std::mem::size_of;
+
 use web_sys::{WebGlProgram, WebGlRenderingContext, WebGlShader};
 
 use base::defs::{Error, ErrorKind::WebGlError, Result};
@@ -18,7 +21,7 @@ pub fn compile_shader(
         .unwrap_or(false)
     {
         let msg = context.get_shader_info_log(&shader).unwrap();
-        let desc = format!("failed to create shader: {}", msg);
+        let desc = format!("failed to create WebGL shader: {}", msg);
         return Err(Error::new(WebGlError, desc));
     }
 
@@ -42,9 +45,44 @@ pub fn link_program(
         .unwrap_or(false)
     {
         let msg = context.get_program_info_log(&program).unwrap();
-        let desc = format!("failed to link program: {}", msg);
+        let desc = format!("failed to link WebGL program: {}", msg);
         return Err(Error::new(WebGlError, desc));
     }
 
     Ok(program)
+}
+
+pub fn define_attribute<T>(
+    context: &WebGlRenderingContext,
+    program: &WebGlProgram,
+    name: &str,
+    size: usize,
+    stride: usize,
+    offset: usize,
+) -> Result<()> {
+    let r#type = match type_name::<T>() {
+        "f32" => WebGlRenderingContext::FLOAT,
+        "i8" => WebGlRenderingContext::BYTE,
+        "i16" => WebGlRenderingContext::SHORT,
+        "u8" => WebGlRenderingContext::UNSIGNED_BYTE,
+        "u16" => WebGlRenderingContext::UNSIGNED_SHORT,
+        _ => panic!("unsupported WebGL attribute type"),
+    };
+
+    let location = context.get_attrib_location(&program, name);
+    if location == -1 {
+        let desc = format!("failed to find WebGL program attribute '{}'", name);
+        return Err(Error::new(WebGlError, desc));
+    }
+
+    context.vertex_attrib_pointer_with_i32(
+        location as u32,
+        (size / size_of::<T>()) as i32,
+        r#type,
+        false,
+        stride as i32,
+        offset as i32,
+    );
+
+    Ok(())
 }

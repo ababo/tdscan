@@ -1,5 +1,10 @@
 precision mediump float;
 
+attribute vec2 texture;
+attribute vec3 position;
+attribute vec3 normal;
+
 void main() {
-    gl_Position = vec4(0.0, 0.0, 0.0, 1.0);
+    // This nonsense is just to make sure the attributes are not optimized out.
+    gl_Position = vec4(vec3(texture, 0.0) + position + normal, 1.0);
 }

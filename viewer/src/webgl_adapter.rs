@@ -1,9 +1,11 @@
+use std::mem::size_of;
 use std::rc::Rc;
 
 use async_trait::async_trait;
+use memoffset::offset_of;
 use web_sys::{WebGlProgram, WebGlRenderingContext};
 
-use crate::controller::Adapter;
+use crate::controller::{Adapter, Vertex};
 
 use crate::controller::Face;
 use crate::defs::IntoResult;
@@ -45,6 +47,33 @@ impl WebGlAdapter {
         let program =
             webgl::link_program(&context, &vert_shader, &frag_shader)?;
         context.use_program(Some(&program));
+
+        let buf = context.create_buffer().unwrap();
+        context.bind_buffer(WebGlRenderingContext::ARRAY_BUFFER, Some(&buf));
+        webgl::define_attribute::<f32>(
+            &context,
+            &program,
+            "texture",
+            size_of::<model::Point2>(),
+            size_of::<Vertex>(),
+            offset_of!(Vertex, texture),
+        )?;
+        webgl::define_attribute::<f32>(
+            &context,
+            &program,
+            "position",
+            size_of::<model::Point3>(),
+            size_of::<Vertex>(),
+            offset_of!(Vertex, position),
+        )?;
+        webgl::define_attribute::<f32>(
+            &context,
+            &program,
+            "normal",
+            size_of::<model::Point3>(),
+            size_of::<Vertex>(),
+            offset_of!(Vertex, normal),
+        )?;
 
         Ok(Rc::new(Self { context, program }))
     }

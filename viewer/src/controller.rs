@@ -220,8 +220,9 @@ impl<A: Adapter> Controller<A> {
             return Error::new(InconsistentState, desc);
         })?;
 
-        if view_state.vertices.len() != index.vertices.len()
-            || view_state.normals.len() != index.vertices.len()
+        let num_vertices = *index.vertices.last().unwrap_or(&0) as usize;
+        if view_state.vertices.len() != num_vertices
+            || view_state.normals.len() != num_vertices
         {
             let desc = format!(
                 "bad number of view state vertices or normals for element '{}'",

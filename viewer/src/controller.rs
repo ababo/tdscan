@@ -4,6 +4,7 @@ use std::rc::Rc;
 
 use arrayvec::ArrayVec;
 use async_trait::async_trait;
+use zerocopy::AsBytes;
 
 use base::defs::{Error, ErrorKind::*, Result};
 use base::model;
@@ -20,7 +21,8 @@ pub struct Vertex {
     pub normal: model::Point3,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(AsBytes, Debug, PartialEq, Clone, Copy)]
+#[repr(packed)]
 pub struct Face {
     #[allow(dead_code)]
     vertex1: u16,

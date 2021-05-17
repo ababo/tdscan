@@ -84,5 +84,7 @@ pub fn define_attribute<T>(
         offset as i32,
     );
 
+    context.enable_vertex_attrib_array(location as u32);
+
     Ok(())
 }

@@ -4,11 +4,11 @@ use std::rc::Rc;
 use async_trait::async_trait;
 use memoffset::offset_of;
 use web_sys::{WebGlProgram, WebGlRenderingContext};
+use zerocopy::AsBytes as _;
 
-use crate::controller::{Adapter, Vertex};
-
-use crate::controller::Face;
+use crate::controller::{Adapter, Face, Vertex};
 use crate::defs::IntoResult;
+use crate::util::wasm;
 use crate::util::web;
 use crate::util::webgl;
 use base::defs::Result;
@@ -85,7 +85,19 @@ fn texture_num(index: usize) -> u32 {
 
 #[async_trait(?Send)]
 impl Adapter for WebGlAdapter {
-    async fn set_faces(self: &Rc<Self>, _faces: &[Face]) -> Result<()> {
+    async fn set_faces(self: &Rc<Self>, faces: &[Face]) -> Result<()> {
+        let buf = self.context.create_buffer().unwrap();
+        self.context.bind_buffer(
+            WebGlRenderingContext::ELEMENT_ARRAY_BUFFER,
+            Some(&buf),
+        );
+
+        self.context.buffer_data_with_array_buffer_view(
+            WebGlRenderingContext::ELEMENT_ARRAY_BUFFER,
+            &wasm::new_uint8_array(faces.as_bytes()),
+            WebGlRenderingContext::STATIC_DRAW,
+        );
+
         Ok(())
     }
 

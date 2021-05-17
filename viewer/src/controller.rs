@@ -254,6 +254,7 @@ impl<A: Adapter> Controller<A> {
 
         if state.states.is_empty() {
             self.adapter.set_faces(&state.faces).await?;
+            state.faces = Vec::new(); // It's not used anymore, so deallocate.
         }
 
         state.states.insert(
@@ -473,6 +474,8 @@ mod tests {
         });
 
         assert_eq!(controller.add_record(rec).await, err_res);
+
+        controller.adapter.finish();
     }
 
     #[test]
@@ -506,6 +509,8 @@ mod tests {
                 "duplicate view state time 123 for element 'a'"
             ),
         );
+
+        controller.adapter.finish();
     }
 
     #[test]
@@ -544,6 +549,8 @@ mod tests {
                 "non-monotonic view state time 122 for element 'a'"
             ),
         );
+
+        controller.adapter.finish();
     }
 
     #[test]
@@ -561,6 +568,8 @@ mod tests {
             controller.add_record(rec).await,
             inconsistent_state_result("view state for unknown element 'a'"),
         );
+
+        controller.adapter.finish();
     }
 
     #[test]

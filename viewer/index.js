@@ -4,6 +4,11 @@ document.addEventListener('DOMContentLoaded', async event => {
   await fmViewer.default();
 
   let canvas = document.getElementById('canvas');
+
+  let doc = document.documentElement;
+  canvas.setAttribute('height', doc.clientHeight);
+  canvas.setAttribute('width', doc.clientWidth);
+
   let context = canvas.getContext('webgl');
   let viewer = await fmViewer.Viewer.create(context);
 
@@ -15,7 +20,5 @@ document.addEventListener('DOMContentLoaded', async event => {
   let buf = await resp.arrayBuffer();
   await viewer.loadFmBuffer(buf);
 
-  let doc = document.documentElement;
-  canvas.setAttribute('height', doc.clientHeight);
-  canvas.setAttribute('width', doc.clientWidth);
+  await viewer.renderFrame(BigInt(0));
 });

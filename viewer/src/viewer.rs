@@ -7,7 +7,7 @@ use wasm_bindgen::JsValue;
 use wasm_bindgen_futures::future_to_promise;
 use web_sys::WebGlRenderingContext;
 
-use crate::controller::Controller;
+use crate::controller::{Controller, Time};
 use crate::defs::IntoJsResult;
 use crate::webgl_adapter::WebGlAdapter;
 use base::fm;
@@ -54,6 +54,16 @@ impl Viewer {
                 }
             }
 
+            Ok(JsValue::NULL)
+        })
+    }
+
+    #[wasm_bindgen(js_name = renderFrame)]
+    pub fn render_frame(&self, time: Time) -> Promise {
+        let controller = self.controller.clone();
+
+        future_to_promise(async move {
+            controller.render_frame(time).await.into_result()?;
             Ok(JsValue::NULL)
         })
     }

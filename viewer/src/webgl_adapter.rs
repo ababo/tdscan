@@ -152,4 +152,8 @@ impl Adapter for WebGlAdapter {
 
         Ok(())
     }
+
+    async fn render_frame(self: &Rc<Self>, _vertices: &[Vertex]) -> Result<()> {
+        Ok(())
+    }
 }

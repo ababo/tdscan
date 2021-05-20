@@ -1,14 +1,14 @@
 use std::mem::size_of;
 use std::rc::Rc;
+use std::slice::from_raw_parts;
 
 use async_trait::async_trait;
+use js_sys::{Uint16Array, Uint8Array};
 use memoffset::offset_of;
 use web_sys::{WebGlProgram, WebGlRenderingContext};
-use zerocopy::AsBytes as _;
 
 use crate::controller::{Adapter, Face, Vertex};
 use crate::defs::IntoResult;
-use crate::util::wasm;
 use crate::util::web;
 use crate::util::webgl;
 use base::defs::Result;
@@ -66,14 +66,6 @@ impl WebGlAdapter {
             size_of::<Vertex>(),
             offset_of!(Vertex, position),
         )?;
-        webgl::define_attribute::<f32>(
-            &context,
-            &program,
-            "normal",
-            size_of::<model::Point3>(),
-            size_of::<Vertex>(),
-            offset_of!(Vertex, normal),
-        )?;
 
         Ok(Rc::new(Self { context, program }))
     }
@@ -92,9 +84,16 @@ impl Adapter for WebGlAdapter {
             Some(&buf),
         );
 
+        let indexes: &[u16] = unsafe {
+            from_raw_parts(
+                &faces[0] as *const Face as *const u16,
+                faces.len() * size_of::<Face>() / size_of::<u16>(),
+            )
+        };
+
         self.context.buffer_data_with_array_buffer_view(
             WebGlRenderingContext::ELEMENT_ARRAY_BUFFER,
-            &wasm::new_uint8_array(faces.as_bytes()),
+            &Uint16Array::from(indexes),
             WebGlRenderingContext::STATIC_DRAW,
         );
 
@@ -153,7 +152,37 @@ impl Adapter for WebGlAdapter {
         Ok(())
     }
 
-    async fn render_frame(self: &Rc<Self>, _vertices: &[Vertex]) -> Result<()> {
+    async fn render_frame(self: &Rc<Self>, vertices: &[Vertex]) -> Result<()> {
+        let buf = self.context.create_buffer().unwrap();
+        self.context
+            .bind_buffer(WebGlRenderingContext::ARRAY_BUFFER, Some(&buf));
+
+        let bytes: &[u8] = unsafe {
+            from_raw_parts(
+                &vertices[0] as *const Vertex as *const u8,
+                vertices.len() * size_of::<Face>(),
+            )
+        };
+
+        self.context.buffer_data_with_array_buffer_view(
+            WebGlRenderingContext::ARRAY_BUFFER,
+            &Uint8Array::from(bytes),
+            WebGlRenderingContext::STATIC_DRAW,
+        );
+
+        let size = self.context.get_buffer_parameter(
+            WebGlRenderingContext::ELEMENT_ARRAY_BUFFER,
+            WebGlRenderingContext::BUFFER_SIZE,
+        );
+        let size = size.as_f64().unwrap() as usize / size_of::<u16>();
+
+        self.context.draw_elements_with_i32(
+            WebGlRenderingContext::TRIANGLES,
+            size as i32,
+            WebGlRenderingContext::UNSIGNED_SHORT,
+            0,
+        );
+
         Ok(())
     }
 }

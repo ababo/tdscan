@@ -5,26 +5,26 @@ use std::rc::Rc;
 
 use arrayvec::ArrayVec;
 use async_trait::async_trait;
-use zerocopy::AsBytes;
 
 use base::defs::{Error, ErrorKind::*, Result};
 use base::model;
 
 pub type Time = i64;
 
-#[derive(Clone, Default)]
+#[derive(Clone, Copy, Default)]
+#[repr(packed)]
 pub struct Vertex {
     pub texture: model::Point2,
     pub position: model::Point3,
     pub normal: model::Point3,
 }
 
-#[derive(AsBytes, Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 #[repr(packed)]
 pub struct Face {
-    vertex1: u16,
-    vertex2: u16,
-    vertex3: u16,
+    pub vertex1: u16,
+    pub vertex2: u16,
+    pub vertex3: u16,
 }
 
 #[async_trait(?Send)]

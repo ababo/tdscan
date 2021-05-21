@@ -9,8 +9,7 @@ document.addEventListener('DOMContentLoaded', async event => {
   canvas.setAttribute('height', doc.clientHeight);
   canvas.setAttribute('width', doc.clientWidth);
 
-  let context = canvas.getContext('webgl');
-  let viewer = await fmViewer.Viewer.create(context);
+  let viewer = await fmViewer.Viewer.create(canvas);
 
   let resp = await fetch('./pkg/model.fm');
   if (!resp.ok) {

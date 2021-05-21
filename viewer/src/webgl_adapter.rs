@@ -1,11 +1,14 @@
+use std::f32::consts::PI;
 use std::mem::size_of;
 use std::rc::Rc;
 use std::slice::from_raw_parts;
 
 use async_trait::async_trait;
+use glam::{Mat4, Vec3};
 use js_sys::{Uint16Array, Uint8Array};
 use memoffset::offset_of;
-use web_sys::{WebGlProgram, WebGlRenderingContext};
+use wasm_bindgen::JsCast;
+use web_sys::{HtmlCanvasElement, WebGlProgram, WebGlRenderingContext};
 
 use crate::controller::{Adapter, Face, Vertex};
 use crate::defs::IntoResult;
@@ -15,14 +18,16 @@ use base::defs::Result;
 use base::model;
 
 pub struct WebGlAdapter {
+    canvas: HtmlCanvasElement,
     context: WebGlRenderingContext,
     program: WebGlProgram,
 }
 
 impl WebGlAdapter {
-    pub async fn create(
-        context: WebGlRenderingContext,
-    ) -> Result<Rc<WebGlAdapter>> {
+    pub async fn create(canvas: HtmlCanvasElement) -> Result<Rc<WebGlAdapter>> {
+        let context = canvas.get_context("webgl").into_result()?.unwrap();
+        let context = context.dyn_into::<WebGlRenderingContext>().unwrap();
+
         context.clear(
             WebGlRenderingContext::COLOR_BUFFER_BIT
                 | WebGlRenderingContext::DEPTH_BUFFER_BIT,
@@ -50,6 +55,7 @@ impl WebGlAdapter {
 
         let buf = context.create_buffer().unwrap();
         context.bind_buffer(WebGlRenderingContext::ARRAY_BUFFER, Some(&buf));
+
         webgl::define_attribute::<f32>(
             &context,
             &program,
@@ -58,6 +64,7 @@ impl WebGlAdapter {
             size_of::<Vertex>(),
             offset_of!(Vertex, texture),
         )?;
+
         webgl::define_attribute::<f32>(
             &context,
             &program,
@@ -67,7 +74,55 @@ impl WebGlAdapter {
             offset_of!(Vertex, position),
         )?;
 
-        Ok(Rc::new(Self { context, program }))
+        let adapter = Rc::new(Self {
+            canvas,
+            context,
+            program,
+        });
+
+        adapter.set_projection()?;
+        adapter.set_view()?;
+        adapter.set_world()?;
+
+        Ok(adapter)
+    }
+
+    fn set_projection(self: &Rc<Self>) -> Result<()> {
+        let width = self.canvas.client_width() as f32;
+        let height = self.canvas.client_height() as f32;
+
+        let projection = Mat4::perspective_rh_gl(
+            45.0 * PI / 180.0,
+            width / height,
+            0.1,
+            1000.0,
+        );
+
+        webgl::set_uniform_mat4(
+            &self.context,
+            &self.program,
+            "projection",
+            &projection,
+        )
+    }
+
+    fn set_view(self: &Rc<Self>) -> Result<()> {
+        let eye = Vec3::new(0.0, -75.0, 10.0);
+        let center = Vec3::new(0.0, 0.0, 15.0);
+        let up = Vec3::new(0.0, -75.0, 10.0);
+
+        let view = Mat4::look_at_rh(eye, center, up);
+
+        webgl::set_uniform_mat4(&self.context, &self.program, "view", &view)
+    }
+
+    fn set_world(self: &Rc<Self>) -> Result<()> {
+        webgl::set_uniform_mat4(
+            &self.context,
+            &self.program,
+            "world",
+            &Mat4::IDENTITY,
+        )
     }
 }
 
@@ -108,6 +163,7 @@ impl Adapter for WebGlAdapter {
         let texture = self.context.create_texture().unwrap();
         self.context
             .bind_texture(WebGlRenderingContext::TEXTURE_2D, Some(&texture));
+
         self.context.tex_parameteri(
             WebGlRenderingContext::TEXTURE_2D,
             WebGlRenderingContext::TEXTURE_WRAP_S,
@@ -153,14 +209,10 @@ impl Adapter for WebGlAdapter {
     }
 
     async fn render_frame(self: &Rc<Self>, vertices: &[Vertex]) -> Result<()> {
-        let buf = self.context.create_buffer().unwrap();
-        self.context
-            .bind_buffer(WebGlRenderingContext::ARRAY_BUFFER, Some(&buf));
-
         let bytes: &[u8] = unsafe {
             from_raw_parts(
                 &vertices[0] as *const Vertex as *const u8,
-                vertices.len() * size_of::<Face>(),
+                vertices.len() * size_of::<Vertex>(),
             )
         };
 

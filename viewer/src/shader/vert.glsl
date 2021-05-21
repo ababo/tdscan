@@ -3,7 +3,13 @@ precision mediump float;
 attribute vec2 texture;
 attribute vec3 position;
 
+uniform mat4 projection;
+uniform mat4 view;
+uniform mat4 world;
+
+varying vec2 frag_texture;
+
 void main() {
-    // This nonsense is just to make sure the attributes are not optimized out.
-    gl_Position = vec4(vec3(texture, 0.0) + position, 1.0);
+    frag_texture = texture;
+    gl_Position = projection * view * world * vec4(position, 1.0);
 }

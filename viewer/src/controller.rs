@@ -12,7 +12,7 @@ use base::model;
 pub type Time = i64;
 
 #[derive(Clone, Copy, Default)]
-#[repr(packed)]
+#[repr(C)]
 pub struct Vertex {
     pub texture: model::Point2,
     pub position: model::Point3,
@@ -20,7 +20,7 @@ pub struct Vertex {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-#[repr(packed)]
+#[repr(C)]
 pub struct Face {
     pub vertex1: u16,
     pub vertex2: u16,

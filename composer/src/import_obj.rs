@@ -407,7 +407,9 @@ fn import_vt(state: &mut ImportState, parts: &Vec<&str>) -> Result<()> {
     let x = parse_coord("x-coordinate of vt-statement", state.line, parts[1])?;
     let y = parse_coord("y-coordinate of vt-statement", state.line, parts[2])?;
 
-    state.view.texture_points.push(model::Point2 { x, y });
+    // Fm uses OpenGL-compatible texture coordinates while .obj doesn't.
+    let point = model::Point2 { x, y: 1.0 - y };
+    state.view.texture_points.push(point);
 
     Ok(())
 }
@@ -679,9 +681,9 @@ mod tests {
 
         let texture_points = view.texture_points;
         assert_eq!(texture_points.len(), 3);
-        assert_eq!(texture_points[0], new_point2(0.40, 0.41));
-        assert_eq!(texture_points[1], new_point2(0.42, 0.43));
-        assert_eq!(texture_points[2], new_point2(0.44, 0.45));
+        assert_eq!(texture_points[0], new_point2(0.40, 1.0 - 0.41));
+        assert_eq!(texture_points[1], new_point2(0.42, 1.0 - 0.43));
+        assert_eq!(texture_points[2], new_point2(0.44, 1.0 - 0.45));
 
         let faces = view.faces;
         assert_eq!(faces.len(), 7);

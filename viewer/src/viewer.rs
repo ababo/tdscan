@@ -5,7 +5,7 @@ use js_sys::{ArrayBuffer, Promise};
 use wasm_bindgen::prelude::wasm_bindgen;
 use wasm_bindgen::JsValue;
 use wasm_bindgen_futures::future_to_promise;
-use web_sys::WebGlRenderingContext;
+use web_sys::HtmlCanvasElement;
 
 use crate::controller::{Controller, Time};
 use crate::defs::IntoJsResult;
@@ -23,12 +23,12 @@ pub struct Viewer {
 
 #[wasm_bindgen]
 impl Viewer {
-    pub fn create(context: WebGlRenderingContext) -> Promise {
+    pub fn create(canvas: HtmlCanvasElement) -> Promise {
         #[cfg(feature = "console_error_panic_hook")]
         console_error_panic_hook::set_once();
 
         future_to_promise(async move {
-            let adapter = WebGlAdapter::create(context).await.into_result()?;
+            let adapter = WebGlAdapter::create(canvas).await.into_result()?;
             let controller = Controller::new(adapter).await.into_result()?;
             Ok(Viewer { controller }.into())
         })

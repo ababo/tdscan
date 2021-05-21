@@ -1,6 +1,7 @@
 use std::any::type_name;
 use std::mem::size_of;
 
+use glam::Mat4;
 use web_sys::{WebGlProgram, WebGlRenderingContext, WebGlShader};
 
 use base::defs::{Error, ErrorKind::WebGlError, Result};
@@ -85,6 +86,27 @@ pub fn define_attribute<T>(
     );
 
     context.enable_vertex_attrib_array(location as u32);
+
+    Ok(())
+}
+
+pub fn set_uniform_mat4(
+    context: &WebGlRenderingContext,
+    program: &WebGlProgram,
+    name: &str,
+    matrix: &Mat4,
+) -> Result<()> {
+    let location =
+        context.get_uniform_location(program, name).ok_or_else(|| {
+            let desc = format!("failed to find WeGL uniform '{}'", name);
+            Error::new(WebGlError, desc)
+        })?;
+
+    context.uniform_matrix4fv_with_f32_array(
+        Some(&location),
+        false,
+        matrix.as_ref(),
+    );
 
     Ok(())
 }

@@ -1,3 +1,4 @@
+mod combine;
 mod import_obj;
 
 use structopt::StructOpt;
@@ -11,6 +12,7 @@ struct Opts {
 
 #[derive(StructOpt)]
 enum Command {
+    Combine(combine::CombineParams),
     ImportObj(import_obj::ImportObjParams),
 }
 
@@ -18,6 +20,7 @@ fn main() {
     let opts: Opts = Opts::from_args();
 
     let res = match opts.command {
+        Command::Combine(params) => combine::combine_with_params(&params),
         Command::ImportObj(params) => {
             import_obj::import_obj_with_params(&params)
         }

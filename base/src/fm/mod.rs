@@ -1,12 +1,14 @@
 mod reader;
 mod writer;
 
-pub use reader::*;
-pub use writer::*;
-
+use std::result::Result as StdResult;
 use std::str::FromStr;
 
 use structopt::StructOpt;
+
+use crate::defs::{Error, ErrorKind::*, Result};
+pub use reader::*;
+pub use writer::*;
 
 pub const MAGIC: u32 = 0xD0932177;
 pub const VERSION: u32 = 1;
@@ -18,13 +20,16 @@ pub enum Compression {
 }
 
 impl FromStr for Compression {
-    type Err = &'static str;
+    type Err = Error;
 
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+    fn from_str(s: &str) -> Result<Self> {
         match s {
             "none" => Ok(Compression::None),
             "gzip" => Ok(Compression::Gzip),
-            _ => Err("can be 'none' or 'gzip'"),
+            _ => Err(Error::new(
+                MalformedData,
+                format!("unknown .fm compression (can be 'none' or 'gzip')"),
+            )),
         }
     }
 }
@@ -32,12 +37,12 @@ impl FromStr for Compression {
 pub const DEFAULT_COMPRESSION: &'static str = "gzip";
 pub const DEFAULT_GZIP_LEVEL: &'static str = "6";
 
-fn validate_gzip_level(value: String) -> std::result::Result<(), String> {
+fn validate_gzip_level(value: String) -> StdResult<(), String> {
     let parsed = value
         .parse::<u32>()
         .map_err(|_| "must be a positive integer".to_string())?;
     if parsed > 9 {
-        return Err("can be from 0 to 9".to_string());
+        return Err(format!("unsupported gzip level (can be from 0 to 9"));
     }
     Ok(())
 }

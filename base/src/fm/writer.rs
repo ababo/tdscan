@@ -10,7 +10,7 @@ use crate::fm::{Compression, WriterParams, MAGIC, VERSION};
 use crate::model::Record;
 
 pub trait Write {
-    fn write_record(&mut self, record: Record) -> Result<()>;
+    fn write_record(&mut self, record: &Record) -> Result<()>;
 }
 
 #[derive(Debug)]
@@ -99,7 +99,7 @@ impl<W: io::Write> Writer<W> {
 }
 
 impl<W: io::Write> Write for Writer<W> {
-    fn write_record(&mut self, record: Record) -> Result<()> {
+    fn write_record(&mut self, record: &Record) -> Result<()> {
         let size = record.encoded_len();
         self.writer
             .write_all(&(size as u32).to_le_bytes())

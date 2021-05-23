@@ -323,7 +323,10 @@ mod tests {
     use async_attributes::test;
 
     use super::*;
-    use base::util::test::{new_ev_face, new_point2, new_point3, MethodMock};
+    use base::util::test::{
+        new_element_view_rec, new_element_view_state_rec, new_ev_face,
+        new_point2, new_point3, MethodMock,
+    };
 
     struct TestAdapterData {
         set_faces_mock: MethodMock<Vec<Face>, Result<()>>,
@@ -380,7 +383,7 @@ mod tests {
     }
 
     fn new_simple_view(element: &str) -> model::Record {
-        element_view_record(model::ElementView {
+        new_element_view_rec(model::ElementView {
             element: format!("{}", element),
             texture: Some(model::Image::default()),
             texture_points: vec![new_point2(0.0, 0.0)],
@@ -409,21 +412,6 @@ mod tests {
         }
     }
 
-    fn element_view_record(view: model::ElementView) -> model::Record {
-        model::Record {
-            r#type: Some(base::model::record::Type::ElementView(view)),
-        }
-    }
-
-    fn element_view_state_record(
-        view_state: model::ElementViewState,
-    ) -> model::Record {
-        use base::model::record::Type;
-        model::Record {
-            r#type: Some(Type::ElementViewState(view_state)),
-        }
-    }
-
     fn new_face(vertex1: u16, vertex2: u16, vertex3: u16) -> Face {
         Face {
             vertex1,
@@ -445,7 +433,7 @@ mod tests {
         let controller = Controller::new(TestAdapter::new()).await.unwrap();
         add_simple_view(&controller, "a").await;
 
-        let rec = element_view_state_record(model::ElementViewState {
+        let rec = new_element_view_state_rec(model::ElementViewState {
             element: format!("a"),
             time: 0,
             vertices: vec![(new_point3(0.0, 0.0, 0.0))],
@@ -510,7 +498,7 @@ mod tests {
         let controller = Controller::new(TestAdapter::new()).await.unwrap();
         add_simple_view(&controller, "a").await;
 
-        let rec = element_view_state_record(model::ElementViewState {
+        let rec = new_element_view_state_rec(model::ElementViewState {
             element: format!("a"),
             time: 0,
             vertices: vec![
@@ -526,7 +514,7 @@ mod tests {
 
         assert_eq!(controller.add_record(rec).await, err_res);
 
-        let rec = element_view_state_record(model::ElementViewState {
+        let rec = new_element_view_state_rec(model::ElementViewState {
             element: format!("a"),
             time: 0,
             vertices: vec![new_point3(0.0, 0.0, 0.0)],
@@ -549,7 +537,7 @@ mod tests {
             data.set_faces_mock.rets.push(Ok(()));
         }
 
-        let rec = element_view_state_record(model::ElementViewState {
+        let rec = new_element_view_state_rec(model::ElementViewState {
             element: format!("a"),
             time: 123,
             vertices: vec![new_point3(0.0, 0.0, 0.0)],
@@ -591,7 +579,7 @@ mod tests {
             normals: vec![(new_point3(0.0, 0.0, 0.0))],
         };
 
-        let rec = element_view_state_record(state.clone());
+        let rec = new_element_view_state_rec(state.clone());
         controller.add_record(rec.clone()).await.unwrap();
 
         {
@@ -601,7 +589,7 @@ mod tests {
         }
 
         state.time = 122;
-        let rec = element_view_state_record(state);
+        let rec = new_element_view_state_rec(state);
 
         assert_eq!(
             controller.add_record(rec.clone()).await,
@@ -617,7 +605,7 @@ mod tests {
     async fn test_add_view_state_unknown_element() {
         let controller = Controller::new(TestAdapter::new()).await.unwrap();
 
-        let rec = element_view_state_record(model::ElementViewState {
+        let rec = new_element_view_state_rec(model::ElementViewState {
             element: format!("a"),
             time: 0,
             vertices: vec![(new_point3(0.0, 0.0, 0.0))],
@@ -636,7 +624,7 @@ mod tests {
     async fn test_add_view_unknown_texture_point_reference() {
         let controller = Controller::new(TestAdapter::new()).await.unwrap();
 
-        let rec = element_view_record(model::ElementView {
+        let rec = new_element_view_rec(model::ElementView {
             element: format!("a"),
             texture: Some(model::Image::default()),
             texture_points: vec![new_point2(0.0, 0.0)],
@@ -652,7 +640,7 @@ mod tests {
             ))
         );
 
-        let rec = element_view_record(model::ElementView {
+        let rec = new_element_view_rec(model::ElementView {
             element: format!("b"),
             faces: vec![new_ev_face(1, 1, 1, 0, 1, 1)],
             ..Default::default()
@@ -679,7 +667,7 @@ mod tests {
             data: vec![1, 2, 3],
         };
 
-        let rec = element_view_record(model::ElementView {
+        let rec = new_element_view_rec(model::ElementView {
             element: format!("a"),
             texture: Some(image),
             texture_points: vec![
@@ -740,7 +728,7 @@ mod tests {
     async fn test_add_view_zero_texture_point_number() {
         let controller = Controller::new(TestAdapter::new()).await.unwrap();
 
-        let rec = element_view_record(model::ElementView {
+        let rec = new_element_view_rec(model::ElementView {
             element: format!("a"),
             texture: Some(model::Image::default()),
             texture_points: vec![new_point2(0.0, 0.0)],
@@ -762,7 +750,7 @@ mod tests {
     async fn test_add_view_zero_vertex_number() {
         let controller = Controller::new(TestAdapter::new()).await.unwrap();
 
-        let rec = element_view_record(model::ElementView {
+        let rec = new_element_view_rec(model::ElementView {
             element: format!("a"),
             texture: Some(model::Image::default()),
             texture_points: vec![new_point2(0.0, 0.0)],
@@ -794,7 +782,7 @@ mod tests {
             data.render_frame_mock.rets.push(Ok(()));
         }
 
-        let rec = element_view_state_record(model::ElementViewState {
+        let rec = new_element_view_state_rec(model::ElementViewState {
             element: format!("a"),
             time: 123,
             vertices: vec![new_point3(0.123, 0.234, 0.345)],
@@ -802,7 +790,7 @@ mod tests {
         });
         controller.add_record(rec).await.unwrap();
 
-        let rec = element_view_state_record(model::ElementViewState {
+        let rec = new_element_view_state_rec(model::ElementViewState {
             element: format!("b"),
             time: 234,
             vertices: vec![new_point3(0.789, 0.890, 0.901)],
@@ -810,7 +798,7 @@ mod tests {
         });
         controller.add_record(rec).await.unwrap();
 
-        let rec = element_view_state_record(model::ElementViewState {
+        let rec = new_element_view_state_rec(model::ElementViewState {
             element: format!("b"),
             time: 345,
             vertices: vec![new_point3(0.345, 0.456, 0.567)],

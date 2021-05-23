@@ -115,18 +115,18 @@ pub fn import_obj<F: Fn(&Path) -> Result<Vec<u8>>>(
 
     use model::record::Type;
 
-    fm_writer.write_record(model::Record {
+    fm_writer.write_record(&model::Record {
         r#type: Some(Type::Element(model::Element {
             id: element.to_string(),
             composite: String::default(),
         })),
     })?;
 
-    fm_writer.write_record(model::Record {
+    fm_writer.write_record(&model::Record {
         r#type: Some(Type::ElementView(take(&mut state.view))),
     })?;
 
-    fm_writer.write_record(model::Record {
+    fm_writer.write_record(&model::Record {
         r#type: Some(Type::ElementViewState(take(&mut state.view_state))),
     })?;
 

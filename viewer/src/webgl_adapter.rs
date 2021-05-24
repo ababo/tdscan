@@ -8,7 +8,7 @@ use glam::{Mat4, Vec3};
 use js_sys::{Uint16Array, Uint8Array};
 use memoffset::offset_of;
 use wasm_bindgen::JsCast;
-use web_sys::{HtmlCanvasElement, WebGlProgram, WebGlRenderingContext};
+use web_sys::{HtmlCanvasElement, WebGl2RenderingContext, WebGlProgram};
 
 use crate::controller::{Adapter, Face, Vertex};
 use crate::defs::IntoResult;
@@ -19,34 +19,43 @@ use base::model;
 
 pub struct WebGlAdapter {
     canvas: HtmlCanvasElement,
-    context: WebGlRenderingContext,
+    context: WebGl2RenderingContext,
     program: WebGlProgram,
 }
 
 impl WebGlAdapter {
     pub async fn create(canvas: HtmlCanvasElement) -> Result<Rc<WebGlAdapter>> {
-        let context = canvas.get_context("webgl").into_result()?.unwrap();
-        let context = context.dyn_into::<WebGlRenderingContext>().unwrap();
+        let context = canvas.get_context("webgl2").into_result()?.unwrap();
+        let context = context.dyn_into::<WebGl2RenderingContext>().unwrap();
 
         context.clear(
-            WebGlRenderingContext::COLOR_BUFFER_BIT
-                | WebGlRenderingContext::DEPTH_BUFFER_BIT,
+            WebGl2RenderingContext::COLOR_BUFFER_BIT
+                | WebGl2RenderingContext::DEPTH_BUFFER_BIT,
         );
-        context.enable(WebGlRenderingContext::DEPTH_TEST);
-        context.enable(WebGlRenderingContext::CULL_FACE);
-        context.front_face(WebGlRenderingContext::CCW);
-        context.cull_face(WebGlRenderingContext::BACK);
+        context.enable(WebGl2RenderingContext::DEPTH_TEST);
+        context.enable(WebGl2RenderingContext::CULL_FACE);
+        context.front_face(WebGl2RenderingContext::CCW);
+        context.cull_face(WebGl2RenderingContext::BACK);
 
         let vert_shader = webgl::compile_shader(
             &context,
-            WebGlRenderingContext::VERTEX_SHADER,
+            WebGl2RenderingContext::VERTEX_SHADER,
             include_str!("shader/vert.glsl"),
         )?;
 
+        let max_num_textures = context
+            .get_parameter(WebGl2RenderingContext::MAX_TEXTURE_IMAGE_UNITS)
+            .unwrap()
+            .as_f64()
+            .unwrap() as u32;
+
         let frag_shader = webgl::compile_shader(
             &context,
-            WebGlRenderingContext::FRAGMENT_SHADER,
-            include_str!("shader/frag.glsl"),
+            WebGl2RenderingContext::FRAGMENT_SHADER,
+            &include_str!("shader/frag.glsl").replace(
+                "MAX_TEXTURE_IMAGE_UNITS",
+                &format!("{}", max_num_textures),
+            ),
         )?;
 
         let program =
@@ -54,7 +63,7 @@ impl WebGlAdapter {
         context.use_program(Some(&program));
 
         let buf = context.create_buffer().unwrap();
-        context.bind_buffer(WebGlRenderingContext::ARRAY_BUFFER, Some(&buf));
+        context.bind_buffer(WebGl2RenderingContext::ARRAY_BUFFER, Some(&buf));
 
         webgl::define_attribute::<f32>(
             &context,
@@ -82,7 +91,6 @@ impl WebGlAdapter {
 
         adapter.set_projection()?;
         adapter.set_view()?;
-        adapter.set_world()?;
 
         Ok(adapter)
     }
@@ -115,19 +123,10 @@ impl WebGlAdapter {
 
         webgl::set_uniform_mat4(&self.context, &self.program, "view", &view)
     }
-
-    fn set_world(self: &Rc<Self>) -> Result<()> {
-        webgl::set_uniform_mat4(
-            &self.context,
-            &self.program,
-            "world",
-            &Mat4::IDENTITY,
-        )
-    }
 }
 
 fn texture_num(index: usize) -> u32 {
-    WebGlRenderingContext::TEXTURE0 + index as u32
+    WebGl2RenderingContext::TEXTURE0 + index as u32
 }
 
 #[async_trait(?Send)]
@@ -135,7 +134,7 @@ impl Adapter for WebGlAdapter {
     async fn set_faces(self: &Rc<Self>, faces: &[Face]) -> Result<()> {
         let buf = self.context.create_buffer().unwrap();
         self.context.bind_buffer(
-            WebGlRenderingContext::ELEMENT_ARRAY_BUFFER,
+            WebGl2RenderingContext::ELEMENT_ARRAY_BUFFER,
             Some(&buf),
         );
 
@@ -147,9 +146,9 @@ impl Adapter for WebGlAdapter {
         };
 
         self.context.buffer_data_with_array_buffer_view(
-            WebGlRenderingContext::ELEMENT_ARRAY_BUFFER,
+            WebGl2RenderingContext::ELEMENT_ARRAY_BUFFER,
             &Uint16Array::from(indexes),
-            WebGlRenderingContext::STATIC_DRAW,
+            WebGl2RenderingContext::STATIC_DRAW,
         );
 
         Ok(())
@@ -160,52 +159,65 @@ impl Adapter for WebGlAdapter {
         index: usize,
         image: model::Image,
     ) -> Result<()> {
+        self.context.active_texture(texture_num(index));
+
         let texture = self.context.create_texture().unwrap();
         self.context
-            .bind_texture(WebGlRenderingContext::TEXTURE_2D, Some(&texture));
+            .bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(&texture));
 
         self.context.tex_parameteri(
-            WebGlRenderingContext::TEXTURE_2D,
-            WebGlRenderingContext::TEXTURE_WRAP_S,
-            WebGlRenderingContext::CLAMP_TO_EDGE as i32,
+            WebGl2RenderingContext::TEXTURE_2D,
+            WebGl2RenderingContext::TEXTURE_WRAP_S,
+            WebGl2RenderingContext::CLAMP_TO_EDGE as i32,
         );
         self.context.tex_parameteri(
-            WebGlRenderingContext::TEXTURE_2D,
-            WebGlRenderingContext::TEXTURE_WRAP_T,
-            WebGlRenderingContext::CLAMP_TO_EDGE as i32,
+            WebGl2RenderingContext::TEXTURE_2D,
+            WebGl2RenderingContext::TEXTURE_WRAP_T,
+            WebGl2RenderingContext::CLAMP_TO_EDGE as i32,
         );
         self.context.tex_parameteri(
-            WebGlRenderingContext::TEXTURE_2D,
-            WebGlRenderingContext::TEXTURE_MIN_FILTER,
-            WebGlRenderingContext::LINEAR as i32,
+            WebGl2RenderingContext::TEXTURE_2D,
+            WebGl2RenderingContext::TEXTURE_MIN_FILTER,
+            WebGl2RenderingContext::LINEAR as i32,
         );
         self.context.tex_parameteri(
-            WebGlRenderingContext::TEXTURE_2D,
-            WebGlRenderingContext::TEXTURE_MAG_FILTER,
-            WebGlRenderingContext::LINEAR as i32,
+            WebGl2RenderingContext::TEXTURE_2D,
+            WebGl2RenderingContext::TEXTURE_MAG_FILTER,
+            WebGl2RenderingContext::LINEAR as i32,
         );
 
         self.context
-            .tex_image_2d_with_u32_and_u32_and_image(
-                WebGlRenderingContext::TEXTURE_2D,
+            .tex_image_2d_with_u32_and_u32_and_html_image_element(
+                WebGl2RenderingContext::TEXTURE_2D,
                 0,
-                WebGlRenderingContext::RGBA as i32,
-                WebGlRenderingContext::RGBA,
-                WebGlRenderingContext::UNSIGNED_BYTE,
+                WebGl2RenderingContext::RGBA as i32,
+                WebGl2RenderingContext::RGBA,
+                WebGl2RenderingContext::UNSIGNED_BYTE,
                 &web::decode_image(&image).await?,
             )
             .into_result()?;
 
-        let location = self.context.get_uniform_location(
+        let location = webgl::get_uniform_location(
+            &self.context,
             &self.program,
             &format!("textures[{}]", index),
-        );
-        self.context.uniform1i(location.as_ref(), index as i32);
-        self.context.active_texture(texture_num(index));
+        )?;
+        self.context.uniform1i(Some(&location), index as i32);
+
         self.context
-            .bind_texture(WebGlRenderingContext::TEXTURE_2D, Some(&texture));
+            .bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(&texture));
 
         Ok(())
+    }
+
+    async fn set_texture_index(self: &Rc<Self>, index: &[u16]) -> Result<()> {
+        let index: Vec<i32> = index.iter().map(|v| *v as i32).collect();
+        webgl::set_uniform_i32_array(
+            &self.context,
+            &self.program,
+            "texture_index",
+            &index,
+        )
     }
 
     async fn render_frame(self: &Rc<Self>, vertices: &[Vertex]) -> Result<()> {
@@ -217,21 +229,21 @@ impl Adapter for WebGlAdapter {
         };
 
         self.context.buffer_data_with_array_buffer_view(
-            WebGlRenderingContext::ARRAY_BUFFER,
+            WebGl2RenderingContext::ARRAY_BUFFER,
             &Uint8Array::from(bytes),
-            WebGlRenderingContext::STATIC_DRAW,
+            WebGl2RenderingContext::STATIC_DRAW,
         );
 
         let size = self.context.get_buffer_parameter(
-            WebGlRenderingContext::ELEMENT_ARRAY_BUFFER,
-            WebGlRenderingContext::BUFFER_SIZE,
+            WebGl2RenderingContext::ELEMENT_ARRAY_BUFFER,
+            WebGl2RenderingContext::BUFFER_SIZE,
         );
         let size = size.as_f64().unwrap() as usize / size_of::<u16>();
 
         self.context.draw_elements_with_i32(
-            WebGlRenderingContext::TRIANGLES,
+            WebGl2RenderingContext::TRIANGLES,
             size as i32,
-            WebGlRenderingContext::UNSIGNED_SHORT,
+            WebGl2RenderingContext::UNSIGNED_SHORT,
             0,
         );
 

@@ -1,15 +1,18 @@
+#version 300 es
+
 precision mediump float;
 
-attribute vec2 texture;
-attribute vec3 position;
+in vec2 texture;
+in vec3 position;
+
+out vec2 vert_texture;
+flat out int vert_vertex_id;
 
 uniform mat4 projection;
 uniform mat4 view;
-uniform mat4 world;
-
-varying vec2 frag_texture;
 
 void main() {
-    frag_texture = texture;
-    gl_Position = projection * view * world * vec4(position, 1.0);
+    vert_texture = texture;
+    vert_vertex_id = gl_VertexID;
+    gl_Position = projection * view * vec4(position, 1.0);
 }

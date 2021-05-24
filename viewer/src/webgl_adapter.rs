@@ -107,9 +107,9 @@ impl WebGlAdapter {
     }
 
     fn set_view(self: &Rc<Self>) -> Result<()> {
-        let eye = Vec3::new(0.0, -75.0, 10.0);
-        let center = Vec3::new(0.0, 0.0, 15.0);
-        let up = Vec3::new(0.0, -75.0, 10.0);
+        let eye = Vec3::new(0.0, 100.0, -8.0);
+        let center = Vec3::new(0.0, 0.0, 0.0);
+        let up = Vec3::new(0.0, 1.0, 0.0);
 
         let view = Mat4::look_at_rh(eye, center, up);
 

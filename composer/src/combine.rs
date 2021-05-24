@@ -9,7 +9,6 @@ use structopt::StructOpt;
 
 use base::defs::{Error, ErrorKind::*, Result};
 use base::fm;
-use base::fm::{Read as _, Write as _};
 use base::model;
 use base::util::cli::parse_key_val;
 use base::util::fs;
@@ -62,6 +61,7 @@ pub struct CombineParams {
     in_paths: Vec<PathBuf>,
     #[structopt(help="Element displacement in form 'element=dx,dy,dz'",
             long,
+            number_of_values = 1,
             parse(try_from_str = parse_key_val),
             short = "d"
         )]
@@ -168,11 +168,17 @@ impl Ord for Item {
 
             use model::record::Type;
             Err(match this {
+                Type::Element(_) => match that {
+                    Type::ElementView(_) | Type::ElementViewState(_) => Less,
+                    _ => Equal,
+                },
                 Type::ElementView(_) => match that {
+                    Type::Element(_) => Greater,
                     Type::ElementViewState(_) => Less,
                     _ => Equal,
                 },
                 Type::ElementViewState(this) => match that {
+                    Type::Element(_) => Greater,
                     Type::ElementView(_) => Greater,
                     Type::ElementViewState(that) => this.time.cmp(&that.time),
                     _ => Equal,
@@ -202,6 +208,7 @@ impl PartialEq for Item {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use base::fm::{Read as _, Write as _};
     use base::record_variant;
     use base::util::test::{
         new_element_view_rec, new_element_view_state_rec, new_point3,

@@ -17,7 +17,7 @@ const MAX_NUM_FACE_VERTICES: usize = 10;
 pub struct ImportObjParams {
     #[structopt(help = "Input .obj file (STDIN if omitted)")]
     obj_path: Option<PathBuf>,
-    #[structopt(help = "Element ID for imported data", long)]
+    #[structopt(help = "Element ID for imported data", long, short = "e")]
     element: Option<String>,
     #[structopt(
         help = "Output .fm file (STDOUT if omitted)",

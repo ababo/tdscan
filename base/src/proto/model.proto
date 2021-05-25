@@ -24,15 +24,6 @@ message Image {
   bytes data = 2;
 }
 
-message Composite {
-  string id = 1;
-}
-
-message Element {
-  string id = 1;
-  string composite = 2;
-}
-
 message ElementView {
   message Face {
     uint32 vertex1 = 1;
@@ -58,9 +49,7 @@ message ElementViewState {
 
 message Record {
   oneof type {
-    Composite composite = 1;
-    Element element = 2;
-    ElementView element_view = 3;
-    ElementViewState element_view_state = 4;
+    ElementView element_view = 1;
+    ElementViewState element_view_state = 2;
   }
 }

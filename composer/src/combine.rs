@@ -168,22 +168,14 @@ impl Ord for Item {
 
             use model::record::Type;
             Err(match this {
-                Type::Element(_) => match that {
-                    Type::ElementView(_) | Type::ElementViewState(_) => Less,
-                    _ => Equal,
-                },
                 Type::ElementView(_) => match that {
-                    Type::Element(_) => Greater,
                     Type::ElementViewState(_) => Less,
                     _ => Equal,
                 },
                 Type::ElementViewState(this) => match that {
-                    Type::Element(_) => Greater,
                     Type::ElementView(_) => Greater,
                     Type::ElementViewState(that) => this.time.cmp(&that.time),
-                    _ => Equal,
                 },
-                _ => Equal,
             })
         }
 

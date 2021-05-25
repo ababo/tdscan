@@ -116,13 +116,6 @@ pub fn import_obj<F: Fn(&Path) -> Result<Vec<u8>>>(
     use model::record::Type;
 
     fm_writer.write_record(&model::Record {
-        r#type: Some(Type::Element(model::Element {
-            id: element.to_string(),
-            composite: String::default(),
-        })),
-    })?;
-
-    fm_writer.write_record(&model::Record {
         r#type: Some(Type::ElementView(take(&mut state.view))),
     })?;
 
@@ -665,11 +658,6 @@ mod tests {
         let fm_data = fm_writer.into_inner().unwrap();
         let mut fm_reader = fm_data.as_slice();
         let mut fm_reader = fm::Reader::new(&mut fm_reader).unwrap();
-
-        let record = fm_reader.read_record().unwrap().unwrap();
-        let element = record_variant!(Element, record);
-        assert_eq!(element.id, format!("buzz"));
-        assert!(element.composite.is_empty());
 
         let record = fm_reader.read_record().unwrap().unwrap();
         let view = record_variant!(ElementView, record);

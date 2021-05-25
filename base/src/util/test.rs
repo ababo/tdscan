@@ -47,6 +47,9 @@ pub fn new_ev_face(
     texture1: u32,
     texture2: u32,
     texture3: u32,
+    normal1: u32,
+    normal2: u32,
+    normal3: u32,
 ) -> model::element_view::Face {
     model::element_view::Face {
         vertex1,
@@ -55,6 +58,9 @@ pub fn new_ev_face(
         texture1,
         texture2,
         texture3,
+        normal1,
+        normal2,
+        normal3,
     }
 }
 

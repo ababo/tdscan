@@ -45,7 +45,7 @@ pub trait Adapter {
 #[derive(Default)]
 struct ElementIndex {
     base: u16,
-    vertices: Vec<u16>,
+    vertices: Vec<(u16, u16)>,
 }
 
 #[derive(Default)]
@@ -144,17 +144,17 @@ impl<A: Adapter> Controller<A> {
             return Err(Error::new(InconsistentState, desc));
         }
 
-        #[derive(PartialEq, PartialOrd, Ord, Eq)]
-        struct VertexDesc(u32, u32);
+        #[derive(Eq, PartialEq, PartialOrd, Ord)]
+        struct VertexDesc(u32, u32, u32);
 
         let mut vertex_descs: Vec<_> = view
             .faces
             .iter()
             .flat_map(|f| {
                 ArrayVec::from([
-                    VertexDesc(f.vertex1, f.texture1),
-                    VertexDesc(f.vertex2, f.texture2),
-                    VertexDesc(f.vertex3, f.texture3),
+                    VertexDesc(f.vertex1, f.texture1, f.normal1),
+                    VertexDesc(f.vertex2, f.texture2, f.normal2),
+                    VertexDesc(f.vertex3, f.texture3, f.normal3),
                 ])
             })
             .collect();
@@ -174,9 +174,9 @@ impl<A: Adapter> Controller<A> {
         let mut faces = Vec::with_capacity(vertex_descs.len());
 
         for face in &view.faces {
-            let v1 = VertexDesc(face.vertex1, face.texture1);
-            let v2 = VertexDesc(face.vertex2, face.texture2);
-            let v3 = VertexDesc(face.vertex3, face.texture3);
+            let v1 = VertexDesc(face.vertex1, face.texture1, face.normal1);
+            let v2 = VertexDesc(face.vertex2, face.texture2, face.normal2);
+            let v3 = VertexDesc(face.vertex3, face.texture3, face.normal3);
             let v1i = vertex_descs.binary_search(&v1).unwrap();
             let v2i = vertex_descs.binary_search(&v2).unwrap();
             let v3i = vertex_descs.binary_search(&v3).unwrap();
@@ -193,37 +193,36 @@ impl<A: Adapter> Controller<A> {
             Err(Error::new(InconsistentState, desc))
         };
 
-        let unknown_texture_point_ref_err_res =
-            || in_face_err_res("reference to unknown texture point number");
+        let check_not_zero = |num, what| {
+            if num == 0 {
+                return in_face_err_res(what);
+            }
+            Ok(())
+        };
 
-        for VertexDesc(vn, tn) in vertex_descs {
-            if vn == 0 {
-                return in_face_err_res("zero vertex number");
+        for VertexDesc(vn, tn, nn) in vertex_descs {
+            check_not_zero(vn, "zero vertex number")?;
+            check_not_zero(tn, "zero texture point number")?;
+            check_not_zero(nn, "zero normal number")?;
+
+            let tn = tn as usize;
+            if tn > view.texture_points.len() {
+                return in_face_err_res("unknown texture point number");
             }
 
-            let tp = if view.texture.is_some() {
-                if tn == 0 {
-                    return in_face_err_res("zero texture point number");
-                } else if tn as usize > view.texture_points.len() {
-                    return unknown_texture_point_ref_err_res();
-                }
-                view.texture_points[tn as usize - 1].clone()
-            } else {
-                if tn != 0 {
-                    return unknown_texture_point_ref_err_res();
-                }
-                model::Point2::default()
-            };
-
             vertices.push(Vertex {
-                texture: tp,
+                texture: view.texture_points[tn - 1],
                 ..Default::default()
             });
-            index.vertices.push(vn as u16);
+
+            index.vertices.push((vn as u16, nn as u16));
         }
 
         if let Some(img) = view.texture {
             self.adapter.set_texture(data.index.len(), img).await?;
+        } else {
+            let desc = format!("textureless element '{}'", view.element);
+            return Err(Error::new(UnsupportedFeature, desc));
         }
 
         data.index.insert(view.element, index);
@@ -246,15 +245,30 @@ impl<A: Adapter> Controller<A> {
             return Error::new(InconsistentState, desc);
         })?;
 
-        let num_vertices = *index.vertices.last().unwrap_or(&0) as usize;
-        if view_state.vertices.len() != num_vertices
-            || view_state.normals.len() != num_vertices
-        {
+        let bad_number_res = |what, expected, actual| {
             let desc = format!(
-                "bad number of view state vertices or normals for element '{}'",
-                &view_state.element
+                "expected {} view state {} for element '{}', encountered {}",
+                expected, what, &view_state.element, actual
             );
             return Err(Error::new(InconsistentState, desc));
+        };
+
+        let num_vertices = index.vertices.last().map(|d| d.0).unwrap_or(0);
+        if view_state.vertices.len() != num_vertices as usize {
+            return bad_number_res(
+                "vertices",
+                num_vertices,
+                view_state.vertices.len(),
+            );
+        }
+
+        let num_normals = index.vertices.iter().map(|d| d.1).max().unwrap_or(0);
+        if view_state.normals.len() != num_normals as usize {
+            return bad_number_res(
+                "normals",
+                num_normals,
+                view_state.normals.len(),
+            );
         }
 
         let key = TimeElement(view_state.time, view_state.element);
@@ -308,12 +322,13 @@ impl<A: Adapter> Controller<A> {
 
         for (element, index) in &data.index {
             let element_state = states.get(&element);
-            for (i, num) in index.vertices.iter().enumerate() {
+            for (i, (vn, nn)) in index.vertices.iter().enumerate() {
                 let j = index.base as usize + i;
                 match element_state {
                     Some(s) => {
-                        let k = num.clone() as usize - 1;
+                        let k = vn.clone() as usize - 1;
                         vertices[j].position = s.vertices[k].clone();
+                        let k = nn.clone() as usize - 1;
                         vertices[j].normal = s.normals[k].clone();
                     }
                     None => {
@@ -408,7 +423,7 @@ mod tests {
             element: format!("{}", element),
             texture: Some(model::Image::default()),
             texture_points: vec![new_point2(0.0, 0.0)],
-            faces: vec![new_ev_face(1, 1, 1, 1, 1, 1)],
+            faces: vec![new_ev_face(1, 1, 1, 1, 1, 1, 1, 1, 1)],
             ..Default::default()
         })
     }
@@ -532,9 +547,8 @@ mod tests {
         });
 
         let err_res = inconsistent_state_result(
-            "bad number of view state vertices or normals for element 'a'",
+            "expected 1 view state vertices for element 'a', encountered 2",
         );
-
         assert_eq!(controller.add_record(rec).await, err_res);
 
         let rec = new_element_view_state_rec(model::ElementViewState {
@@ -544,6 +558,9 @@ mod tests {
             normals: vec![new_point3(0.0, 0.0, 0.0), new_point3(0.0, 0.0, 0.0)],
         });
 
+        let err_res = inconsistent_state_result(
+            "expected 1 view state normals for element 'a', encountered 2",
+        );
         assert_eq!(controller.add_record(rec).await, err_res);
 
         controller.adapter().finish();
@@ -655,29 +672,27 @@ mod tests {
             element: format!("a"),
             texture: Some(model::Image::default()),
             texture_points: vec![new_point2(0.0, 0.0)],
-            faces: vec![new_ev_face(1, 1, 1, 2, 1, 1)],
+            faces: vec![new_ev_face(1, 1, 1, 2, 1, 1, 1, 1, 2)],
             ..Default::default()
         });
 
         assert_eq!(
             controller.add_record(rec).await,
             inconsistent_state_result(concat!(
-                "reference to unknown texture point ",
-                "number in view face for element 'a'"
+                "unknown texture point number in view face for element 'a'"
             ))
         );
 
         let rec = new_element_view_rec(model::ElementView {
             element: format!("b"),
-            faces: vec![new_ev_face(1, 1, 1, 0, 1, 1)],
+            faces: vec![new_ev_face(1, 1, 1, 0, 1, 1, 1, 1, 0)],
             ..Default::default()
         });
 
         assert_eq!(
             controller.add_record(rec).await,
             inconsistent_state_result(concat!(
-                "reference to unknown texture point ",
-                "number in view face for element 'b'"
+                "zero texture point number in view face for element 'b'"
             ))
         );
 
@@ -703,9 +718,9 @@ mod tests {
                 new_point2(0.5, 0.6),
             ],
             faces: vec![
-                new_ev_face(1, 2, 3, 1, 2, 3),
-                new_ev_face(2, 3, 4, 2, 3, 1),
-                new_ev_face(3, 4, 5, 3, 2, 1),
+                new_ev_face(1, 2, 3, 1, 2, 3, 1, 2, 3),
+                new_ev_face(2, 3, 4, 2, 3, 1, 2, 3, 1),
+                new_ev_face(3, 4, 5, 3, 2, 1, 3, 1, 2),
             ],
             ..Default::default()
         });
@@ -725,7 +740,10 @@ mod tests {
             let index = &data.index;
             assert_eq!(index.len(), 1);
             assert_eq!(index["a"].base, 0);
-            assert_eq!(index["a"].vertices, vec![1, 2, 3, 4, 4, 5]);
+            assert_eq!(
+                index["a"].vertices,
+                vec![(1, 1), (2, 2), (3, 3), (4, 1), (4, 1), (5, 2)]
+            );
 
             assert_eq!(vertices.len(), 6);
             assert_eq!(vertices[0].texture, new_point2(0.1, 0.2));
@@ -752,6 +770,28 @@ mod tests {
     }
 
     #[test]
+    async fn test_add_view_zero_normal_number() {
+        let controller = Controller::new(TestAdapter::new()).await.unwrap();
+
+        let rec = new_element_view_rec(model::ElementView {
+            element: format!("a"),
+            texture: Some(model::Image::default()),
+            texture_points: vec![new_point2(0.0, 0.0)],
+            faces: vec![new_ev_face(1, 1, 1, 1, 1, 1, 1, 0, 1)],
+            ..Default::default()
+        });
+
+        assert_eq!(
+            controller.add_record(rec).await,
+            inconsistent_state_result(
+                "zero normal number in view face for element 'a'"
+            ),
+        );
+
+        controller.adapter().finish();
+    }
+
+    #[test]
     async fn test_add_view_zero_texture_point_number() {
         let controller = Controller::new(TestAdapter::new()).await.unwrap();
 
@@ -759,7 +799,7 @@ mod tests {
             element: format!("a"),
             texture: Some(model::Image::default()),
             texture_points: vec![new_point2(0.0, 0.0)],
-            faces: vec![new_ev_face(1, 1, 1, 0, 1, 1)],
+            faces: vec![new_ev_face(1, 1, 1, 0, 1, 1, 1, 1, 1)],
             ..Default::default()
         });
 
@@ -781,7 +821,7 @@ mod tests {
             element: format!("a"),
             texture: Some(model::Image::default()),
             texture_points: vec![new_point2(0.0, 0.0)],
-            faces: vec![new_ev_face(1, 1, 0, 1, 1, 1)],
+            faces: vec![new_ev_face(1, 1, 0, 1, 1, 1, 1, 1, 1)],
             ..Default::default()
         });
 

@@ -32,6 +32,9 @@ message ElementView {
     uint32 texture1 = 4;
     uint32 texture2 = 5;
     uint32 texture3 = 6;
+    uint32 normal1 = 7;
+    uint32 normal2 = 8;
+    uint32 normal3 = 9;
   }
 
   string element = 1;

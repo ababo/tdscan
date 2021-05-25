@@ -80,12 +80,12 @@ pub fn import_obj<F: Fn(&Path) -> Result<Vec<u8>>>(
     fm_writer: &mut dyn fm::Write,
     element: &str,
 ) -> Result<()> {
-    let mut state = ImportState {
+    let mut data = ImportData {
         view: model::ElementView {
             element: element.to_string(),
             ..Default::default()
         },
-        view_state: model::ElementViewState {
+        state: model::ElementViewState {
             element: element.to_string(),
             ..Default::default()
         },
@@ -94,19 +94,19 @@ pub fn import_obj<F: Fn(&Path) -> Result<Vec<u8>>>(
 
     for line_res in BufReader::new(obj_reader).lines() {
         if let Ok(line) = line_res {
-            state.line += 1;
+            data.line += 1;
 
             let parts: Vec<&str> = line.trim().split_whitespace().collect();
             if parts.len() > 0 {
                 match parts[0] {
-                    "f" => import_f(&mut state, &parts)?,
+                    "f" => import_f(&mut data, &parts)?,
                     "mtllib" => {
-                        import_mtllib(&read_file, mtl_dir, &mut state, &parts)?
+                        import_mtllib(&read_file, mtl_dir, &mut data, &parts)?
                     }
-                    "usemtl" => import_usemtl(&mut state, &parts)?,
-                    "v" => import_v(&mut state, &parts)?,
-                    "vn" => import_vn(&mut state, &parts)?,
-                    "vt" => import_vt(&mut state, &parts)?,
+                    "usemtl" => import_usemtl(&mut data, &parts)?,
+                    "v" => import_v(&mut data, &parts)?,
+                    "vn" => import_vn(&mut data, &parts)?,
+                    "vt" => import_vt(&mut data, &parts)?,
                     _ => (),
                 }
             }
@@ -116,31 +116,30 @@ pub fn import_obj<F: Fn(&Path) -> Result<Vec<u8>>>(
     use model::record::Type;
 
     fm_writer.write_record(&model::Record {
-        r#type: Some(Type::ElementView(take(&mut state.view))),
+        r#type: Some(Type::ElementView(take(&mut data.view))),
     })?;
 
     fm_writer.write_record(&model::Record {
-        r#type: Some(Type::ElementViewState(take(&mut state.view_state))),
+        r#type: Some(Type::ElementViewState(take(&mut data.state))),
     })?;
 
     Ok(())
 }
 
 #[derive(Default)]
-struct ImportState {
+struct ImportData {
     line: usize,
-    normals: Vec<model::Point3>,
     view: model::ElementView,
-    view_state: model::ElementViewState,
+    state: model::ElementViewState,
     mtl_line: usize,
     mtl_material: Option<String>,
     mtl_dir: PathBuf,
 }
 
-fn import_f(state: &mut ImportState, parts: &Vec<&str>) -> Result<()> {
+fn import_f(data: &mut ImportData, parts: &Vec<&str>) -> Result<()> {
     let num_vertices_err_res = |kind, prop| {
         let msg = "number of vertices in f-statement at line";
-        Err(Error::new(kind, format!("{} {} {}", prop, msg, state.line)))
+        Err(Error::new(kind, format!("{} {} {}", prop, msg, data.line)))
     };
     if parts.len() < 4 {
         return num_vertices_err_res(MalformedData, "bad");
@@ -152,32 +151,37 @@ fn import_f(state: &mut ImportState, parts: &Vec<&str>) -> Result<()> {
 
     for (i, part) in parts[1..].iter().enumerate() {
         let mut iter = part.split("/");
-        let vertex = parse_f_component(state.line, &mut iter, i + 1, false)?;
-        let texture = parse_f_component(state.line, &mut iter, i + 1, true)?;
-        let normal = parse_f_component(state.line, &mut iter, i + 1, false)?;
+        let vertex = parse_f_component(data.line, &mut iter, i + 1, false)?;
+        let texture = parse_f_component(data.line, &mut iter, i + 1, true)?;
+        let normal = parse_f_component(data.line, &mut iter, i + 1, false)?;
         if iter.next().is_some() {
             // Too many components, so emit the same error.
-            parse_f_component(state.line, &mut iter, i + 1, false)?;
+            parse_f_component(data.line, &mut iter, i + 1, false)?;
         }
         face_vertices[i] = (vertex, texture, normal);
     }
 
     let len = parts.len() - 1;
-    for (i, (v, t, n)) in face_vertices[..len - 2].iter().cloned().enumerate() {
+    for (i, (v1, t1, n1)) in
+        face_vertices[..len - 2].iter().cloned().enumerate()
+    {
         let (v2, t2, n2) = face_vertices[i + 1];
         let (v3, t3, n3) = face_vertices[len - 1];
 
-        add_normal(state, v, n)?;
-        add_normal(state, v2, n2)?;
-        add_normal(state, v3, n3)?;
+        validate_face_vertex(&data, v1, t1, n1)?;
+        validate_face_vertex(&data, v2, t2, n2)?;
+        validate_face_vertex(&data, v2, t2, n2)?;
 
-        state.view.faces.push(model::element_view::Face {
-            vertex1: v,
+        data.view.faces.push(model::element_view::Face {
+            vertex1: v1,
             vertex2: v2,
             vertex3: v3,
-            texture1: t,
+            texture1: t1,
             texture2: t2,
             texture3: t3,
+            normal1: n1,
+            normal2: n2,
+            normal3: n3,
         })
     }
 
@@ -210,12 +214,12 @@ fn parse_f_component(
 fn import_mtllib<F: Fn(&Path) -> Result<Vec<u8>>>(
     read_file: &F,
     mtl_dir: &Path,
-    state: &mut ImportState,
+    data: &mut ImportData,
     parts: &Vec<&str>,
 ) -> Result<()> {
     let num_filenames_err_res = |kind, prop| {
         let msg = "filenames in mtllib-statement at line";
-        Err(Error::new(kind, format!("{} {} {}", prop, msg, state.line)))
+        Err(Error::new(kind, format!("{} {} {}", prop, msg, data.line)))
     };
     if parts.len() < 2 {
         return num_filenames_err_res(MalformedData, "no");
@@ -229,15 +233,15 @@ fn import_mtllib<F: Fn(&Path) -> Result<Vec<u8>>>(
     let mtl_data = read_file(&mtl_dir.join(parts[1]))?;
     for line_res in BufReader::new(mtl_data.as_slice()).lines() {
         if let Ok(line) = line_res {
-            state.mtl_line += 1;
+            data.mtl_line += 1;
 
             let parts: Vec<&str> = line.trim().split_whitespace().collect();
             if !parts.is_empty() {
                 match parts[0] {
                     "map_Ka" => {
-                        import_mtl_map_ka(&read_file, mtl_dir, state, &parts)?
+                        import_mtl_map_ka(&read_file, mtl_dir, data, &parts)?
                     }
-                    "newmtl" => import_mtl_newmtl(state, &parts)?,
+                    "newmtl" => import_mtl_newmtl(data, &parts)?,
                     _ => (),
                 }
             }
@@ -247,16 +251,16 @@ fn import_mtllib<F: Fn(&Path) -> Result<Vec<u8>>>(
     Ok(())
 }
 
-fn import_usemtl(state: &mut ImportState, parts: &Vec<&str>) -> Result<()> {
+fn import_usemtl(data: &mut ImportData, parts: &Vec<&str>) -> Result<()> {
     if parts.len() != 2 {
-        let desc = format!("malformed usemtl-statement at line {}", state.line);
+        let desc = format!("malformed usemtl-statement at line {}", data.line);
         return Err(Error::new(MalformedData, desc));
     }
 
-    if Some(parts[1]) != state.mtl_material.as_deref() {
+    if Some(parts[1]) != data.mtl_material.as_deref() {
         let desc = format!(
             "unknown material in usemtl-statement at line {}",
-            state.line
+            data.line
         );
         return Err(Error::new(InconsistentState, desc));
     }
@@ -267,16 +271,16 @@ fn import_usemtl(state: &mut ImportState, parts: &Vec<&str>) -> Result<()> {
 fn import_mtl_map_ka<F: Fn(&Path) -> Result<Vec<u8>>>(
     read_file: &F,
     mtl_dir: &Path,
-    state: &mut ImportState,
+    data: &mut ImportData,
     parts: &Vec<&str>,
 ) -> Result<()> {
     if parts.len() != 2 {
         let desc =
-            format!("malformed map_Ka-statement at line {}", state.mtl_line);
+            format!("malformed map_Ka-statement at line {}", data.mtl_line);
         return Err(Error::new(MalformedData, desc));
     }
 
-    let path = state.mtl_dir.join(parts[1]);
+    let path = data.mtl_dir.join(parts[1]);
 
     let ext = path
         .extension()
@@ -294,7 +298,7 @@ fn import_mtl_map_ka<F: Fn(&Path) -> Result<Vec<u8>>>(
                     "missing or unsupported file extension ",
                     "in map_Ka-statement at line {}"
                 ),
-                state.line
+                data.line
             );
             return Err(Error::new(UnsupportedFeature, desc));
         }
@@ -304,105 +308,71 @@ fn import_mtl_map_ka<F: Fn(&Path) -> Result<Vec<u8>>>(
         r#type: image_type as i32,
         data: read_file(&mtl_dir.join(path))?,
     };
-    state.view.texture = Some(texture);
+    data.view.texture = Some(texture);
 
     Ok(())
 }
 
-fn import_mtl_newmtl(state: &mut ImportState, parts: &Vec<&str>) -> Result<()> {
-    if state.mtl_material.is_some() {
+fn import_mtl_newmtl(data: &mut ImportData, parts: &Vec<&str>) -> Result<()> {
+    if data.mtl_material.is_some() {
         let desc = format!(
             "multiple materials are not supported, found at line {}",
-            state.mtl_line
+            data.mtl_line
         );
         return Err(Error::new(UnsupportedFeature, desc));
     }
-    state.mtl_material = Some(parts[1].to_string());
+    data.mtl_material = Some(parts[1].to_string());
     Ok(())
 }
 
-fn add_normal(state: &mut ImportState, vertex: u32, normal: u32) -> Result<()> {
-    let line = state.line;
-    let bad_vertex_err_res = |prefix, vertex| {
-        let desc = format!(
-            "{} vertex {} in f-statement at line {}",
-            prefix, vertex, line
-        );
-        return Err(Error::new(InconsistentState, desc));
-    };
-
-    let vi = (vertex - 1) as usize;
-    if state.view_state.vertices.len() <= vi {
-        return bad_vertex_err_res("reference to unknown", vertex);
-    }
-
-    let normals = &mut state.view_state.normals;
-    if normals.len() <= vi {
-        normals.resize(vi + 1, model::Point3::default());
-    }
-
-    let ni = (normal - 1) as usize;
-    if ni >= state.normals.len() {
-        return bad_vertex_err_res("reference to unknown normal of", vertex);
-    }
-
-    if normals[vi] == model::Point3::default() {
-        normals[vi] = state.normals[ni].clone();
-    } else if normals[vi] != state.normals[ni] {
-        return bad_vertex_err_res("multiple normals for", vertex);
-    }
-
-    Ok(())
-}
-
-fn import_v(state: &mut ImportState, parts: &Vec<&str>) -> Result<()> {
+fn import_v(data: &mut ImportData, parts: &Vec<&str>) -> Result<()> {
     if parts.len() < 4 || parts.len() > 5 {
         return Err(Error::new(
             MalformedData,
-            format!("malformed v-statement at line {}", state.line),
+            format!("malformed v-statement at line {}", data.line),
         ));
     }
 
-    let x = parse_coord("x-coordinate of v-statement", state.line, parts[1])?;
-    let y = parse_coord("y-coordinate of v-statement", state.line, parts[2])?;
-    let z = parse_coord("z-coordinate of v-statement", state.line, parts[3])?;
+    let x = parse_coord("x-coordinate of v-statement", data.line, parts[1])?;
+    let y = parse_coord("y-coordinate of v-statement", data.line, parts[2])?;
+    let z = parse_coord("z-coordinate of v-statement", data.line, parts[3])?;
 
-    state.view_state.vertices.push(model::Point3 { x, y, z });
+    data.state.vertices.push(model::Point3 { x, y, z });
 
     Ok(())
 }
 
-fn import_vn(state: &mut ImportState, parts: &Vec<&str>) -> Result<()> {
+fn import_vn(data: &mut ImportData, parts: &Vec<&str>) -> Result<()> {
     if parts.len() != 4 {
         return Err(Error::new(
             MalformedData,
-            format!("malformed vn-statement at line {}", state.line),
+            format!("malformed vn-statement at line {}", data.line),
         ));
     }
 
-    let x = parse_coord("x-coordinate of vn-statement", state.line, parts[1])?;
-    let y = parse_coord("y-coordinate of vn-statement", state.line, parts[2])?;
-    let z = parse_coord("z-coordinate of vn-statement", state.line, parts[3])?;
+    let x = parse_coord("x-coordinate of vn-statement", data.line, parts[1])?;
+    let y = parse_coord("y-coordinate of vn-statement", data.line, parts[2])?;
+    let z = parse_coord("z-coordinate of vn-statement", data.line, parts[3])?;
 
-    state.normals.push(model::Point3 { x, y, z });
+    data.state.normals.push(model::Point3 { x, y, z });
 
     Ok(())
 }
 
-fn import_vt(state: &mut ImportState, parts: &Vec<&str>) -> Result<()> {
+fn import_vt(data: &mut ImportData, parts: &Vec<&str>) -> Result<()> {
     if parts.len() < 3 || parts.len() > 4 {
         return Err(Error::new(
             MalformedData,
-            format!("malformed vt-statement at line {}", state.line),
+            format!("malformed vt-statement at line {}", data.line),
         ));
     }
 
-    let x = parse_coord("x-coordinate of vt-statement", state.line, parts[1])?;
-    let y = parse_coord("y-coordinate of vt-statement", state.line, parts[2])?;
+    let x = parse_coord("x-coordinate of vt-statement", data.line, parts[1])?;
+    let y = parse_coord("y-coordinate of vt-statement", data.line, parts[2])?;
 
     // Fm uses OpenGL-compatible texture coordinates while .obj doesn't.
     let point = model::Point2 { x, y: 1.0 - y };
-    state.view.texture_points.push(point);
+    data.view.texture_points.push(point);
 
     Ok(())
 }
@@ -415,6 +385,39 @@ fn parse_coord(what: &str, line: usize, str: &str) -> Result<f32> {
             format!("failed to parse {} at line {}", what, line),
         )),
     }
+}
+
+fn validate_face_vertex(
+    data: &ImportData,
+    vertex: u32,
+    texture: u32,
+    normal: u32,
+) -> Result<()> {
+    let line = data.line;
+    let bad_vertex_err_res = |prefix, vertex| {
+        let desc = format!(
+            "{} vertex {} in f-statement at line {}",
+            prefix, vertex, line
+        );
+        return Err(Error::new(InconsistentState, desc));
+    };
+
+    if data.state.vertices.len() < vertex as usize {
+        return bad_vertex_err_res("reference to unknown", vertex);
+    }
+
+    if data.view.texture_points.len() < texture as usize {
+        return bad_vertex_err_res(
+            "reference to unknown texture point of",
+            vertex,
+        );
+    }
+
+    if data.state.normals.len() < normal as usize {
+        return bad_vertex_err_res("reference to unknown normal of", vertex);
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -481,26 +484,6 @@ mod tests {
     }
 
     #[test]
-    fn test_f_multiple_vertext_normals() {
-        let obj = r#"
-            v 0.01 0.02 0.03
-            v 0.04 0.05 0.06
-            v 0.07 0.08 0.09
-            vn 0.10 0.11 0.12
-            vn 0.13 0.14 0.15
-            vn 0.16 0.17 0.18
-            f 1//1 2//2 3//3
-            f 1//2 3//3 4//4
-        "#;
-        let err = import_obj_err(obj, dont_read_file);
-        assert_eq!(err.kind, InconsistentState);
-        assert_eq!(
-            err.description,
-            format!("multiple normals for vertex 1 in f-statement at line 9")
-        );
-    }
-
-    #[test]
     fn test_f_unknown_normal() {
         let obj = r#"
             v 0.01 0.02 0.03
@@ -522,11 +505,16 @@ mod tests {
 
     #[test]
     fn test_f_unknown_vertex() {
-        let err = import_obj_err("f 1/1/6 2/2/5 3/3/4", dont_read_file);
+        let obj = r#"
+            vt 0.01 0.02 0.03
+            vn 0.04 0.05 0.06
+            f 1/1/1 2/1/1 3/1/1
+        "#;
+        let err = import_obj_err(obj, dont_read_file);
         assert_eq!(err.kind, InconsistentState);
         assert_eq!(
             err.description,
-            format!("reference to unknown vertex 1 in f-statement at line 1")
+            format!("reference to unknown vertex 1 in f-statement at line 4")
         );
     }
 
@@ -675,13 +663,13 @@ mod tests {
 
         let faces = view.faces;
         assert_eq!(faces.len(), 7);
-        assert_eq!(faces[0], new_ev_face(1, 2, 6, 1, 2, 3));
-        assert_eq!(faces[1], new_ev_face(2, 3, 6, 2, 3, 3));
-        assert_eq!(faces[2], new_ev_face(3, 4, 6, 3, 1, 3));
-        assert_eq!(faces[3], new_ev_face(4, 5, 6, 1, 2, 3));
-        assert_eq!(faces[4], new_ev_face(2, 3, 5, 1, 2, 1));
-        assert_eq!(faces[5], new_ev_face(3, 4, 5, 2, 3, 1));
-        assert_eq!(faces[6], new_ev_face(3, 4, 5, 2, 3, 1));
+        assert_eq!(faces[0], new_ev_face(1, 2, 6, 1, 2, 3, 6, 5, 1));
+        assert_eq!(faces[1], new_ev_face(2, 3, 6, 2, 3, 3, 5, 4, 1));
+        assert_eq!(faces[2], new_ev_face(3, 4, 6, 3, 1, 3, 4, 3, 1));
+        assert_eq!(faces[3], new_ev_face(4, 5, 6, 1, 2, 3, 3, 2, 1));
+        assert_eq!(faces[4], new_ev_face(2, 3, 5, 1, 2, 1, 5, 4, 2));
+        assert_eq!(faces[5], new_ev_face(3, 4, 5, 2, 3, 1, 4, 3, 2));
+        assert_eq!(faces[6], new_ev_face(3, 4, 5, 2, 3, 1, 4, 3, 2));
 
         let record = fm_reader.read_record().unwrap().unwrap();
         let state = record_variant!(ElementViewState, record);
@@ -699,12 +687,12 @@ mod tests {
 
         let normals = state.normals;
         assert_eq!(normals.len(), 6);
-        assert_eq!(normals[0], new_point3(0.35, 0.36, 0.37));
-        assert_eq!(normals[1], new_point3(0.32, 0.33, 0.34));
-        assert_eq!(normals[2], new_point3(0.29, 0.30, 0.31));
-        assert_eq!(normals[3], new_point3(0.26, 0.27, 0.28));
-        assert_eq!(normals[4], new_point3(0.23, 0.24, 0.25));
-        assert_eq!(normals[5], new_point3(0.20, 0.21, 0.22));
+        assert_eq!(normals[0], new_point3(0.20, 0.21, 0.22));
+        assert_eq!(normals[1], new_point3(0.23, 0.24, 0.25));
+        assert_eq!(normals[2], new_point3(0.26, 0.27, 0.28));
+        assert_eq!(normals[3], new_point3(0.29, 0.30, 0.31));
+        assert_eq!(normals[4], new_point3(0.32, 0.33, 0.34));
+        assert_eq!(normals[5], new_point3(0.35, 0.36, 0.37));
 
         assert!(fm_reader.read_record().unwrap().is_none());
     }

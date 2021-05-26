@@ -82,3 +82,24 @@ macro_rules! record_variant {
         .unwrap()
     };
 }
+
+#[macro_export]
+macro_rules! assert_p2_eq {
+    ($a:expr, $b:expr) => {{
+        use float_cmp::approx_eq;
+        let (a, b) = ($a, $b);
+        approx_eq!(f32, a.x, b.x);
+        approx_eq!(f32, a.y, b.y);
+    }};
+}
+
+#[macro_export]
+macro_rules! assert_p3_eq {
+    ($a:expr, $b:expr) => {{
+        use float_cmp::approx_eq;
+        let (a, b) = ($a, $b);
+        approx_eq!(f32, a.x, b.x);
+        approx_eq!(f32, a.y, b.y);
+        approx_eq!(f32, a.z, b.z);
+    }};
+}

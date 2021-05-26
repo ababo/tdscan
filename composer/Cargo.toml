@@ -8,3 +8,6 @@ edition = "2018"
 [dependencies]
 base = { path = "../base" }
 structopt = "0.3"
+
+[dev-dependencies]
+float-cmp = "0.8.0"

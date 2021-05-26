@@ -60,12 +60,19 @@ pub struct CombineParams {
     #[structopt(help = "Input .fm files")]
     in_paths: Vec<PathBuf>,
     #[structopt(help="Element displacement in form 'element=dx,dy,dz'",
-            long,
+            long = "displacement",
             number_of_values = 1,
             parse(try_from_str = parse_key_val),
             short = "d"
         )]
     displacements: Vec<(String, Displacement)>,
+    #[structopt(help="Element scaling in form 'element=scale'",
+            long = "scaling",
+            number_of_values = 1,
+            parse(try_from_str = parse_key_val),
+            short = "s"
+        )]
+    scalings: Vec<(String, f32)>,
     #[structopt(
         help = "Output .fm file (STDOUT if omitted)",
         long,
@@ -89,6 +96,7 @@ pub fn combine_with_params(params: &CombineParams) -> Result<()> {
     }
 
     let displacements = params.displacements.iter().cloned().collect();
+    let scalings = params.scalings.iter().cloned().collect();
 
     let mut writer = if let Some(path) = &params.out_path {
         let writer =
@@ -99,12 +107,13 @@ pub fn combine_with_params(params: &CombineParams) -> Result<()> {
         Box::new(writer) as Box<dyn fm::Write>
     };
 
-    combine(&mut reader_refs, &displacements, writer.as_mut())
+    combine(&mut reader_refs, &displacements, &scalings, writer.as_mut())
 }
 
 pub fn combine(
     readers: &mut [&mut dyn fm::Read],
     displacements: &HashMap<String, Displacement>,
+    scalings: &HashMap<String, f32>,
     writer: &mut dyn fm::Write,
 ) -> Result<()> {
     let mut items = Vec::new();
@@ -133,6 +142,20 @@ pub fn combine(
                     state.normals[i].x += disp.dx;
                     state.normals[i].y += disp.dy;
                     state.normals[i].z += disp.dz;
+                }
+            }
+
+            if let Some(scale) = scalings.get(&state.element) {
+                for i in 0..state.vertices.len() {
+                    state.vertices[i].x *= scale;
+                    state.vertices[i].y *= scale;
+                    state.vertices[i].z *= scale;
+                }
+
+                for i in 0..state.normals.len() {
+                    state.normals[i].x *= scale;
+                    state.normals[i].y *= scale;
+                    state.normals[i].z *= scale;
                 }
             }
         }
@@ -201,10 +224,10 @@ impl PartialEq for Item {
 mod tests {
     use super::*;
     use base::fm::{Read as _, Write as _};
-    use base::record_variant;
     use base::util::test::{
         new_element_view_rec, new_element_view_state_rec, new_point3,
     };
+    use base::{assert_p3_eq, record_variant};
     use model::record::Type::*;
 
     fn new_displacement(dx: f32, dy: f32, dz: f32) -> Displacement {
@@ -225,8 +248,8 @@ mod tests {
         new_element_view_state_rec(model::ElementViewState {
             element: format!("{}", element),
             time: time,
-            vertices: vec![model::Point3::default()],
-            normals: vec![model::Point3::default()],
+            vertices: vec![new_point3(0.1, 0.2, 0.3)],
+            normals: vec![new_point3(0.2, 0.3, 0.4)],
             ..Default::default()
         })
     }
@@ -259,11 +282,17 @@ mod tests {
         let mut reader2 = fm::Reader::new(data2_slice).unwrap();
 
         let mut readers: [&mut dyn fm::Read; 2] = [&mut reader1, &mut reader2];
+
+        let mut scales = HashMap::new();
+        scales.insert(format!("e1"), 2.0);
+
         let mut displacements = HashMap::new();
-        displacements.insert(format!("e2"), new_displacement(0.1, 0.2, 0.3));
+        displacements.insert(format!("e2"), new_displacement(0.3, 0.4, 0.5));
+
         let mut writer =
             fm::Writer::new(Vec::new(), &fm::WriterParams::default()).unwrap();
-        combine(&mut readers[..], &displacements, &mut writer).unwrap();
+        combine(&mut readers[..], &displacements, &scales, &mut writer)
+            .unwrap();
 
         let data = writer.into_inner().unwrap();
         let data_slice = &data[..];
@@ -282,36 +311,36 @@ mod tests {
         assert_eq!(state.element, format!("e1"));
         assert_eq!(state.time, 1);
         assert_eq!(state.vertices.len(), 1);
-        assert_eq!(state.vertices[0], model::Point3::default());
+        assert_p3_eq!(state.vertices[0], new_point3(0.2, 0.4, 0.6));
         assert_eq!(state.normals.len(), 1);
-        assert_eq!(state.normals[0], model::Point3::default());
+        assert_p3_eq!(state.normals[0], new_point3(0.4, 0.6, 0.8));
 
         let rec = reader.read_record().unwrap().unwrap();
         let state = record_variant!(ElementViewState, rec);
         assert_eq!(state.element, format!("e2"));
         assert_eq!(state.time, 2);
         assert_eq!(state.vertices.len(), 1);
-        assert_eq!(state.vertices[0], new_point3(0.1, 0.2, 0.3));
+        assert_p3_eq!(state.vertices[0], new_point3(0.4, 0.6, 0.8));
         assert_eq!(state.normals.len(), 1);
-        assert_eq!(state.normals[0], new_point3(0.1, 0.2, 0.3));
+        assert_p3_eq!(state.normals[0], new_point3(0.5, 0.7, 0.9));
 
         let rec = reader.read_record().unwrap().unwrap();
         let state = record_variant!(ElementViewState, rec);
         assert_eq!(state.element, format!("e1"));
         assert_eq!(state.time, 3);
         assert_eq!(state.vertices.len(), 1);
-        assert_eq!(state.vertices[0], model::Point3::default());
+        assert_p3_eq!(state.vertices[0], new_point3(0.2, 0.4, 0.6));
         assert_eq!(state.normals.len(), 1);
-        assert_eq!(state.normals[0], model::Point3::default());
+        assert_p3_eq!(state.normals[0], new_point3(0.4, 0.6, 0.8));
 
         let rec = reader.read_record().unwrap().unwrap();
         let state = record_variant!(ElementViewState, rec);
         assert_eq!(state.element, format!("e2"));
         assert_eq!(state.time, 4);
         assert_eq!(state.vertices.len(), 1);
-        assert_eq!(state.vertices[0], new_point3(0.1, 0.2, 0.3));
+        assert_p3_eq!(state.vertices[0], new_point3(0.4, 0.6, 0.8));
         assert_eq!(state.normals.len(), 1);
-        assert_eq!(state.normals[0], new_point3(0.1, 0.2, 0.3));
+        assert_p3_eq!(state.normals[0], new_point3(0.5, 0.7, 0.9));
 
         assert!(reader.read_record().unwrap().is_none());
     }

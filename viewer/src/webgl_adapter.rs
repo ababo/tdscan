@@ -131,6 +131,10 @@ fn texture_num(index: usize) -> u32 {
 
 #[async_trait(?Send)]
 impl Adapter for WebGlAdapter {
+    async fn destroy(self: &Rc<Self>) -> Result<()> {
+        Ok(())
+    }
+
     async fn set_faces(self: &Rc<Self>, faces: &[Face]) -> Result<()> {
         let buf = self.context.create_buffer().unwrap();
         self.context.bind_buffer(

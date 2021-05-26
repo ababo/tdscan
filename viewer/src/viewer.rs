@@ -29,8 +29,17 @@ impl Viewer {
 
         future_to_promise(async move {
             let adapter = WebGlAdapter::create(canvas).await.into_result()?;
-            let controller = Controller::new(adapter).await.into_result()?;
+            let controller = Controller::create(adapter).await.into_result()?;
             Ok(Viewer { controller }.into())
+        })
+    }
+
+    pub fn destroy(&self) -> Promise {
+        let controller = self.controller.clone();
+
+        future_to_promise(async move {
+            controller.destroy().await.into_result()?;
+            Ok(JsValue::NULL)
         })
     }
 
@@ -58,12 +67,12 @@ impl Viewer {
         })
     }
 
-    #[wasm_bindgen(js_name = renderFrame)]
-    pub fn render_frame(&self, time: Time) -> Promise {
+    #[wasm_bindgen(js_name = moveToScene)]
+    pub fn move_to_scene(&self, time: Time) -> Promise {
         let controller = self.controller.clone();
 
         future_to_promise(async move {
-            controller.render_frame(time).await.into_result()?;
+            controller.move_to_scene(time).await.into_result()?;
             Ok(JsValue::NULL)
         })
     }

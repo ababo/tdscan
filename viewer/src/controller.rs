@@ -106,18 +106,29 @@ pub struct Controller<A: Adapter> {
     adapter: Rc<A>,
     data: RefCell<ControllerData>,
     vertices: RefCell<Vec<Vertex>>,
+    mouse_sub: RefCell<Option<A::Subscription>>,
 }
 
-impl<A: Adapter> Controller<A> {
+impl<A: Adapter + 'static> Controller<A> {
     pub fn create(adapter: Rc<A>) -> Result<Rc<Self>> {
-        Ok(Rc::new(Self {
+        let controller = Rc::new(Self {
             adapter: adapter.clone(),
             data: RefCell::new(ControllerData::default()),
             vertices: RefCell::new(Vec::new()),
-        }))
+            mouse_sub: RefCell::new(None),
+        });
+
+        let cloned = controller.clone();
+        let mouse_sub = adapter
+            .subscribe_to_mouse_events(move |e| cloned.handle_mouse(e))?;
+        controller.mouse_sub.borrow_mut().get_or_insert(mouse_sub);
+
+        Ok(controller)
     }
 
     pub fn destroy(self: &Rc<Self>) {
+        self.mouse_sub.borrow_mut().take(); // Unsubscribe.
+
         let mut data = self.data.borrow_mut();
         data.index = HashMap::new();
         data.faces = Vec::new();
@@ -331,6 +342,12 @@ impl<A: Adapter> Controller<A> {
         Ok(())
     }
 
+    fn handle_mouse(self: &Rc<Self>, _event: &MouseEvent) {
+        if !cfg!(test) {
+            info!("handle_mouse");
+        }
+    }
+
     pub fn move_to_scene(self: &Rc<Self>, time: Time) -> Result<()> {
         let data = self.data.borrow();
         let mut vertices = self.vertices.borrow_mut();
@@ -460,6 +477,25 @@ mod tests {
         }
     }
 
+    fn create_controller() -> Rc<Controller<TestAdapter>> {
+        let adapter = TestAdapter::new();
+
+        {
+            let ret = Ok(format!("mouse_sub"));
+            let mut data = adapter.data.borrow_mut();
+            data.subscribe_to_mouse_events_mock.rets.push(ret);
+        }
+
+        let controller = Controller::create(adapter).unwrap();
+
+        {
+            let mut data = controller.adapter.data.borrow_mut();
+            let _ = data.subscribe_to_mouse_events_mock.args.pop().unwrap();
+        }
+
+        controller
+    }
+
     fn new_simple_view(element: &str) -> model::Record {
         new_element_view_rec(model::ElementView {
             element: format!("{}", element),
@@ -506,7 +542,7 @@ mod tests {
 
     #[test]
     async fn test_add_view_after_state() {
-        let controller = Controller::create(TestAdapter::new()).unwrap();
+        let controller = create_controller();
         add_simple_view(&controller, "a").await;
 
         let rec = new_element_view_state_rec(model::ElementViewState {
@@ -543,7 +579,7 @@ mod tests {
 
     #[test]
     async fn test_add_view_duplicate() {
-        let controller = Controller::create(TestAdapter::new()).unwrap();
+        let controller = create_controller();
 
         {
             let mut data = controller.adapter.data.borrow_mut();
@@ -569,7 +605,7 @@ mod tests {
 
     #[test]
     async fn test_add_view_state_bad_num_of_vertices_normals() {
-        let controller = Controller::create(TestAdapter::new()).unwrap();
+        let controller = create_controller();
         add_simple_view(&controller, "a").await;
 
         let rec = new_element_view_state_rec(model::ElementViewState {
@@ -604,7 +640,7 @@ mod tests {
 
     #[test]
     async fn test_add_view_state_duplicate() {
-        let controller = Controller::create(TestAdapter::new()).unwrap();
+        let controller = create_controller();
         add_simple_view(&controller, "a").await;
 
         {
@@ -639,7 +675,7 @@ mod tests {
 
     #[test]
     async fn test_add_view_state_non_monotonic() {
-        let controller = Controller::create(TestAdapter::new()).unwrap();
+        let controller = create_controller();
         add_simple_view(&controller, "a").await;
 
         {
@@ -679,7 +715,7 @@ mod tests {
 
     #[test]
     async fn test_add_view_state_unknown_element() {
-        let controller = Controller::create(TestAdapter::new()).unwrap();
+        let controller = create_controller();
 
         let rec = new_element_view_state_rec(model::ElementViewState {
             element: format!("a"),
@@ -698,7 +734,7 @@ mod tests {
 
     #[test]
     async fn test_add_view_unknown_texture_point_reference() {
-        let controller = Controller::create(TestAdapter::new()).unwrap();
+        let controller = create_controller();
 
         let rec = new_element_view_rec(model::ElementView {
             element: format!("a"),
@@ -733,7 +769,7 @@ mod tests {
 
     #[test]
     async fn test_add_view_valid() {
-        let controller = Controller::create(TestAdapter::new()).unwrap();
+        let controller = create_controller();
 
         let png = model::image::Type::Png as i32;
         let image = model::Image {
@@ -801,7 +837,7 @@ mod tests {
 
     #[test]
     async fn test_add_view_zero_normal_number() {
-        let controller = Controller::create(TestAdapter::new()).unwrap();
+        let controller = create_controller();
 
         let rec = new_element_view_rec(model::ElementView {
             element: format!("a"),
@@ -823,7 +859,7 @@ mod tests {
 
     #[test]
     async fn test_add_view_zero_texture_point_number() {
-        let controller = Controller::create(TestAdapter::new()).unwrap();
+        let controller = create_controller();
 
         let rec = new_element_view_rec(model::ElementView {
             element: format!("a"),
@@ -845,7 +881,7 @@ mod tests {
 
     #[test]
     async fn test_add_view_zero_vertex_number() {
-        let controller = Controller::create(TestAdapter::new()).unwrap();
+        let controller = create_controller();
 
         let rec = new_element_view_rec(model::ElementView {
             element: format!("a"),
@@ -867,7 +903,7 @@ mod tests {
 
     #[test]
     async fn test_destroy() {
-        let controller = Controller::create(TestAdapter::new()).unwrap();
+        let controller = create_controller();
         {
             let mut data = controller.adapter.data.borrow_mut();
             data.destroy_mock.rets.push(Ok(()));
@@ -881,7 +917,7 @@ mod tests {
 
     #[test]
     async fn test_render_frame() {
-        let controller = Controller::create(TestAdapter::new()).unwrap();
+        let controller = create_controller();
         add_simple_view(&controller, "a").await;
         add_simple_view(&controller, "b").await;
         add_simple_view(&controller, "c").await;

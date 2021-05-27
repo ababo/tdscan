@@ -24,7 +24,7 @@ pub struct WebGlAdapter {
 }
 
 impl WebGlAdapter {
-    pub async fn create(canvas: HtmlCanvasElement) -> Result<Rc<WebGlAdapter>> {
+    pub fn create(canvas: HtmlCanvasElement) -> Result<Rc<WebGlAdapter>> {
         let context = canvas.get_context("webgl2").into_result()?.unwrap();
         let context = context.dyn_into::<WebGl2RenderingContext>().unwrap();
 
@@ -131,11 +131,9 @@ fn texture_num(index: usize) -> u32 {
 
 #[async_trait(?Send)]
 impl Adapter for WebGlAdapter {
-    async fn destroy(self: &Rc<Self>) -> Result<()> {
-        Ok(())
-    }
+    fn destroy(self: &Rc<Self>) {}
 
-    async fn set_faces(self: &Rc<Self>, faces: &[Face]) -> Result<()> {
+    fn set_faces(self: &Rc<Self>, faces: &[Face]) -> Result<()> {
         let buf = self.context.create_buffer().unwrap();
         self.context.bind_buffer(
             WebGl2RenderingContext::ELEMENT_ARRAY_BUFFER,
@@ -214,7 +212,7 @@ impl Adapter for WebGlAdapter {
         Ok(())
     }
 
-    async fn set_texture_index(self: &Rc<Self>, index: &[u16]) -> Result<()> {
+    fn set_texture_index(self: &Rc<Self>, index: &[u16]) -> Result<()> {
         let index: Vec<i32> = index.iter().map(|v| *v as i32).collect();
         webgl::set_uniform_i32_array(
             &self.context,
@@ -224,7 +222,7 @@ impl Adapter for WebGlAdapter {
         )
     }
 
-    async fn render_frame(self: &Rc<Self>, vertices: &[Vertex]) -> Result<()> {
+    fn render_frame(self: &Rc<Self>, vertices: &[Vertex]) -> Result<()> {
         let bytes: &[u8] = unsafe {
             from_raw_parts(
                 &vertices[0] as *const Vertex as *const u8,

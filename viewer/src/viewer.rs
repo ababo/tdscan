@@ -1,5 +1,6 @@
 use std::io::Cursor;
 use std::rc::Rc;
+use std::result::Result as StdResult;
 
 use js_sys::{ArrayBuffer, Promise};
 use wasm_bindgen::prelude::wasm_bindgen;
@@ -23,24 +24,17 @@ pub struct Viewer {
 
 #[wasm_bindgen]
 impl Viewer {
-    pub fn create(canvas: HtmlCanvasElement) -> Promise {
+    pub fn create(canvas: HtmlCanvasElement) -> StdResult<Viewer, JsValue> {
         #[cfg(feature = "console_error_panic_hook")]
         console_error_panic_hook::set_once();
 
-        future_to_promise(async move {
-            let adapter = WebGlAdapter::create(canvas).await.into_result()?;
-            let controller = Controller::create(adapter).await.into_result()?;
-            Ok(Viewer { controller }.into())
-        })
+        let adapter = WebGlAdapter::create(canvas).into_result()?;
+        let controller = Controller::create(adapter).into_result()?;
+        Ok(Viewer { controller }).into()
     }
 
-    pub fn destroy(&self) -> Promise {
-        let controller = self.controller.clone();
-
-        future_to_promise(async move {
-            controller.destroy().await.into_result()?;
-            Ok(JsValue::NULL)
-        })
+    pub fn destroy(&self) {
+        self.controller.destroy();
     }
 
     #[wasm_bindgen(js_name = loadFmBuffer)]
@@ -68,12 +62,7 @@ impl Viewer {
     }
 
     #[wasm_bindgen(js_name = moveToScene)]
-    pub fn move_to_scene(&self, time: Time) -> Promise {
-        let controller = self.controller.clone();
-
-        future_to_promise(async move {
-            controller.move_to_scene(time).await.into_result()?;
-            Ok(JsValue::NULL)
-        })
+    pub fn move_to_scene(&self, time: Time) -> StdResult<(), JsValue> {
+        self.controller.move_to_scene(time).into_result()
     }
 }

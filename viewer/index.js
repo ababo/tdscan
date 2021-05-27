@@ -9,7 +9,7 @@ document.addEventListener('DOMContentLoaded', async event => {
   canvas.setAttribute('height', doc.clientHeight);
   canvas.setAttribute('width', doc.clientWidth);
 
-  let viewer = await fmViewer.Viewer.create(canvas);
+  let viewer = fmViewer.Viewer.create(canvas);
 
   let resp = await fetch('./pkg/model.fm');
   if (!resp.ok) {
@@ -19,5 +19,5 @@ document.addEventListener('DOMContentLoaded', async event => {
   let buf = await resp.arrayBuffer();
   await viewer.loadFmBuffer(buf);
 
-  await viewer.moveToScene(BigInt(0));
+  viewer.moveToScene(BigInt(0));
 });

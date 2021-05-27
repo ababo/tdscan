@@ -27,9 +27,15 @@ pub struct Face {
     pub vertex3: u16,
 }
 
+pub struct MouseEvent {}
+
 #[async_trait(?Send)]
 pub trait Adapter {
+    type Subscription; // Should unsubscribe when dropped.
+
     fn destroy(self: &Rc<Self>);
+
+    fn render_frame(self: &Rc<Self>) -> Result<()>;
 
     fn set_faces(self: &Rc<Self>, faces: &[Face]) -> Result<()>;
 
@@ -41,7 +47,12 @@ pub trait Adapter {
 
     fn set_texture_index(self: &Rc<Self>, index: &[u16]) -> Result<()>;
 
-    fn render_frame(self: &Rc<Self>, vertices: &[Vertex]) -> Result<()>;
+    fn set_vertices(self: &Rc<Self>, vertices: &[Vertex]) -> Result<()>;
+
+    fn subscribe_to_mouse_events<F: Fn(&MouseEvent) + 'static>(
+        self: &Rc<Self>,
+        handler: F,
+    ) -> Result<Self::Subscription>;
 }
 
 #[derive(Default)]
@@ -345,7 +356,8 @@ impl<A: Adapter> Controller<A> {
             }
         }
 
-        self.adapter.render_frame(vertices.as_ref())
+        self.adapter.set_vertices(vertices.as_ref())?;
+        self.adapter.render_frame()
     }
 }
 
@@ -361,10 +373,13 @@ mod tests {
 
     struct TestAdapterData {
         destroy_mock: MethodMock<(), Result<()>>,
+        render_frame_mock: MethodMock<(), Result<()>>,
         set_faces_mock: MethodMock<Vec<Face>, Result<()>>,
         set_texture_mock: MethodMock<(usize, model::Image), Result<()>>,
         set_texture_index_mock: MethodMock<Vec<u16>, Result<()>>,
-        render_frame_mock: MethodMock<Vec<Vertex>, Result<()>>,
+        set_vertices_mock: MethodMock<Vec<Vertex>, Result<()>>,
+        subscribe_to_mouse_events_mock:
+            MethodMock<Box<dyn Fn(&MouseEvent)>, Result<String>>,
     }
 
     struct TestAdapter {
@@ -376,10 +391,12 @@ mod tests {
             Rc::new(TestAdapter {
                 data: RefCell::new(TestAdapterData {
                     destroy_mock: MethodMock::new(),
+                    render_frame_mock: MethodMock::new(),
                     set_faces_mock: MethodMock::new(),
                     set_texture_mock: MethodMock::new(),
                     set_texture_index_mock: MethodMock::new(),
-                    render_frame_mock: MethodMock::new(),
+                    set_vertices_mock: MethodMock::new(),
+                    subscribe_to_mouse_events_mock: MethodMock::new(),
                 }),
             })
         }
@@ -387,23 +404,29 @@ mod tests {
         pub fn finish(&self) {
             let data = self.data.borrow();
             data.destroy_mock.finish();
+            data.render_frame_mock.finish();
             data.set_faces_mock.finish();
             data.set_texture_mock.finish();
             data.set_texture_index_mock.finish();
-            data.render_frame_mock.finish();
+            data.set_vertices_mock.finish();
+            data.subscribe_to_mouse_events_mock.finish();
         }
     }
 
     #[async_trait(?Send)]
     impl Adapter for TestAdapter {
+        type Subscription = String;
+
         fn destroy(self: &Rc<Self>) {
-            let mut data = self.data.borrow_mut();
-            let _ = data.destroy_mock.call(());
+            let _ = self.data.borrow_mut().destroy_mock.call(());
+        }
+
+        fn render_frame(self: &Rc<Self>) -> Result<()> {
+            self.data.borrow_mut().render_frame_mock.call(())
         }
 
         fn set_faces(self: &Rc<Self>, faces: &[Face]) -> Result<()> {
-            let mut data = self.data.borrow_mut();
-            data.set_faces_mock.call(faces.to_vec())
+            self.data.borrow_mut().set_faces_mock.call(faces.to_vec())
         }
 
         async fn set_texture(
@@ -411,18 +434,29 @@ mod tests {
             index: usize,
             image: model::Image,
         ) -> Result<()> {
-            let mut data = self.data.borrow_mut();
-            data.set_texture_mock.call((index, image))
+            self.data.borrow_mut().set_texture_mock.call((index, image))
         }
 
         fn set_texture_index(self: &Rc<Self>, index: &[u16]) -> Result<()> {
-            let mut data = self.data.borrow_mut();
-            data.set_texture_index_mock.call(index.to_vec())
+            self.data
+                .borrow_mut()
+                .set_texture_index_mock
+                .call(index.to_vec())
         }
 
-        fn render_frame(self: &Rc<Self>, vertices: &[Vertex]) -> Result<()> {
+        fn set_vertices(self: &Rc<Self>, vertices: &[Vertex]) -> Result<()> {
+            self.data
+                .borrow_mut()
+                .set_vertices_mock
+                .call(vertices.to_vec())
+        }
+
+        fn subscribe_to_mouse_events<F: Fn(&MouseEvent) + 'static>(
+            self: &Rc<Self>,
+            handler: F,
+        ) -> Result<Self::Subscription> {
             let mut data = self.data.borrow_mut();
-            data.render_frame_mock.call(vertices.to_vec())
+            data.subscribe_to_mouse_events_mock.call(Box::new(handler))
         }
     }
 
@@ -450,7 +484,7 @@ mod tests {
 
         {
             let mut data = controller.adapter.data.borrow_mut();
-            data.set_texture_mock.args.pop();
+            data.set_texture_mock.args.pop().unwrap();
         }
     }
 
@@ -492,8 +526,8 @@ mod tests {
 
         {
             let mut data = controller.adapter.data.borrow_mut();
-            data.set_faces_mock.args.pop();
-            data.set_texture_index_mock.args.pop();
+            data.set_faces_mock.args.pop().unwrap();
+            data.set_texture_index_mock.args.pop().unwrap();
         }
 
         let rec = new_simple_view("b");
@@ -589,8 +623,8 @@ mod tests {
 
         {
             let mut data = controller.adapter.data.borrow_mut();
-            data.set_faces_mock.args.pop();
-            data.set_texture_index_mock.args.pop();
+            data.set_faces_mock.args.pop().unwrap();
+            data.set_texture_index_mock.args.pop().unwrap();
         }
 
         assert_eq!(
@@ -626,8 +660,8 @@ mod tests {
 
         {
             let mut data = controller.adapter.data.borrow_mut();
-            data.set_faces_mock.args.pop();
-            data.set_texture_index_mock.args.pop();
+            data.set_faces_mock.args.pop().unwrap();
+            data.set_texture_index_mock.args.pop().unwrap();
         }
 
         state.time = 122;
@@ -841,7 +875,7 @@ mod tests {
         controller.destroy();
         {
             let mut data = controller.adapter.data.borrow_mut();
-            data.destroy_mock.args.pop();
+            data.destroy_mock.args.pop().unwrap();
         }
     }
 
@@ -856,6 +890,7 @@ mod tests {
             let mut data = controller.adapter.data.borrow_mut();
             data.set_faces_mock.rets.push(Ok(()));
             data.set_texture_index_mock.rets.push(Ok(()));
+            data.set_vertices_mock.rets.push(Ok(()));
             data.render_frame_mock.rets.push(Ok(()));
         }
 
@@ -889,9 +924,10 @@ mod tests {
         let vertices;
         {
             let mut data = controller.adapter.data.borrow_mut();
-            data.set_faces_mock.args.pop();
+            data.set_faces_mock.args.pop().unwrap();
             texture_index = data.set_texture_index_mock.args.pop();
-            vertices = data.render_frame_mock.args.pop().unwrap();
+            vertices = data.set_vertices_mock.args.pop().unwrap();
+            data.render_frame_mock.args.pop().unwrap();
         }
 
         assert_eq!(texture_index, Some(vec![1, 2, 3]));

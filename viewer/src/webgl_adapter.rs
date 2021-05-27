@@ -10,7 +10,7 @@ use memoffset::offset_of;
 use wasm_bindgen::JsCast;
 use web_sys::{HtmlCanvasElement, WebGl2RenderingContext, WebGlProgram};
 
-use crate::controller::{Adapter, Face, Vertex};
+use crate::controller::{Adapter, Face, MouseEvent, Vertex};
 use crate::defs::IntoResult;
 use crate::util::web;
 use crate::util::webgl;
@@ -131,7 +131,27 @@ fn texture_num(index: usize) -> u32 {
 
 #[async_trait(?Send)]
 impl Adapter for WebGlAdapter {
+    type Subscription = ();
+
     fn destroy(self: &Rc<Self>) {}
+
+    fn render_frame(self: &Rc<Self>) -> Result<()> {
+        let size = self.context.get_buffer_parameter(
+            WebGl2RenderingContext::ELEMENT_ARRAY_BUFFER,
+            WebGl2RenderingContext::BUFFER_SIZE,
+        );
+
+        let size = size.as_f64().unwrap() as usize / size_of::<u16>();
+
+        self.context.draw_elements_with_i32(
+            WebGl2RenderingContext::TRIANGLES,
+            size as i32,
+            WebGl2RenderingContext::UNSIGNED_SHORT,
+            0,
+        );
+
+        Ok(())
+    }
 
     fn set_faces(self: &Rc<Self>, faces: &[Face]) -> Result<()> {
         let buf = self.context.create_buffer().unwrap();
@@ -222,7 +242,7 @@ impl Adapter for WebGlAdapter {
         )
     }
 
-    fn render_frame(self: &Rc<Self>, vertices: &[Vertex]) -> Result<()> {
+    fn set_vertices(self: &Rc<Self>, vertices: &[Vertex]) -> Result<()> {
         let bytes: &[u8] = unsafe {
             from_raw_parts(
                 &vertices[0] as *const Vertex as *const u8,
@@ -236,19 +256,13 @@ impl Adapter for WebGlAdapter {
             WebGl2RenderingContext::STATIC_DRAW,
         );
 
-        let size = self.context.get_buffer_parameter(
-            WebGl2RenderingContext::ELEMENT_ARRAY_BUFFER,
-            WebGl2RenderingContext::BUFFER_SIZE,
-        );
-        let size = size.as_f64().unwrap() as usize / size_of::<u16>();
+        Ok(())
+    }
 
-        self.context.draw_elements_with_i32(
-            WebGl2RenderingContext::TRIANGLES,
-            size as i32,
-            WebGl2RenderingContext::UNSIGNED_SHORT,
-            0,
-        );
-
+    fn subscribe_to_mouse_events<F: Fn(&MouseEvent) + 'static>(
+        self: &Rc<Self>,
+        _handler: F,
+    ) -> Result<Self::Subscription> {
         Ok(())
     }
 }

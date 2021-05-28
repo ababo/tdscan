@@ -32,6 +32,7 @@ version = "0.3.50"
 features = [
   'Blob',
   'Document',
+  'Event',
   'HtmlCanvasElement',
   'HtmlImageElement',
   'MouseEvent',

@@ -9,6 +9,7 @@ pub enum ErrorKind {
     JsError,
     WebGlError,
     InconsistentState,
+    BadOperation,
 }
 
 #[derive(Debug)]

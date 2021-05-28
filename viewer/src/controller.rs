@@ -27,7 +27,12 @@ pub struct Face {
     pub vertex3: u16,
 }
 
-pub struct MouseEvent {}
+#[derive(Debug)]
+pub struct MouseEvent {
+    pub dx: i32,
+    pub dy: i32,
+    pub primary_button: bool,
+}
 
 #[async_trait(?Send)]
 pub trait Adapter {
@@ -49,7 +54,7 @@ pub trait Adapter {
 
     fn set_vertices(self: &Rc<Self>, vertices: &[Vertex]) -> Result<()>;
 
-    fn subscribe_to_mouse_events<F: Fn(&MouseEvent) + 'static>(
+    fn subscribe_to_mouse_move<F: Fn(&MouseEvent) + 'static>(
         self: &Rc<Self>,
         handler: F,
     ) -> Result<Self::Subscription>;
@@ -120,7 +125,7 @@ impl<A: Adapter + 'static> Controller<A> {
 
         let cloned = controller.clone();
         let mouse_sub = adapter
-            .subscribe_to_mouse_events(move |e| cloned.handle_mouse(e))?;
+            .subscribe_to_mouse_move(move |e| cloned.handle_mouse_move(e))?;
         controller.mouse_sub.borrow_mut().get_or_insert(mouse_sub);
 
         Ok(controller)
@@ -342,9 +347,9 @@ impl<A: Adapter + 'static> Controller<A> {
         Ok(())
     }
 
-    fn handle_mouse(self: &Rc<Self>, _event: &MouseEvent) {
+    fn handle_mouse_move(self: &Rc<Self>, event: &MouseEvent) {
         if !cfg!(test) {
-            info!("handle_mouse");
+            info!("{:?}", event);
         }
     }
 
@@ -468,7 +473,7 @@ mod tests {
                 .call(vertices.to_vec())
         }
 
-        fn subscribe_to_mouse_events<F: Fn(&MouseEvent) + 'static>(
+        fn subscribe_to_mouse_move<F: Fn(&MouseEvent) + 'static>(
             self: &Rc<Self>,
             handler: F,
         ) -> Result<Self::Subscription> {

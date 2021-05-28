@@ -131,7 +131,7 @@ fn texture_num(index: usize) -> u32 {
 
 #[async_trait(?Send)]
 impl Adapter for WebGlAdapter {
-    type Subscription = ();
+    type Subscription = web::Subscription;
 
     fn destroy(self: &Rc<Self>) {}
 
@@ -259,10 +259,18 @@ impl Adapter for WebGlAdapter {
         Ok(())
     }
 
-    fn subscribe_to_mouse_events<F: Fn(&MouseEvent) + 'static>(
+    fn subscribe_to_mouse_move<F: Fn(&MouseEvent) + 'static>(
         self: &Rc<Self>,
-        _handler: F,
+        handler: F,
     ) -> Result<Self::Subscription> {
-        Ok(())
+        let sub = web::subscribe(&self.canvas, "mousemove", move |e| {
+            let event = web_sys::MouseEvent::unchecked_from_js_ref(e.as_ref());
+            handler(&MouseEvent {
+                dx: event.movement_x(),
+                dy: event.movement_y(),
+                primary_button: event.buttons() & 1 != 0,
+            });
+        })?;
+        Ok(sub)
     }
 }

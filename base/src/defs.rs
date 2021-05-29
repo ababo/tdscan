@@ -3,13 +3,13 @@ use std::result;
 
 #[derive(Debug, PartialEq)]
 pub enum ErrorKind {
+    BadOperation,
+    InconsistentState,
     IoError,
+    JsError,
     MalformedData,
     UnsupportedFeature,
-    JsError,
     WebGlError,
-    InconsistentState,
-    BadOperation,
 }
 
 #[derive(Debug)]

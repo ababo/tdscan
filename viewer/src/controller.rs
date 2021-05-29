@@ -6,8 +6,15 @@ use std::rc::Rc;
 use arrayvec::ArrayVec;
 use async_trait::async_trait;
 
+use crate::util::sync::Mutex;
 use base::defs::{Error, ErrorKind::*, Result};
 use base::model;
+
+const DEFAULT_EYE_POSITION: model::Point3 = model::Point3 {
+    x: 0.0,
+    y: 0.0,
+    z: 100.0,
+};
 
 pub type Time = i64;
 
@@ -54,6 +61,12 @@ pub trait Adapter {
 
     fn set_vertices(self: &Rc<Self>, vertices: &[Vertex]) -> Result<()>;
 
+    fn set_view(
+        self: &Rc<Self>,
+        eye: &model::Point3,
+        center: &model::Point3,
+    ) -> Result<()>;
+
     fn subscribe_to_mouse_move<F: Fn(&MouseEvent) + 'static>(
         self: &Rc<Self>,
         handler: F,
@@ -82,6 +95,7 @@ struct ControllerData {
     index: HashMap<String, ElementIndex>,
     faces: Vec<Face>,
     states: BTreeMap<TimeElement, ElementState>,
+    eye_pos: model::Point3,
 }
 
 impl ControllerData {
@@ -108,6 +122,7 @@ impl ControllerData {
 }
 
 pub struct Controller<A: Adapter> {
+    mutex: Mutex,
     adapter: Rc<A>,
     data: RefCell<ControllerData>,
     vertices: RefCell<Vec<Vertex>>,
@@ -117,6 +132,7 @@ pub struct Controller<A: Adapter> {
 impl<A: Adapter + 'static> Controller<A> {
     pub fn create(adapter: Rc<A>) -> Result<Rc<Self>> {
         let controller = Rc::new(Self {
+            mutex: Mutex::new(),
             adapter: adapter.clone(),
             data: RefCell::new(ControllerData::default()),
             vertices: RefCell::new(Vec::new()),
@@ -124,14 +140,17 @@ impl<A: Adapter + 'static> Controller<A> {
         });
 
         let cloned = controller.clone();
-        let mouse_sub = adapter
-            .subscribe_to_mouse_move(move |e| cloned.handle_mouse_move(e))?;
+        let mouse_sub = adapter.subscribe_to_mouse_move(move |e| {
+            let _ = cloned.handle_mouse_move(e);
+        })?;
         controller.mouse_sub.borrow_mut().get_or_insert(mouse_sub);
 
         Ok(controller)
     }
 
     pub fn destroy(self: &Rc<Self>) {
+        let _guard = self.mutex.try_lock().unwrap();
+
         self.mouse_sub.borrow_mut().take(); // Unsubscribe.
 
         let mut data = self.data.borrow_mut();
@@ -148,6 +167,8 @@ impl<A: Adapter + 'static> Controller<A> {
         self: &Rc<Self>,
         record: model::Record,
     ) -> Result<()> {
+        let _guard = self.mutex.try_lock()?;
+
         use model::record::Type::*;
         match record.r#type {
             Some(ElementView(v)) => self.add_element_view(v).await?,
@@ -347,14 +368,27 @@ impl<A: Adapter + 'static> Controller<A> {
         Ok(())
     }
 
-    fn handle_mouse_move(self: &Rc<Self>, event: &MouseEvent) {
-        if !cfg!(test) {
-            info!("{:?}", event);
+    fn handle_mouse_move(self: &Rc<Self>, event: &MouseEvent) -> Result<()> {
+        if !event.primary_button {
+            return Ok(());
         }
+
+        let _guard = self.mutex.try_lock()?;
+
+        // let mut data = self.data.borrow_mut();
+
+        // Implement rotation here.
+        // let self data.eye_pos = ...
+
+        // self.adapter
+        //    .set_view(&data.eye_pos, &model::Point3::default())?;
+        self.adapter.render_frame()
     }
 
     pub fn move_to_scene(self: &Rc<Self>, time: Time) -> Result<()> {
-        let data = self.data.borrow();
+        let _guard = self.mutex.try_lock()?;
+
+        let mut data = self.data.borrow_mut();
         let mut vertices = self.vertices.borrow_mut();
 
         let states = data.states_at_time(time);
@@ -379,6 +413,9 @@ impl<A: Adapter + 'static> Controller<A> {
         }
 
         self.adapter.set_vertices(vertices.as_ref())?;
+        data.eye_pos = DEFAULT_EYE_POSITION;
+        self.adapter
+            .set_view(&data.eye_pos, &model::Point3::default())?;
         self.adapter.render_frame()
     }
 }
@@ -400,6 +437,7 @@ mod tests {
         set_texture_mock: MethodMock<(usize, model::Image), Result<()>>,
         set_texture_index_mock: MethodMock<Vec<u16>, Result<()>>,
         set_vertices_mock: MethodMock<Vec<Vertex>, Result<()>>,
+        set_view_mock: MethodMock<(model::Point3, model::Point3), Result<()>>,
         subscribe_to_mouse_events_mock:
             MethodMock<Box<dyn Fn(&MouseEvent)>, Result<String>>,
     }
@@ -418,6 +456,7 @@ mod tests {
                     set_texture_mock: MethodMock::new(),
                     set_texture_index_mock: MethodMock::new(),
                     set_vertices_mock: MethodMock::new(),
+                    set_view_mock: MethodMock::new(),
                     subscribe_to_mouse_events_mock: MethodMock::new(),
                 }),
             })
@@ -431,6 +470,7 @@ mod tests {
             data.set_texture_mock.finish();
             data.set_texture_index_mock.finish();
             data.set_vertices_mock.finish();
+            data.set_view_mock.finish();
             data.subscribe_to_mouse_events_mock.finish();
         }
     }
@@ -471,6 +511,17 @@ mod tests {
                 .borrow_mut()
                 .set_vertices_mock
                 .call(vertices.to_vec())
+        }
+
+        fn set_view(
+            self: &Rc<Self>,
+            eye: &model::Point3,
+            center: &model::Point3,
+        ) -> Result<()> {
+            self.data
+                .borrow_mut()
+                .set_view_mock
+                .call((eye.clone(), center.clone()))
         }
 
         fn subscribe_to_mouse_move<F: Fn(&MouseEvent) + 'static>(
@@ -932,6 +983,7 @@ mod tests {
             data.set_faces_mock.rets.push(Ok(()));
             data.set_texture_index_mock.rets.push(Ok(()));
             data.set_vertices_mock.rets.push(Ok(()));
+            data.set_view_mock.rets.push(Ok(()));
             data.render_frame_mock.rets.push(Ok(()));
         }
 
@@ -963,11 +1015,13 @@ mod tests {
 
         let texture_index;
         let vertices;
+        let view;
         {
             let mut data = controller.adapter.data.borrow_mut();
             data.set_faces_mock.args.pop().unwrap();
             texture_index = data.set_texture_index_mock.args.pop();
             vertices = data.set_vertices_mock.args.pop().unwrap();
+            view = data.set_view_mock.args.pop().unwrap();
             data.render_frame_mock.args.pop().unwrap();
         }
 
@@ -980,6 +1034,8 @@ mod tests {
         assert_eq!(vertices[1].normal, new_point3(0.678, 0.789, 0.890));
         assert_eq!(vertices[2].position, model::Point3::default());
         assert_eq!(vertices[2].normal, model::Point3::default());
+
+        assert_eq!(view, (DEFAULT_EYE_POSITION, model::Point3::default()));
 
         controller.adapter.finish();
     }

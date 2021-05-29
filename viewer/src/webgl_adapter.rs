@@ -90,7 +90,6 @@ impl WebGlAdapter {
         });
 
         adapter.set_projection()?;
-        adapter.set_view()?;
 
         Ok(adapter)
     }
@@ -112,16 +111,6 @@ impl WebGlAdapter {
             "projection",
             &projection,
         )
-    }
-
-    fn set_view(self: &Rc<Self>) -> Result<()> {
-        let eye = Vec3::new(0.0, 100.0, -8.0);
-        let center = Vec3::new(0.0, 0.0, 0.0);
-        let up = Vec3::new(0.0, 1.0, 0.0);
-
-        let view = Mat4::look_at_rh(eye, center, up);
-
-        webgl::set_uniform_mat4(&self.context, &self.program, "view", &view)
     }
 }
 
@@ -257,6 +246,18 @@ impl Adapter for WebGlAdapter {
         );
 
         Ok(())
+    }
+
+    fn set_view(
+        self: &Rc<Self>,
+        eye: &model::Point3,
+        center: &model::Point3,
+    ) -> Result<()> {
+        let eye = Vec3::new(eye.x, eye.y, eye.z);
+        let center = Vec3::new(center.x, center.y, center.z);
+        let up = Vec3::new(0.0, 1.0, 0.0);
+        let view = Mat4::look_at_rh(eye, center, up);
+        webgl::set_uniform_mat4(&self.context, &self.program, "view", &view)
     }
 
     fn subscribe_to_mouse_move<F: Fn(&MouseEvent) + 'static>(

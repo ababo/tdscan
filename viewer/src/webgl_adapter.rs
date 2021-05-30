@@ -12,6 +12,7 @@ use web_sys::{HtmlCanvasElement, WebGl2RenderingContext, WebGlProgram};
 
 use crate::controller::{Adapter, Face, MouseEvent, Vertex};
 use crate::defs::IntoResult;
+use crate::util::glam::point3_to_vec3;
 use crate::util::web;
 use crate::util::webgl;
 use base::defs::Result;
@@ -254,8 +255,8 @@ impl Adapter for WebGlAdapter {
         center: &model::Point3,
     ) -> Result<()> {
         let eye = Vec3::new(eye.x, eye.y, eye.z);
-        let center = Vec3::new(center.x, center.y, center.z);
-        let up = Vec3::new(0.0, 1.0, 0.0);
+        let center = point3_to_vec3(center);
+        let up = Vec3::new(0.0, 0.0, 1.0);
         let view = Mat4::look_at_rh(eye, center, up);
         webgl::set_uniform_mat4(&self.context, &self.program, "view", &view)
     }

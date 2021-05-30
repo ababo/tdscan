@@ -5,14 +5,16 @@ use std::rc::Rc;
 
 use arrayvec::ArrayVec;
 use async_trait::async_trait;
+use glam::{EulerRot, Quat, Vec3};
 
+use crate::util::glam::{point3_to_vec3, vec3_to_point3};
 use crate::util::sync::Mutex;
 use base::defs::{Error, ErrorKind::*, Result};
 use base::model;
 
 const DEFAULT_EYE_POSITION: model::Point3 = model::Point3 {
-    x: 0.0,
-    y: 0.0,
+    x: 100.0,
+    y: 100.0,
     z: 100.0,
 };
 
@@ -375,13 +377,40 @@ impl<A: Adapter + 'static> Controller<A> {
 
         let _guard = self.mutex.try_lock()?;
 
-        // let mut data = self.data.borrow_mut();
+        let mut data = self.data.borrow_mut();
 
-        // Implement rotation here.
-        // let self data.eye_pos = ...
+        let hor_rot_angle = -event.dx as f32 / 100.0;
+        let hor_rot = Quat::from_euler(EulerRot::YZX, 0.0, hor_rot_angle, 0.0);
+        let eye_pos = point3_to_vec3(&data.eye_pos);
+        data.eye_pos = vec3_to_point3(&hor_rot.mul_vec3(eye_pos));
 
-        // self.adapter
-        //    .set_view(&data.eye_pos, &model::Point3::default())?;
+        let vert_rot_axis = if data.eye_pos.y != 0.0 {
+            let slope = -data.eye_pos.x / data.eye_pos.y;
+            let x = 1.0 / (1.0 + slope * slope).sqrt();
+            let y = slope * x;
+            Vec3::new(x, y, 0.0)
+        } else {
+            Vec3::new(0.0, 1.0, 0.0)
+        };
+
+        let vert_rot_angle = data.eye_pos.y.signum() * event.dy as f32 / 100.0;
+        let vert_rot = Quat::from_axis_angle(vert_rot_axis, vert_rot_angle);
+        let eye_pos = point3_to_vec3(&data.eye_pos);
+        let eye_pos = vec3_to_point3(&vert_rot.mul_vec3(eye_pos));
+
+        let angle_z = (eye_pos.z
+            / (eye_pos.x * eye_pos.x
+                + eye_pos.y * eye_pos.y
+                + eye_pos.z * eye_pos.z)
+                .sqrt())
+        .acos();
+
+        if eye_pos.z >= 0.0 && vert_rot_angle.abs() < angle_z {
+            data.eye_pos = eye_pos;
+        }
+
+        self.adapter
+            .set_view(&data.eye_pos, &model::Point3::default())?;
         self.adapter.render_frame()
     }
 

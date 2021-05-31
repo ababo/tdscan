@@ -249,13 +249,9 @@ impl Adapter for WebGlAdapter {
         Ok(())
     }
 
-    fn set_view(
-        self: &Rc<Self>,
-        eye: &model::Point3,
-        center: &model::Point3,
-    ) -> Result<()> {
-        let eye = Vec3::new(eye.x, eye.y, eye.z);
-        let center = point3_to_vec3(center);
+    fn set_eye_position(self: &Rc<Self>, eye: &model::Point3) -> Result<()> {
+        let eye = point3_to_vec3(eye);
+        let center = Vec3::new(0.0, 0.0, 0.0);
         let up = Vec3::new(0.0, 0.0, 1.0);
         let view = Mat4::look_at_rh(eye, center, up);
         webgl::set_uniform_mat4(&self.context, &self.program, "view", &view)
@@ -267,6 +263,7 @@ impl Adapter for WebGlAdapter {
     ) -> Result<Self::Subscription> {
         let sub = web::subscribe(&self.canvas, "mousemove", move |e| {
             let event = web_sys::MouseEvent::unchecked_from_js_ref(e.as_ref());
+            info!("buttons {}", event.buttons());
             handler(&MouseEvent {
                 dx: event.movement_x(),
                 dy: event.movement_y(),

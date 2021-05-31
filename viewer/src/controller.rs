@@ -18,6 +18,8 @@ const DEFAULT_EYE_POSITION: model::Point3 = model::Point3 {
     z: 100.0,
 };
 
+const MOUSE_MOVE_ANGLE_FACTOR: f32 = 0.01;
+
 pub type Time = i64;
 
 #[derive(Clone, Copy, Default)]
@@ -63,11 +65,7 @@ pub trait Adapter {
 
     fn set_vertices(self: &Rc<Self>, vertices: &[Vertex]) -> Result<()>;
 
-    fn set_view(
-        self: &Rc<Self>,
-        eye: &model::Point3,
-        center: &model::Point3,
-    ) -> Result<()>;
+    fn set_eye_position(self: &Rc<Self>, eye: &model::Point3) -> Result<()>;
 
     fn subscribe_to_mouse_move<F: Fn(&MouseEvent) + 'static>(
         self: &Rc<Self>,
@@ -379,7 +377,7 @@ impl<A: Adapter + 'static> Controller<A> {
 
         let mut data = self.data.borrow_mut();
 
-        let hor_rot_angle = -event.dx as f32 / 100.0;
+        let hor_rot_angle = -event.dx as f32 * MOUSE_MOVE_ANGLE_FACTOR;
         let hor_rot = Quat::from_euler(EulerRot::YZX, 0.0, hor_rot_angle, 0.0);
         let eye_pos = point3_to_vec3(&data.eye_pos);
         data.eye_pos = vec3_to_point3(&hor_rot.mul_vec3(eye_pos));
@@ -393,7 +391,8 @@ impl<A: Adapter + 'static> Controller<A> {
             Vec3::new(0.0, 1.0, 0.0)
         };
 
-        let vert_rot_angle = data.eye_pos.y.signum() * event.dy as f32 / 100.0;
+        let vert_rot_angle =
+            data.eye_pos.y.signum() * event.dy as f32 * MOUSE_MOVE_ANGLE_FACTOR;
         let vert_rot = Quat::from_axis_angle(vert_rot_axis, vert_rot_angle);
         let eye_pos = point3_to_vec3(&data.eye_pos);
         let eye_pos = vec3_to_point3(&vert_rot.mul_vec3(eye_pos));
@@ -409,8 +408,7 @@ impl<A: Adapter + 'static> Controller<A> {
             data.eye_pos = eye_pos;
         }
 
-        self.adapter
-            .set_view(&data.eye_pos, &model::Point3::default())?;
+        self.adapter.set_eye_position(&data.eye_pos)?;
         self.adapter.render_frame()
     }
 
@@ -443,8 +441,7 @@ impl<A: Adapter + 'static> Controller<A> {
 
         self.adapter.set_vertices(vertices.as_ref())?;
         data.eye_pos = DEFAULT_EYE_POSITION;
-        self.adapter
-            .set_view(&data.eye_pos, &model::Point3::default())?;
+        self.adapter.set_eye_position(&data.eye_pos)?;
         self.adapter.render_frame()
     }
 }
@@ -466,7 +463,7 @@ mod tests {
         set_texture_mock: MethodMock<(usize, model::Image), Result<()>>,
         set_texture_index_mock: MethodMock<Vec<u16>, Result<()>>,
         set_vertices_mock: MethodMock<Vec<Vertex>, Result<()>>,
-        set_view_mock: MethodMock<(model::Point3, model::Point3), Result<()>>,
+        set_eye_position_mock: MethodMock<model::Point3, Result<()>>,
         subscribe_to_mouse_events_mock:
             MethodMock<Box<dyn Fn(&MouseEvent)>, Result<String>>,
     }
@@ -485,7 +482,7 @@ mod tests {
                     set_texture_mock: MethodMock::new(),
                     set_texture_index_mock: MethodMock::new(),
                     set_vertices_mock: MethodMock::new(),
-                    set_view_mock: MethodMock::new(),
+                    set_eye_position_mock: MethodMock::new(),
                     subscribe_to_mouse_events_mock: MethodMock::new(),
                 }),
             })
@@ -499,7 +496,7 @@ mod tests {
             data.set_texture_mock.finish();
             data.set_texture_index_mock.finish();
             data.set_vertices_mock.finish();
-            data.set_view_mock.finish();
+            data.set_eye_position_mock.finish();
             data.subscribe_to_mouse_events_mock.finish();
         }
     }
@@ -542,15 +539,14 @@ mod tests {
                 .call(vertices.to_vec())
         }
 
-        fn set_view(
+        fn set_eye_position(
             self: &Rc<Self>,
             eye: &model::Point3,
-            center: &model::Point3,
         ) -> Result<()> {
             self.data
                 .borrow_mut()
-                .set_view_mock
-                .call((eye.clone(), center.clone()))
+                .set_eye_position_mock
+                .call(eye.clone())
         }
 
         fn subscribe_to_mouse_move<F: Fn(&MouseEvent) + 'static>(
@@ -1012,7 +1008,7 @@ mod tests {
             data.set_faces_mock.rets.push(Ok(()));
             data.set_texture_index_mock.rets.push(Ok(()));
             data.set_vertices_mock.rets.push(Ok(()));
-            data.set_view_mock.rets.push(Ok(()));
+            data.set_eye_position_mock.rets.push(Ok(()));
             data.render_frame_mock.rets.push(Ok(()));
         }
 
@@ -1050,7 +1046,7 @@ mod tests {
             data.set_faces_mock.args.pop().unwrap();
             texture_index = data.set_texture_index_mock.args.pop();
             vertices = data.set_vertices_mock.args.pop().unwrap();
-            view = data.set_view_mock.args.pop().unwrap();
+            view = data.set_eye_position_mock.args.pop().unwrap();
             data.render_frame_mock.args.pop().unwrap();
         }
 
@@ -1064,7 +1060,7 @@ mod tests {
         assert_eq!(vertices[2].position, model::Point3::default());
         assert_eq!(vertices[2].normal, model::Point3::default());
 
-        assert_eq!(view, (DEFAULT_EYE_POSITION, model::Point3::default()));
+        assert_eq!(view, DEFAULT_EYE_POSITION);
 
         controller.adapter.finish();
     }

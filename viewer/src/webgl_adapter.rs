@@ -263,11 +263,24 @@ impl Adapter for WebGlAdapter {
     ) -> Result<Self::Subscription> {
         let sub = web::subscribe(&self.canvas, "mousemove", move |e| {
             let event = web_sys::MouseEvent::unchecked_from_js_ref(e.as_ref());
-            info!("buttons {}", event.buttons());
             handler(&MouseEvent {
-                dx: event.movement_x(),
-                dy: event.movement_y(),
+                dx: event.movement_x() as f32,
+                dy: event.movement_y() as f32,
                 primary_button: event.buttons() & 1 != 0,
+            });
+        })?;
+        Ok(sub)
+    }
+
+    fn subscribe_to_mouse_wheel<F: Fn(&MouseEvent) + 'static>(
+        self: &Rc<Self>,
+        handler: F,
+    ) -> Result<Self::Subscription> {
+        let sub = web::subscribe(&self.canvas, "wheel", move |e| {
+            let event = web_sys::WheelEvent::unchecked_from_js_ref(e.as_ref());
+            handler(&MouseEvent {
+                dy: event.delta_y() as f32,
+                ..Default::default()
             });
         })?;
         Ok(sub)

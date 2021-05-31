@@ -44,6 +44,7 @@ features = [
   'WebGlShader',
   'WebGlTexture',
   'WebGlUniformLocation',
+  'WheelEvent',
   'Window',
 ]
 

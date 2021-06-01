@@ -7,10 +7,10 @@ use arrayvec::ArrayVec;
 use async_trait::async_trait;
 use glam::{EulerRot, Quat, Vec3};
 
-use crate::util::glam::{point3_to_vec3, vec3_to_point3};
 use crate::util::sync::Mutex;
 use base::defs::{Error, ErrorKind::*, Result};
 use base::model;
+use base::util::glam::{point3_to_vec3, vec3_to_point3};
 
 const DEFAULT_EYE_POSITION: model::Point3 = model::Point3 {
     x: 100.0,

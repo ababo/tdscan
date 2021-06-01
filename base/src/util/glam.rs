@@ -1,6 +1,6 @@
 use glam::Vec3;
 
-use base::model;
+use crate::model;
 
 #[inline]
 pub fn point3_to_vec3(point: &model::Point3) -> Vec3 {

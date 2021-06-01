@@ -88,8 +88,8 @@ macro_rules! assert_p2_eq {
     ($a:expr, $b:expr) => {{
         use float_cmp::approx_eq;
         let (a, b) = ($a, $b);
-        approx_eq!(f32, a.x, b.x);
-        approx_eq!(f32, a.y, b.y);
+        approx_eq!(f32, a.x, b.x, epsilon = 0.000001);
+        approx_eq!(f32, a.y, b.y, epsilon = 0.000001);
     }};
 }
 
@@ -98,8 +98,8 @@ macro_rules! assert_p3_eq {
     ($a:expr, $b:expr) => {{
         use float_cmp::approx_eq;
         let (a, b) = ($a, $b);
-        approx_eq!(f32, a.x, b.x);
-        approx_eq!(f32, a.y, b.y);
-        approx_eq!(f32, a.z, b.z);
+        approx_eq!(f32, a.x, b.x, epsilon = 0.000001);
+        approx_eq!(f32, a.y, b.y, epsilon = 0.000001);
+        approx_eq!(f32, a.z, b.z, epsilon = 0.000001);
     }};
 }

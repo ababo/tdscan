@@ -190,6 +190,7 @@ name = "base"
 version = "0.1.0"
 dependencies = [
  "flate2",
+ "glam",
  "prost",
  "prost-build",
  "structopt",
@@ -272,6 +273,7 @@ version = "0.1.0"
 dependencies = [
  "base",
  "float-cmp",
+ "glam",
  "structopt",
 ]
 

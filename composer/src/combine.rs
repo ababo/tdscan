@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use std::result::Result as StdResult;
 use std::str::FromStr;
 
+use glam::{EulerRot, Quat};
 use structopt::StructOpt;
 
 use base::defs::{Error, ErrorKind::*, Result};
@@ -12,6 +13,7 @@ use base::fm;
 use base::model;
 use base::util::cli::parse_key_val;
 use base::util::fs;
+use base::util::glam::{point3_to_vec3, vec3_to_point3};
 
 #[derive(Default, Clone, Copy)]
 pub struct Displacement {
@@ -54,6 +56,51 @@ impl FromStr for Displacement {
     }
 }
 
+#[derive(Default, Clone, Copy)]
+pub struct Rotation {
+    #[allow(dead_code)]
+    around_x: f32,
+    #[allow(dead_code)]
+    around_y: f32,
+    #[allow(dead_code)]
+    around_z: f32,
+}
+
+impl FromStr for Rotation {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        let malformed_err = || {
+            let desc = format!("malformed rotation '{}'", s);
+            Error::new(MalformedData, desc)
+        };
+
+        let parse = |iter: &mut std::str::Split<&str>| {
+            let part = iter.next().ok_or_else(|| malformed_err())?;
+            if part.is_empty() {
+                Ok(0.0)
+            } else {
+                part.parse::<f32>().or_else(|_| Err(malformed_err()))
+            }
+        };
+
+        let mut iter = s.split(",");
+        let around_x = parse(&mut iter)?;
+        let around_y = parse(&mut iter)?;
+        let around_z = parse(&mut iter)?;
+
+        if iter.next().is_some() {
+            return Err(malformed_err());
+        }
+
+        Ok(Rotation {
+            around_x,
+            around_y,
+            around_z,
+        })
+    }
+}
+
 #[derive(StructOpt)]
 #[structopt(about = "Combine multiple .fm files")]
 pub struct CombineParams {
@@ -66,6 +113,15 @@ pub struct CombineParams {
             short = "d"
         )]
     displacements: Vec<(String, Displacement)>,
+    #[structopt(
+            help=concat!("Element rotation in form ",
+                "'element=around_x,around_y,around_z' using radians"),
+            long = "rotation",
+            number_of_values = 1,
+            parse(try_from_str = parse_key_val),
+            short = "r"
+        )]
+    rotations: Vec<(String, Rotation)>,
     #[structopt(help="Element scaling in form 'element=scale'",
             long = "scaling",
             number_of_values = 1,
@@ -96,6 +152,7 @@ pub fn combine_with_params(params: &CombineParams) -> Result<()> {
     }
 
     let displacements = params.displacements.iter().cloned().collect();
+    let rotations = params.rotations.iter().cloned().collect();
     let scalings = params.scalings.iter().cloned().collect();
 
     let mut writer = if let Some(path) = &params.out_path {
@@ -107,12 +164,19 @@ pub fn combine_with_params(params: &CombineParams) -> Result<()> {
         Box::new(writer) as Box<dyn fm::Write>
     };
 
-    combine(&mut reader_refs, &displacements, &scalings, writer.as_mut())
+    combine(
+        &mut reader_refs,
+        &displacements,
+        &rotations,
+        &scalings,
+        writer.as_mut(),
+    )
 }
 
 pub fn combine(
     readers: &mut [&mut dyn fm::Read],
     displacements: &HashMap<String, Displacement>,
+    rotations: &HashMap<String, Rotation>,
     scalings: &HashMap<String, f32>,
     writer: &mut dyn fm::Write,
 ) -> Result<()> {
@@ -142,6 +206,27 @@ pub fn combine(
                     state.normals[i].x += disp.dx;
                     state.normals[i].y += disp.dy;
                     state.normals[i].z += disp.dz;
+                }
+            }
+
+            if let Some(rot) = rotations.get(&state.element) {
+                let quat = Quat::from_euler(
+                    EulerRot::XYZ,
+                    rot.around_x,
+                    rot.around_y,
+                    rot.around_z,
+                );
+
+                for i in 0..state.vertices.len() {
+                    state.vertices[i] = vec3_to_point3(
+                        &quat.mul_vec3(point3_to_vec3(&state.vertices[i])),
+                    );
+                }
+
+                for i in 0..state.normals.len() {
+                    state.normals[i] = vec3_to_point3(
+                        &quat.mul_vec3(point3_to_vec3(&state.normals[i])),
+                    );
                 }
             }
 
@@ -234,6 +319,14 @@ mod tests {
         Displacement { dx, dy, dz }
     }
 
+    fn new_rotation(around_x: f32, around_y: f32, around_z: f32) -> Rotation {
+        Rotation {
+            around_x,
+            around_y,
+            around_z,
+        }
+    }
+
     fn new_simple_element_view_rec(element: &str) -> model::Record {
         new_element_view_rec(model::ElementView {
             element: format!("{}", element),
@@ -283,16 +376,25 @@ mod tests {
 
         let mut readers: [&mut dyn fm::Read; 2] = [&mut reader1, &mut reader2];
 
-        let mut scales = HashMap::new();
-        scales.insert(format!("e1"), 2.0);
-
         let mut displacements = HashMap::new();
         displacements.insert(format!("e2"), new_displacement(0.3, 0.4, 0.5));
 
+        let mut rotations = HashMap::new();
+        rotations.insert(format!("e1"), new_rotation(0.6, 0.7, 0.8));
+
+        let mut scales = HashMap::new();
+        scales.insert(format!("e1"), 2.0);
+
         let mut writer =
             fm::Writer::new(Vec::new(), &fm::WriterParams::default()).unwrap();
-        combine(&mut readers[..], &displacements, &scales, &mut writer)
-            .unwrap();
+        combine(
+            &mut readers[..],
+            &displacements,
+            &rotations,
+            &scales,
+            &mut writer,
+        )
+        .unwrap();
 
         let data = writer.into_inner().unwrap();
         let data_slice = &data[..];
@@ -311,9 +413,15 @@ mod tests {
         assert_eq!(state.element, format!("e1"));
         assert_eq!(state.time, 1);
         assert_eq!(state.vertices.len(), 1);
-        assert_p3_eq!(state.vertices[0], new_point3(0.2, 0.4, 0.6));
+        assert_p3_eq!(
+            state.vertices[0],
+            new_point3(0.27363908, 0.0356109, 0.69559586)
+        );
         assert_eq!(state.normals.len(), 1);
-        assert_p3_eq!(state.normals[0], new_point3(0.4, 0.6, 0.8));
+        assert_p3_eq!(
+            state.normals[0],
+            new_point3(0.39932388, 0.18115145, 0.9837299)
+        );
 
         let rec = reader.read_record().unwrap().unwrap();
         let state = record_variant!(ElementViewState, rec);

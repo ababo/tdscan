@@ -12,11 +12,11 @@ use web_sys::{HtmlCanvasElement, WebGl2RenderingContext, WebGlProgram};
 
 use crate::controller::{Adapter, Face, MouseEvent, Vertex};
 use crate::defs::IntoResult;
-use crate::util::glam::point3_to_vec3;
 use crate::util::web;
 use crate::util::webgl;
 use base::defs::Result;
 use base::model;
+use base::util::glam::point3_to_vec3;
 
 pub struct WebGlAdapter {
     canvas: HtmlCanvasElement,

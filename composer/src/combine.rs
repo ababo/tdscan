@@ -312,7 +312,7 @@ mod tests {
     use base::util::test::{
         new_element_view_rec, new_element_view_state_rec, new_point3,
     };
-    use base::{assert_p3_eq, record_variant};
+    use base::{assert_eq_point3, record_variant};
     use model::record::Type::*;
 
     fn new_displacement(dx: f32, dy: f32, dz: f32) -> Displacement {
@@ -413,12 +413,12 @@ mod tests {
         assert_eq!(state.element, format!("e1"));
         assert_eq!(state.time, 1);
         assert_eq!(state.vertices.len(), 1);
-        assert_p3_eq!(
+        assert_eq_point3!(
             state.vertices[0],
             new_point3(0.27363908, 0.0356109, 0.69559586)
         );
         assert_eq!(state.normals.len(), 1);
-        assert_p3_eq!(
+        assert_eq_point3!(
             state.normals[0],
             new_point3(0.39932388, 0.18115145, 0.9837299)
         );
@@ -428,27 +428,27 @@ mod tests {
         assert_eq!(state.element, format!("e2"));
         assert_eq!(state.time, 2);
         assert_eq!(state.vertices.len(), 1);
-        assert_p3_eq!(state.vertices[0], new_point3(0.4, 0.6, 0.8));
+        assert_eq_point3!(state.vertices[0], new_point3(0.4, 0.6, 0.8));
         assert_eq!(state.normals.len(), 1);
-        assert_p3_eq!(state.normals[0], new_point3(0.5, 0.7, 0.9));
+        assert_eq_point3!(state.normals[0], new_point3(0.5, 0.7, 0.9));
 
         let rec = reader.read_record().unwrap().unwrap();
         let state = record_variant!(ElementViewState, rec);
         assert_eq!(state.element, format!("e1"));
         assert_eq!(state.time, 3);
         assert_eq!(state.vertices.len(), 1);
-        assert_p3_eq!(state.vertices[0], new_point3(0.2, 0.4, 0.6));
+        assert_eq_point3!(state.vertices[0], new_point3(0.2, 0.4, 0.6));
         assert_eq!(state.normals.len(), 1);
-        assert_p3_eq!(state.normals[0], new_point3(0.4, 0.6, 0.8));
+        assert_eq_point3!(state.normals[0], new_point3(0.4, 0.6, 0.8));
 
         let rec = reader.read_record().unwrap().unwrap();
         let state = record_variant!(ElementViewState, rec);
         assert_eq!(state.element, format!("e2"));
         assert_eq!(state.time, 4);
         assert_eq!(state.vertices.len(), 1);
-        assert_p3_eq!(state.vertices[0], new_point3(0.4, 0.6, 0.8));
+        assert_eq_point3!(state.vertices[0], new_point3(0.4, 0.6, 0.8));
         assert_eq!(state.normals.len(), 1);
-        assert_p3_eq!(state.normals[0], new_point3(0.5, 0.7, 0.9));
+        assert_eq_point3!(state.normals[0], new_point3(0.5, 0.7, 0.9));
 
         assert!(reader.read_record().unwrap().is_none());
     }

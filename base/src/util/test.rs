@@ -84,25 +84,25 @@ macro_rules! record_variant {
 }
 
 #[macro_export]
-macro_rules! assert_f32_eq {
+macro_rules! assert_eq_f32 {
     ($a:expr, $b:expr) => {{
         float_cmp::approx_eq!(f32, $a, $b, epsilon = 0.000001);
     }};
 }
 
 #[macro_export]
-macro_rules! assert_p2_eq {
+macro_rules! assert_eq_point2 {
     ($a:expr, $b:expr) => {{
-        base::assert_f32_eq!($a.x, $b.x);
-        base::assert_f32_eq!($a.y, $b.y);
+        base::assert_eq_f32!($a.x, $b.x);
+        base::assert_eq_f32!($a.y, $b.y);
     }};
 }
 
 #[macro_export]
-macro_rules! assert_p3_eq {
+macro_rules! assert_eq_point3 {
     ($a:expr, $b:expr) => {{
-        base::assert_f32_eq!($a.x, $b.x);
-        base::assert_f32_eq!($a.y, $b.y);
-        base::assert_f32_eq!($a.z, $b.z);
+        base::assert_eq_f32!($a.x, $b.x);
+        base::assert_eq_f32!($a.y, $b.y);
+        base::assert_eq_f32!($a.z, $b.z);
     }};
 }

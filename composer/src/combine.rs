@@ -17,11 +17,8 @@ use base::util::glam::{point3_to_vec3, vec3_to_point3};
 
 #[derive(Default, Clone, Copy)]
 pub struct Displacement {
-    #[allow(dead_code)]
     dx: f32,
-    #[allow(dead_code)]
     dy: f32,
-    #[allow(dead_code)]
     dz: f32,
 }
 
@@ -58,11 +55,8 @@ impl FromStr for Displacement {
 
 #[derive(Default, Clone, Copy)]
 pub struct Rotation {
-    #[allow(dead_code)]
     around_x: f32,
-    #[allow(dead_code)]
     around_y: f32,
-    #[allow(dead_code)]
     around_z: f32,
 }
 

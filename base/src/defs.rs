@@ -7,6 +7,7 @@ pub enum ErrorKind {
     InconsistentState,
     IoError,
     JsError,
+    LuaError,
     MalformedData,
     UnsupportedFeature,
     WebGlError,

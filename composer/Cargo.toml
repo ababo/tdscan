@@ -8,6 +8,7 @@ edition = "2018"
 [dependencies]
 base = { path = "../base" }
 glam = "0.15.2"
+rlua = "0.17.0"
 structopt = "0.3"
 
 [dev-dependencies]

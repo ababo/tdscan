@@ -16,7 +16,7 @@ const MAX_NUM_FACE_VERTICES: usize = 10;
 #[structopt(about = "Import data from Wavefront .obj file")]
 pub struct ImportObjParams {
     #[structopt(help = "Input .obj file (STDIN if omitted)")]
-    obj_path: Option<PathBuf>,
+    in_path: Option<PathBuf>,
     #[structopt(help = "Element ID for imported data", long, short = "e")]
     element: Option<String>,
     #[structopt(
@@ -24,19 +24,19 @@ pub struct ImportObjParams {
         long,
         short = "o"
     )]
-    fm_path: Option<PathBuf>,
+    out_path: Option<PathBuf>,
     #[structopt(flatten)]
     fm_write_params: fm::WriterParams,
 }
 
 pub fn import_obj_with_params(params: &ImportObjParams) -> Result<()> {
-    let mut obj_reader = if let Some(path) = &params.obj_path {
+    let mut reader = if let Some(path) = &params.in_path {
         Box::new(fs::open_file(path)?) as Box<dyn io::Read>
     } else {
         Box::new(stdin()) as Box<dyn io::Read>
     };
 
-    let mut fm_writer = if let Some(path) = &params.fm_path {
+    let mut writer = if let Some(path) = &params.out_path {
         let writer =
             fm::Writer::new(fs::create_file(path)?, &params.fm_write_params)?;
         Box::new(writer) as Box<dyn fm::Write>
@@ -47,7 +47,7 @@ pub fn import_obj_with_params(params: &ImportObjParams) -> Result<()> {
 
     let element = if let Some(id) = &params.element {
         id.clone()
-    } else if let Some(path) = &params.obj_path {
+    } else if let Some(path) = &params.in_path {
         path.file_stem()
             .unwrap_or_default()
             .to_str()
@@ -58,26 +58,26 @@ pub fn import_obj_with_params(params: &ImportObjParams) -> Result<()> {
     };
 
     let mtl_dir = params
-        .obj_path
+        .in_path
         .as_deref()
         .unwrap_or(".".as_ref())
         .parent()
         .unwrap_or(".".as_ref());
 
     import_obj(
-        &mut obj_reader,
+        &mut reader,
         |p| fs::read_file(p),
         mtl_dir,
-        fm_writer.as_mut(),
+        writer.as_mut(),
         element.as_str(),
     )
 }
 
 pub fn import_obj<F: Fn(&Path) -> Result<Vec<u8>>>(
-    obj_reader: &mut dyn io::Read,
+    reader: &mut dyn io::Read,
     read_file: F,
     mtl_dir: &Path,
-    fm_writer: &mut dyn fm::Write,
+    writer: &mut dyn fm::Write,
     element: &str,
 ) -> Result<()> {
     let mut data = ImportData {
@@ -92,7 +92,7 @@ pub fn import_obj<F: Fn(&Path) -> Result<Vec<u8>>>(
         ..Default::default()
     };
 
-    for line_res in BufReader::new(obj_reader).lines() {
+    for line_res in BufReader::new(reader).lines() {
         if let Ok(line) = line_res {
             data.line += 1;
 
@@ -115,11 +115,11 @@ pub fn import_obj<F: Fn(&Path) -> Result<Vec<u8>>>(
 
     use model::record::Type;
 
-    fm_writer.write_record(&model::Record {
+    writer.write_record(&model::Record {
         r#type: Some(Type::ElementView(take(&mut data.view))),
     })?;
 
-    fm_writer.write_record(&model::Record {
+    writer.write_record(&model::Record {
         r#type: Some(Type::ElementViewState(take(&mut data.state))),
     })?;
 
@@ -448,17 +448,17 @@ mod tests {
         obj: &str,
         read_file: F,
     ) -> Error {
-        let mut obj_reader = obj.as_bytes();
+        let mut reader = obj.as_bytes();
 
-        let mut fm_writer =
+        let mut writer =
             fm::Writer::new(Vec::<u8>::new(), &fm::WriterParams::default())
                 .unwrap();
 
         import_obj(
-            &mut obj_reader,
+            &mut reader,
             read_file,
             "obj-path".as_ref(),
-            &mut fm_writer,
+            &mut writer,
             "buzz",
         )
         .unwrap_err()
@@ -618,9 +618,9 @@ mod tests {
             map_Ka bar.jpg
         "#;
 
-        let mut obj_reader = obj.as_bytes();
+        let mut reader = obj.as_bytes();
 
-        let mut fm_writer =
+        let mut writer =
             fm::Writer::new(Vec::<u8>::new(), &fm::WriterParams::default())
                 .unwrap();
 
@@ -635,15 +635,15 @@ mod tests {
         };
 
         import_obj(
-            &mut obj_reader,
+            &mut reader,
             read_file,
             "obj-path".as_ref(),
-            &mut fm_writer,
+            &mut writer,
             "buzz",
         )
         .unwrap();
 
-        let fm_data = fm_writer.into_inner().unwrap();
+        let fm_data = writer.into_inner().unwrap();
         let mut fm_reader = fm_data.as_slice();
         let mut fm_reader = fm::Reader::new(&mut fm_reader).unwrap();
 

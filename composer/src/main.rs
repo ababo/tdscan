@@ -1,3 +1,4 @@
+mod animate;
 mod combine;
 mod import_obj;
 
@@ -12,6 +13,7 @@ struct Opts {
 
 #[derive(StructOpt)]
 enum Command {
+    Animate(animate::AnimateParams),
     Combine(combine::CombineParams),
     ImportObj(import_obj::ImportObjParams),
 }
@@ -20,6 +22,7 @@ fn main() {
     let opts: Opts = Opts::from_args();
 
     let res = match opts.command {
+        Command::Animate(params) => animate::animate_with_params(&params),
         Command::Combine(params) => combine::combine_with_params(&params),
         Command::ImportObj(params) => {
             import_obj::import_obj_with_params(&params)

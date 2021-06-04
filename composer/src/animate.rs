@@ -218,3 +218,145 @@ fn get_point3(point: &rlua::Table) -> rlua::Result<model::Point3> {
         z: point.get("z")?,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use base::fm::Read as _;
+    use base::util::test::*;
+    use base::{assert_eq_point3, record_variant};
+    use model::record::Type::*;
+
+    const EMPTY_SCRIPT: &str = r#"
+        function update_view_state(time)
+        end
+    "#;
+
+    #[test]
+    fn test_animate_no_view() {
+        let mut reader = create_reader_with_records(&vec![]);
+        let mut writer = create_writer();
+        let err =
+            animate(&mut reader, EMPTY_SCRIPT, 1, 1, &mut writer).unwrap_err();
+        assert_eq!(
+            err.description.as_str(),
+            "no element view as a first record"
+        );
+    }
+
+    #[test]
+    fn test_animate_no_view_state() {
+        let view = new_element_view_rec(model::ElementView {
+            element: format!("abc"),
+            ..Default::default()
+        });
+        let mut reader = create_reader_with_records(&vec![view]);
+        let mut writer = create_writer();
+        let err =
+            animate(&mut reader, EMPTY_SCRIPT, 1, 1, &mut writer).unwrap_err();
+        assert_eq!(
+            err.description.as_str(),
+            "no element view state as a second record"
+        );
+    }
+
+    #[test]
+    fn test_animate_unknown_element() {
+        let view = new_element_view_rec(model::ElementView {
+            element: format!("abc"),
+            ..Default::default()
+        });
+        let state = new_element_view_state_rec(model::ElementViewState {
+            element: format!("bcd"),
+            time: 123,
+            vertices: vec![],
+            normals: vec![],
+        });
+        let mut reader = create_reader_with_records(&vec![view, state]);
+        let mut writer = create_writer();
+        let err =
+            animate(&mut reader, EMPTY_SCRIPT, 1, 1, &mut writer).unwrap_err();
+        assert_eq!(err.description.as_str(), "view state of unknown element");
+    }
+
+    #[test]
+    fn test_animate_valid_element() {
+        let view = new_element_view_rec(model::ElementView {
+            element: format!("abc"),
+            ..Default::default()
+        });
+        let state = new_element_view_state_rec(model::ElementViewState {
+            element: format!("abc"),
+            time: 123,
+            vertices: vec![
+                new_point3(0.12, 0.23, 0.34),
+                new_point3(0.45, 0.56, 0.67),
+                new_point3(0.78, 0.89, 0.90),
+            ],
+            normals: vec![
+                new_point3(0.21, 0.32, 0.43),
+                new_point3(0.54, 0.65, 0.76),
+                new_point3(0.87, 0.98, 0.09),
+            ],
+        });
+        let mut reader =
+            create_reader_with_records(&vec![view.clone(), state.clone()]);
+
+        let script = r#"
+            function update_view_state(time)
+                view_state.time = time
+                for i, v in pairs(view_state.vertices) do
+                    view_state.vertices[i] = {
+                        x = v.x + 0.01,
+                        y = v.y + 0.02,
+                        z = v.z + 0.03,
+                    }
+                end
+                for i, v in pairs(view_state.normals) do
+                    view_state.normals[i] = {
+                        x = v.x + 0.04,
+                        y = v.y + 0.05,
+                        z = v.z + 0.06,
+                    }
+                end
+            end
+        "#;
+
+        let mut writer = create_writer();
+
+        animate(&mut reader, script, 12, 2, &mut writer).unwrap();
+
+        let mut reader = writer_to_reader(writer);
+
+        assert_eq!(reader.read_record().unwrap().unwrap(), view);
+        assert_eq!(reader.read_record().unwrap().unwrap(), state);
+
+        let rec = reader.read_record().unwrap().unwrap();
+        let state = record_variant!(ElementViewState, rec);
+        assert_eq!(state.element.as_str(), "abc");
+        assert_eq!(state.time, 135);
+        assert_eq!(state.vertices.len(), 3);
+        assert_eq_point3!(state.vertices[0], new_point3(0.13, 0.25, 0.37));
+        assert_eq_point3!(state.vertices[1], new_point3(0.46, 0.58, 0.70));
+        assert_eq_point3!(state.vertices[2], new_point3(0.79, 0.91, 0.93));
+        assert_eq!(state.normals.len(), 3);
+        assert_eq_point3!(state.normals[0], new_point3(0.25, 0.37, 0.49));
+        assert_eq_point3!(state.normals[1], new_point3(0.58, 0.70, 0.82));
+        assert_eq_point3!(state.normals[2], new_point3(0.91, 1.03, 0.15));
+
+        let rec = reader.read_record().unwrap().unwrap();
+        let state = record_variant!(ElementViewState, rec);
+        assert_eq!(state.element.as_str(), "abc");
+        assert_eq!(state.time, 147);
+        assert_eq!(state.vertices.len(), 3);
+        assert_eq_point3!(state.vertices[0], new_point3(0.14, 0.27, 0.40));
+        assert_eq_point3!(state.vertices[1], new_point3(0.47, 0.60, 0.73));
+        assert_eq_point3!(state.vertices[2], new_point3(0.80, 0.93, 0.96));
+        assert_eq!(state.normals.len(), 3);
+        assert_eq_point3!(state.normals[0], new_point3(0.29, 0.42, 0.55));
+        assert_eq_point3!(state.normals[1], new_point3(0.62, 0.75, 0.88));
+        assert_eq_point3!(state.normals[2], new_point3(0.95, 1.08, 0.21));
+
+        assert!(reader.read_record().unwrap().is_none());
+    }
+}

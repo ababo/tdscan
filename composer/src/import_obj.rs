@@ -423,9 +423,9 @@ fn validate_face_vertex(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use base::fm::Read as _;
     use base::record_variant;
-    use base::util::test::{new_ev_face, new_point2, new_point3};
+    use base::util::test::*;
+    use fm::Read as _;
     use model::record::Type::*;
 
     fn dont_read_file(_: &Path) -> Result<Vec<u8>> {
@@ -449,11 +449,7 @@ mod tests {
         read_file: F,
     ) -> Error {
         let mut reader = obj.as_bytes();
-
-        let mut writer =
-            fm::Writer::new(Vec::<u8>::new(), &fm::WriterParams::default())
-                .unwrap();
-
+        let mut writer = create_writer();
         import_obj(
             &mut reader,
             read_file,
@@ -495,11 +491,11 @@ mod tests {
         let err = import_obj_err(obj, dont_read_file);
         assert_eq!(err.kind, InconsistentState);
         assert_eq!(
-            err.description,
-            format!(concat!(
+            err.description.as_str(),
+            concat!(
                 "reference to unknown normal ",
                 "of vertex 1 in f-statement at line 5"
-            ))
+            )
         );
     }
 
@@ -513,8 +509,8 @@ mod tests {
         let err = import_obj_err(obj, dont_read_file);
         assert_eq!(err.kind, InconsistentState);
         assert_eq!(
-            err.description,
-            format!("reference to unknown vertex 1 in f-statement at line 4")
+            err.description.as_str(),
+            "reference to unknown vertex 1 in f-statement at line 4"
         );
     }
 
@@ -523,8 +519,8 @@ mod tests {
         let err = import_obj_err("f 1/1/6 2/2/5", dont_read_file);
         assert_eq!(err.kind, MalformedData);
         assert_eq!(
-            err.description,
-            format!("bad number of vertices in f-statement at line 1")
+            err.description.as_str(),
+            "bad number of vertices in f-statement at line 1"
         );
     }
 
@@ -534,8 +530,8 @@ mod tests {
         let err = import_obj_err("mtllib foo.mtl", read_file);
         assert_eq!(err.kind, MalformedData);
         assert_eq!(
-            err.description,
-            format!("malformed map_Ka-statement at line 1")
+            err.description.as_str(),
+            "malformed map_Ka-statement at line 1"
         );
     }
 
@@ -545,11 +541,11 @@ mod tests {
         let err = import_obj_err("mtllib foo.mtl", read_file);
         assert_eq!(err.kind, UnsupportedFeature);
         assert_eq!(
-            err.description,
-            format!(concat!(
+            err.description.as_str(),
+            concat!(
                 "missing or unsupported file extension ",
                 "in map_Ka-statement at line 1"
-            ),)
+            )
         );
     }
 
@@ -558,8 +554,8 @@ mod tests {
         let err = import_obj_err("mtllib", dont_read_file);
         assert_eq!(err.kind, MalformedData);
         assert_eq!(
-            err.description,
-            format!("no filenames in mtllib-statement at line 1")
+            err.description.as_str(),
+            "no filenames in mtllib-statement at line 1"
         );
     }
 
@@ -573,8 +569,8 @@ mod tests {
         let err = import_obj_err("mtllib foo.mtl", read_file);
         assert_eq!(err.kind, UnsupportedFeature);
         assert_eq!(
-            err.description,
-            format!("multiple materials are not supported, found at line 3")
+            err.description.as_str(),
+            "multiple materials are not supported, found at line 3"
         );
     }
 
@@ -620,9 +616,7 @@ mod tests {
 
         let mut reader = obj.as_bytes();
 
-        let mut writer =
-            fm::Writer::new(Vec::<u8>::new(), &fm::WriterParams::default())
-                .unwrap();
+        let mut writer = create_writer();
 
         let read_file = |p: &Path| {
             if p == &Path::new("obj-path").join("foo.mtl") {
@@ -643,13 +637,11 @@ mod tests {
         )
         .unwrap();
 
-        let fm_data = writer.into_inner().unwrap();
-        let mut fm_reader = fm_data.as_slice();
-        let mut fm_reader = fm::Reader::new(&mut fm_reader).unwrap();
+        let mut fm_reader = writer_to_reader(writer);
 
         let record = fm_reader.read_record().unwrap().unwrap();
         let view = record_variant!(ElementView, record);
-        assert_eq!(view.element, format!("buzz"));
+        assert_eq!(view.element.as_str(), "buzz");
 
         let texture = view.texture.unwrap();
         assert_eq!(texture.r#type, model::image::r#Type::Jpeg as i32);
@@ -673,7 +665,7 @@ mod tests {
 
         let record = fm_reader.read_record().unwrap().unwrap();
         let state = record_variant!(ElementViewState, record);
-        assert_eq!(state.element, format!("buzz"));
+        assert_eq!(state.element.as_str(), "buzz");
         assert_eq!(state.time, 0);
 
         let vertices = state.vertices;
@@ -708,8 +700,8 @@ mod tests {
         let err = import_obj_err(obj, read_file);
         assert_eq!(err.kind, MalformedData);
         assert_eq!(
-            err.description,
-            format!("malformed usemtl-statement at line 3")
+            err.description.as_str(),
+            "malformed usemtl-statement at line 3"
         );
     }
 
@@ -724,8 +716,8 @@ mod tests {
         let err = import_obj_err(obj, read_file);
         assert_eq!(err.kind, InconsistentState);
         assert_eq!(
-            err.description,
-            format!("unknown material in usemtl-statement at line 3",)
+            err.description.as_str(),
+            "unknown material in usemtl-statement at line 3"
         );
     }
 
@@ -764,8 +756,8 @@ mod tests {
         let err = import_obj_err("vn 0.1 0.2 0.3 0.4 0.5", dont_read_file);
         assert_eq!(err.kind, MalformedData);
         assert_eq!(
-            err.description,
-            format!("malformed vn-statement at line 1")
+            err.description.as_str(),
+            "malformed vn-statement at line 1"
         );
     }
 
@@ -797,8 +789,8 @@ mod tests {
         let err = import_obj_err("vt 0.1", dont_read_file);
         assert_eq!(err.kind, MalformedData);
         assert_eq!(
-            err.description,
-            format!("malformed vt-statement at line 1")
+            err.description.as_str(),
+            "malformed vt-statement at line 1"
         );
     }
 

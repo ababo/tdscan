@@ -1,4 +1,42 @@
+use crate::fm;
+use crate::fm::Write as _;
 use crate::model;
+use std::io;
+
+#[macro_export]
+macro_rules! record_variant {
+    ($variant:path, $record:expr) => {
+        match $record.r#type.unwrap() {
+            $variant(val) => Some(val),
+            _ => None,
+        }
+        .unwrap()
+    };
+}
+
+#[macro_export]
+macro_rules! assert_eq_f32 {
+    ($a:expr, $b:expr) => {{
+        assert!(($a - $b).abs() < 0.000001);
+    }};
+}
+
+#[macro_export]
+macro_rules! assert_eq_point2 {
+    ($a:expr, $b:expr) => {{
+        base::assert_eq_f32!($a.x, $b.x);
+        base::assert_eq_f32!($a.y, $b.y);
+    }};
+}
+
+#[macro_export]
+macro_rules! assert_eq_point3 {
+    ($a:expr, $b:expr) => {{
+        base::assert_eq_f32!($a.x, $b.x);
+        base::assert_eq_f32!($a.y, $b.y);
+        base::assert_eq_f32!($a.z, $b.z);
+    }};
+}
 
 pub struct MethodMock<Args, Ret> {
     pub args: Vec<Args>,
@@ -23,6 +61,22 @@ impl<Args, Ret> MethodMock<Args, Ret> {
         assert!(self.args.is_empty());
         assert!(self.rets.is_empty());
     }
+}
+
+pub fn create_reader_with_records(
+    records: &Vec<model::Record>,
+) -> fm::Reader<io::Cursor<Vec<u8>>> {
+    let mut writer = create_writer();
+
+    for rec in records {
+        writer.write_record(rec).unwrap();
+    }
+
+    writer_to_reader(writer)
+}
+
+pub fn create_writer() -> fm::Writer<Vec<u8>> {
+    fm::Writer::new(Vec::new(), &fm::WriterParams::default()).unwrap()
 }
 
 pub fn new_element_view_rec(view: model::ElementView) -> model::Record {
@@ -72,37 +126,9 @@ pub fn new_point3(x: f32, y: f32, z: f32) -> model::Point3 {
     model::Point3 { x, y, z }
 }
 
-#[macro_export]
-macro_rules! record_variant {
-    ($variant:path, $record:expr) => {
-        match $record.r#type.unwrap() {
-            $variant(val) => Some(val),
-            _ => None,
-        }
-        .unwrap()
-    };
-}
-
-#[macro_export]
-macro_rules! assert_eq_f32 {
-    ($a:expr, $b:expr) => {{
-        float_cmp::approx_eq!(f32, $a, $b, epsilon = 0.000001);
-    }};
-}
-
-#[macro_export]
-macro_rules! assert_eq_point2 {
-    ($a:expr, $b:expr) => {{
-        base::assert_eq_f32!($a.x, $b.x);
-        base::assert_eq_f32!($a.y, $b.y);
-    }};
-}
-
-#[macro_export]
-macro_rules! assert_eq_point3 {
-    ($a:expr, $b:expr) => {{
-        base::assert_eq_f32!($a.x, $b.x);
-        base::assert_eq_f32!($a.y, $b.y);
-        base::assert_eq_f32!($a.z, $b.z);
-    }};
+pub fn writer_to_reader(
+    writer: fm::Writer<Vec<u8>>,
+) -> fm::Reader<io::Cursor<Vec<u8>>> {
+    let data = writer.into_inner().unwrap();
+    fm::Reader::new(io::Cursor::new(data)).unwrap()
 }

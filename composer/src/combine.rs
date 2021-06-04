@@ -302,11 +302,9 @@ impl PartialEq for Item {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use base::fm::{Read as _, Write as _};
-    use base::util::test::{
-        new_element_view_rec, new_element_view_state_rec, new_point3,
-    };
+    use base::util::test::*;
     use base::{assert_eq_point3, record_variant};
+    use fm::Read as _;
     use model::record::Type::*;
 
     fn new_displacement(dx: f32, dy: f32, dz: f32) -> Displacement {
@@ -343,31 +341,16 @@ mod tests {
 
     #[test]
     fn test_combine_sanity() {
-        fn new_data(element: &str, time: i64) -> Vec<u8> {
-            let mut writer =
-                fm::Writer::new(Vec::new(), &fm::WriterParams::default())
-                    .unwrap();
+        let new_reader = |element, time| {
+            create_reader_with_records(&vec![
+                new_simple_element_view_rec(element),
+                new_simple_element_view_state_rec(element, time),
+                new_simple_element_view_state_rec(element, time + 2),
+            ])
+        };
 
-            let rec = new_simple_element_view_rec(element);
-            writer.write_record(&rec).unwrap();
-
-            let rec = new_simple_element_view_state_rec(element, time);
-            writer.write_record(&rec).unwrap();
-
-            let rec = new_simple_element_view_state_rec(element, time + 2);
-            writer.write_record(&rec).unwrap();
-
-            writer.into_inner().unwrap()
-        }
-
-        let data1 = new_data("e1", 1);
-        let data1_slice = &data1[..];
-        let mut reader1 = fm::Reader::new(data1_slice).unwrap();
-
-        let data2 = new_data("e2", 2);
-        let data2_slice = &data2[..];
-        let mut reader2 = fm::Reader::new(data2_slice).unwrap();
-
+        let mut reader1 = new_reader("e1", 1);
+        let mut reader2 = new_reader("e2", 2);
         let mut readers: [&mut dyn fm::Read; 2] = [&mut reader1, &mut reader2];
 
         let mut displacements = HashMap::new();
@@ -379,8 +362,7 @@ mod tests {
         let mut scales = HashMap::new();
         scales.insert(format!("e1"), 2.0);
 
-        let mut writer =
-            fm::Writer::new(Vec::new(), &fm::WriterParams::default()).unwrap();
+        let mut writer = create_writer();
         combine(
             &mut readers[..],
             &displacements,
@@ -390,21 +372,19 @@ mod tests {
         )
         .unwrap();
 
-        let data = writer.into_inner().unwrap();
-        let data_slice = &data[..];
-        let mut reader = fm::Reader::new(data_slice).unwrap();
+        let mut reader = writer_to_reader(writer);
 
         let rec = reader.read_record().unwrap().unwrap();
         let view = record_variant!(ElementView, rec);
-        assert_eq!(view.element, format!("e1"));
+        assert_eq!(view.element.as_str(), "e1");
 
         let rec = reader.read_record().unwrap().unwrap();
         let view = record_variant!(ElementView, rec);
-        assert_eq!(view.element, format!("e2"));
+        assert_eq!(view.element.as_str(), "e2");
 
         let rec = reader.read_record().unwrap().unwrap();
         let state = record_variant!(ElementViewState, rec);
-        assert_eq!(state.element, format!("e1"));
+        assert_eq!(state.element.as_str(), "e1");
         assert_eq!(state.time, 1);
         assert_eq!(state.vertices.len(), 1);
         assert_eq_point3!(
@@ -419,7 +399,7 @@ mod tests {
 
         let rec = reader.read_record().unwrap().unwrap();
         let state = record_variant!(ElementViewState, rec);
-        assert_eq!(state.element, format!("e2"));
+        assert_eq!(state.element.as_str(), "e2");
         assert_eq!(state.time, 2);
         assert_eq!(state.vertices.len(), 1);
         assert_eq_point3!(state.vertices[0], new_point3(0.4, 0.6, 0.8));
@@ -428,16 +408,22 @@ mod tests {
 
         let rec = reader.read_record().unwrap().unwrap();
         let state = record_variant!(ElementViewState, rec);
-        assert_eq!(state.element, format!("e1"));
+        assert_eq!(state.element.as_str(), "e1");
         assert_eq!(state.time, 3);
         assert_eq!(state.vertices.len(), 1);
-        assert_eq_point3!(state.vertices[0], new_point3(0.2, 0.4, 0.6));
+        assert_eq_point3!(
+            state.vertices[0],
+            new_point3(0.27363908, 0.0356109, 0.69559586)
+        );
         assert_eq!(state.normals.len(), 1);
-        assert_eq_point3!(state.normals[0], new_point3(0.4, 0.6, 0.8));
+        assert_eq_point3!(
+            state.normals[0],
+            new_point3(0.39932388, 0.18115145, 0.9837299)
+        );
 
         let rec = reader.read_record().unwrap().unwrap();
         let state = record_variant!(ElementViewState, rec);
-        assert_eq!(state.element, format!("e2"));
+        assert_eq!(state.element.as_str(), "e2");
         assert_eq!(state.time, 4);
         assert_eq!(state.vertices.len(), 1);
         assert_eq_point3!(state.vertices[0], new_point3(0.4, 0.6, 0.8));

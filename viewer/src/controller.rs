@@ -21,8 +21,6 @@ const DEFAULT_EYE_POSITION: model::Point3 = model::Point3 {
 const MOUSE_MOVE_ANGLE_FACTOR: f32 = 0.01;
 const MOUSE_WHEEL_SCALE_FACTOR: f32 = -0.001;
 
-pub type Time = i64;
-
 #[derive(Clone, Copy, Default)]
 #[repr(C)]
 pub struct Vertex {
@@ -52,7 +50,11 @@ pub trait Adapter {
 
     fn destroy(self: &Rc<Self>);
 
+    async fn next_frame(self: &Rc<Self>) -> model::Time;
+
     fn render_frame(self: &Rc<Self>) -> Result<()>;
+
+    fn reset_time(self: &Rc<Self>);
 
     fn set_faces(self: &Rc<Self>, faces: &[Face]) -> Result<()>;
 
@@ -94,7 +96,7 @@ struct ElementState {
 }
 
 #[derive(PartialEq, PartialOrd, Ord, Eq)]
-struct TimeElement(Time, String);
+struct TimeElement(model::Time, String);
 
 #[derive(Default)]
 struct ControllerData {
@@ -107,7 +109,7 @@ struct ControllerData {
 impl ControllerData {
     fn states_at_time<'a>(
         &'a self,
-        time: Time,
+        time: model::Time,
     ) -> HashMap<&'a String, &'a ElementState> {
         let mut states = HashMap::new();
 
@@ -137,6 +139,14 @@ pub struct Controller<A: Adapter> {
 }
 
 impl<A: Adapter + 'static> Controller<A> {
+    pub async fn animate(
+        self: &Rc<Self>,
+        _from: model::Time,
+        _to: model::Time,
+    ) -> Result<()> {
+        Ok(())
+    }
+
     pub fn create(adapter: Rc<A>) -> Result<Rc<Self>> {
         let controller = Rc::new(Self {
             mutex: Mutex::new(),
@@ -447,7 +457,7 @@ impl<A: Adapter + 'static> Controller<A> {
         self.adapter.render_frame()
     }
 
-    pub fn move_to_scene(self: &Rc<Self>, time: Time) -> Result<()> {
+    pub fn move_to_scene(self: &Rc<Self>, time: model::Time) -> Result<()> {
         let _guard = self.mutex.try_lock()?;
 
         let mut data = self.data.borrow_mut();
@@ -493,7 +503,9 @@ mod tests {
 
     struct TestAdapterData {
         destroy_mock: MethodMock<(), Result<()>>,
+        next_frame_mock: MethodMock<(), model::Time>,
         render_frame_mock: MethodMock<(), Result<()>>,
+        reset_time_mock: MethodMock<(), ()>,
         set_faces_mock: MethodMock<Vec<Face>, Result<()>>,
         set_texture_mock: MethodMock<(usize, model::Image), Result<()>>,
         set_texture_index_mock: MethodMock<Vec<u16>, Result<()>>,
@@ -514,7 +526,9 @@ mod tests {
             Rc::new(TestAdapter {
                 data: RefCell::new(TestAdapterData {
                     destroy_mock: MethodMock::new(),
+                    next_frame_mock: MethodMock::new(),
                     render_frame_mock: MethodMock::new(),
+                    reset_time_mock: MethodMock::new(),
                     set_faces_mock: MethodMock::new(),
                     set_texture_mock: MethodMock::new(),
                     set_texture_index_mock: MethodMock::new(),
@@ -529,7 +543,9 @@ mod tests {
         pub fn finish(&self) {
             let data = self.data.borrow();
             data.destroy_mock.finish();
+            data.next_frame_mock.finish();
             data.render_frame_mock.finish();
+            data.reset_time_mock.finish();
             data.set_faces_mock.finish();
             data.set_texture_mock.finish();
             data.set_texture_index_mock.finish();
@@ -546,6 +562,14 @@ mod tests {
 
         fn destroy(self: &Rc<Self>) {
             let _ = self.data.borrow_mut().destroy_mock.call(());
+        }
+
+        async fn next_frame(self: &Rc<Self>) -> model::Time {
+            self.data.borrow_mut().next_frame_mock.call(())
+        }
+
+        fn reset_time(self: &Rc<Self>) {
+            self.data.borrow_mut().reset_time_mock.call(())
         }
 
         fn render_frame(self: &Rc<Self>) -> Result<()> {

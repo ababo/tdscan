@@ -125,6 +125,10 @@ impl Adapter for WebGlAdapter {
 
     fn destroy(self: &Rc<Self>) {}
 
+    async fn next_frame(self: &Rc<Self>) -> model::Time {
+        0
+    }
+
     fn render_frame(self: &Rc<Self>) -> Result<()> {
         let size = self.context.get_buffer_parameter(
             WebGl2RenderingContext::ELEMENT_ARRAY_BUFFER,
@@ -142,6 +146,8 @@ impl Adapter for WebGlAdapter {
 
         Ok(())
     }
+
+    fn reset_time(self: &Rc<Self>) {}
 
     fn set_faces(self: &Rc<Self>, faces: &[Face]) -> Result<()> {
         let buf = self.context.create_buffer().unwrap();

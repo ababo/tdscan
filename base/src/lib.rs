@@ -5,4 +5,6 @@ pub mod util;
 
 pub mod model {
     include!(concat!(env!("OUT_DIR"), "/base.model.rs"));
+
+    pub type Time = i64; // Monotonic time with nanosecond precision.
 }

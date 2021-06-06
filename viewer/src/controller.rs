@@ -54,9 +54,9 @@ pub trait Adapter {
 
     fn render_frame(self: &Rc<Self>) -> Result<()>;
 
-    fn reset_time(self: &Rc<Self>);
-
     fn set_faces(self: &Rc<Self>, faces: &[Face]) -> Result<()>;
+
+    fn set_now(self: &Rc<Self>, now: model::Time);
 
     async fn set_texture(
         self: &Rc<Self>,
@@ -139,11 +139,56 @@ pub struct Controller<A: Adapter> {
 }
 
 impl<A: Adapter + 'static> Controller<A> {
-    pub async fn animate(
+    pub async fn animate_all(self: &Rc<Self>) -> Result<()> {
+        let _guard = self.mutex.try_lock().unwrap();
+
+        let from;
+        let to;
+        {
+            let data = self.data.borrow();
+            let states = &data.states;
+            if states.is_empty() {
+                return Ok(());
+            }
+
+            from = states.iter().next().map(|p| p.0 .0).unwrap();
+            to = states.iter().next_back().map(|p| p.0 .0).unwrap();
+        }
+
+        self.animate(from, to).await
+    }
+
+    pub async fn animate_range(
         self: &Rc<Self>,
-        _from: model::Time,
-        _to: model::Time,
+        from: model::Time,
+        to: model::Time,
     ) -> Result<()> {
+        let _guard = self.mutex.try_lock().unwrap();
+        self.animate(from, to).await
+    }
+
+    async fn animate(
+        self: &Rc<Self>,
+        from: model::Time,
+        to: model::Time,
+    ) -> Result<()> {
+        {
+            let mut data = self.data.borrow_mut();
+            data.eye_pos = DEFAULT_EYE_POSITION;
+            self.adapter.set_eye_position(&data.eye_pos)?;
+        }
+
+        self.adapter.set_now(from);
+
+        loop {
+            let now = self.adapter.next_frame().await;
+            self.set_vertices(now)?;
+            self.adapter.render_frame()?;
+            if now > to {
+                break;
+            }
+        }
+
         Ok(())
     }
 
@@ -457,10 +502,8 @@ impl<A: Adapter + 'static> Controller<A> {
         self.adapter.render_frame()
     }
 
-    pub fn move_to_scene(self: &Rc<Self>, time: model::Time) -> Result<()> {
-        let _guard = self.mutex.try_lock()?;
-
-        let mut data = self.data.borrow_mut();
+    fn set_vertices(self: &Rc<Self>, time: model::Time) -> Result<()> {
+        let data = self.data.borrow();
         let mut vertices = self.vertices.borrow_mut();
 
         let states = data.states_at_time(time);
@@ -484,9 +527,18 @@ impl<A: Adapter + 'static> Controller<A> {
             }
         }
 
-        self.adapter.set_vertices(vertices.as_ref())?;
+        self.adapter.set_vertices(vertices.as_ref())
+    }
+
+    pub fn show_scene(self: &Rc<Self>, time: model::Time) -> Result<()> {
+        let _guard = self.mutex.try_lock()?;
+
+        self.set_vertices(time)?;
+
+        let mut data = self.data.borrow_mut();
         data.eye_pos = DEFAULT_EYE_POSITION;
         self.adapter.set_eye_position(&data.eye_pos)?;
+
         self.adapter.render_frame()
     }
 }
@@ -505,8 +557,8 @@ mod tests {
         destroy_mock: MethodMock<(), Result<()>>,
         next_frame_mock: MethodMock<(), model::Time>,
         render_frame_mock: MethodMock<(), Result<()>>,
-        reset_time_mock: MethodMock<(), ()>,
         set_faces_mock: MethodMock<Vec<Face>, Result<()>>,
+        set_now_mock: MethodMock<model::Time, ()>,
         set_texture_mock: MethodMock<(usize, model::Image), Result<()>>,
         set_texture_index_mock: MethodMock<Vec<u16>, Result<()>>,
         set_vertices_mock: MethodMock<Vec<Vertex>, Result<()>>,
@@ -528,8 +580,8 @@ mod tests {
                     destroy_mock: MethodMock::new(),
                     next_frame_mock: MethodMock::new(),
                     render_frame_mock: MethodMock::new(),
-                    reset_time_mock: MethodMock::new(),
                     set_faces_mock: MethodMock::new(),
+                    set_now_mock: MethodMock::new(),
                     set_texture_mock: MethodMock::new(),
                     set_texture_index_mock: MethodMock::new(),
                     set_vertices_mock: MethodMock::new(),
@@ -545,8 +597,8 @@ mod tests {
             data.destroy_mock.finish();
             data.next_frame_mock.finish();
             data.render_frame_mock.finish();
-            data.reset_time_mock.finish();
             data.set_faces_mock.finish();
+            data.set_now_mock.finish();
             data.set_texture_mock.finish();
             data.set_texture_index_mock.finish();
             data.set_vertices_mock.finish();
@@ -568,16 +620,16 @@ mod tests {
             self.data.borrow_mut().next_frame_mock.call(())
         }
 
-        fn reset_time(self: &Rc<Self>) {
-            self.data.borrow_mut().reset_time_mock.call(())
-        }
-
         fn render_frame(self: &Rc<Self>) -> Result<()> {
             self.data.borrow_mut().render_frame_mock.call(())
         }
 
         fn set_faces(self: &Rc<Self>, faces: &[Face]) -> Result<()> {
             self.data.borrow_mut().set_faces_mock.call(faces.to_vec())
+        }
+
+        fn set_now(self: &Rc<Self>, now: model::Time) {
+            self.data.borrow_mut().set_now_mock.call(now)
         }
 
         async fn set_texture(
@@ -1110,7 +1162,7 @@ mod tests {
         });
         controller.add_record(rec).await.unwrap();
 
-        controller.move_to_scene(456).unwrap();
+        controller.show_scene(456).unwrap();
 
         let texture_index;
         let vertices;

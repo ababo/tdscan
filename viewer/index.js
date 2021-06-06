@@ -19,5 +19,5 @@ document.addEventListener('DOMContentLoaded', async event => {
   let buf = await resp.arrayBuffer();
   await viewer.loadFmBuffer(buf);
 
-  viewer.moveToScene(BigInt(0));
+  await viewer.animateAll();
 });

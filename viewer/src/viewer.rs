@@ -25,12 +25,28 @@ pub struct Viewer {
 
 #[wasm_bindgen]
 impl Viewer {
-    pub fn animate(&self, from: model::Time, to: model::Time) -> Promise {
+    fn seconds_to_time(seconds: f64) -> model::Time {
+        (seconds * 1E9) as model::Time
+    }
+
+    #[wasm_bindgen(js_name = animateAll)]
+    pub fn animate_all(&self) -> Promise {
         let controller = self.controller.clone();
 
         future_to_promise(async move {
-            controller.animate(from, to).await.into_result()?;
+            controller.animate_all().await.into_result()?;
+            Ok(JsValue::NULL)
+        })
+    }
 
+    #[wasm_bindgen(js_name = animateRange)]
+    pub fn animate_range(&self, from: f64, to: f64) -> Promise {
+        let from = Self::seconds_to_time(from);
+        let to = Self::seconds_to_time(to);
+        let controller = self.controller.clone();
+
+        future_to_promise(async move {
+            controller.animate_range(from, to).await.into_result()?;
             Ok(JsValue::NULL)
         })
     }
@@ -72,8 +88,9 @@ impl Viewer {
         })
     }
 
-    #[wasm_bindgen(js_name = moveToScene)]
-    pub fn move_to_scene(&self, time: model::Time) -> StdResult<(), JsValue> {
-        self.controller.move_to_scene(time).into_result()
+    #[wasm_bindgen(js_name = showScene)]
+    pub fn show_scene(&self, time: f64) -> StdResult<(), JsValue> {
+        let time = Self::seconds_to_time(time);
+        self.controller.show_scene(time).into_result()
     }
 }

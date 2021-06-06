@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use std::f32::consts::PI;
 use std::mem::size_of;
 use std::rc::Rc;
@@ -5,10 +6,13 @@ use std::slice::from_raw_parts;
 
 use async_trait::async_trait;
 use glam::{Mat4, Vec3};
-use js_sys::{Uint16Array, Uint8Array};
+use js_sys::{Promise, Uint16Array, Uint8Array};
 use memoffset::offset_of;
 use wasm_bindgen::JsCast;
-use web_sys::{HtmlCanvasElement, WebGl2RenderingContext, WebGlProgram};
+use wasm_bindgen_futures::JsFuture;
+use web_sys::{
+    window, HtmlCanvasElement, WebGl2RenderingContext, WebGlProgram,
+};
 
 use crate::controller::{Adapter, Face, MouseEvent, Vertex};
 use crate::defs::IntoResult;
@@ -21,6 +25,7 @@ use base::util::glam::point3_to_vec3;
 pub struct WebGlAdapter {
     canvas: HtmlCanvasElement,
     context: WebGl2RenderingContext,
+    now_offset: Cell<model::Time>,
     program: WebGlProgram,
 }
 
@@ -87,10 +92,12 @@ impl WebGlAdapter {
         let adapter = Rc::new(Self {
             canvas,
             context,
+            now_offset: Cell::new(0),
             program,
         });
 
         adapter.set_projection()?;
+        adapter.set_now(0);
 
         Ok(adapter)
     }
@@ -119,6 +126,10 @@ fn texture_num(index: usize) -> u32 {
     WebGl2RenderingContext::TEXTURE0 + index as u32
 }
 
+fn milliseconds_to_time(milliseconds: f64) -> model::Time {
+    (milliseconds * 1000000.0) as model::Time
+}
+
 #[async_trait(?Send)]
 impl Adapter for WebGlAdapter {
     type Subscription = web::Subscription;
@@ -126,7 +137,11 @@ impl Adapter for WebGlAdapter {
     fn destroy(self: &Rc<Self>) {}
 
     async fn next_frame(self: &Rc<Self>) -> model::Time {
-        0
+        let promise = Promise::new(&mut |resolve, _| {
+            window().unwrap().request_animation_frame(&resolve).unwrap();
+        });
+        let now = JsFuture::from(promise).await.unwrap().as_f64().unwrap();
+        milliseconds_to_time(now) + self.now_offset.get()
     }
 
     fn render_frame(self: &Rc<Self>) -> Result<()> {
@@ -146,8 +161,6 @@ impl Adapter for WebGlAdapter {
 
         Ok(())
     }
-
-    fn reset_time(self: &Rc<Self>) {}
 
     fn set_faces(self: &Rc<Self>, faces: &[Face]) -> Result<()> {
         let buf = self.context.create_buffer().unwrap();
@@ -170,6 +183,11 @@ impl Adapter for WebGlAdapter {
         );
 
         Ok(())
+    }
+
+    fn set_now(self: &Rc<Self>, now: model::Time) {
+        let jsnow = window().unwrap().performance().unwrap().now();
+        self.now_offset.set(now - milliseconds_to_time(jsnow));
     }
 
     async fn set_texture(

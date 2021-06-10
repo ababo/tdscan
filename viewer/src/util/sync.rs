@@ -2,37 +2,56 @@ use std::cell::Cell;
 
 use base::defs::{Error, ErrorKind::*, Result};
 
-pub struct Mutex {
-    locked: Cell<bool>,
+pub struct LevelLock<L: Copy + Ord> {
+    level: Cell<L>,
 }
 
-impl Mutex {
-    pub fn new() -> Mutex {
-        Mutex {
-            locked: Cell::new(false),
+impl<L: Copy + Ord> LevelLock<L> {
+    pub fn new(level: L) -> Self {
+        Self {
+            level: Cell::new(level),
+        }
+    }
+
+    pub fn try_lock<'a>(&'a self, level: L) -> Result<LevelGuard<'a, L>> {
+        if level > self.level.get() {
+            Ok(LevelGuard {
+                lock: &self,
+                level: self.level.replace(level),
+            })
+        } else {
+            Err(Error::new(BadOperation, format!("currently busy")))
         }
     }
 }
 
-impl Mutex {
-    pub fn try_lock<'a>(&'a self) -> Result<MutexGuard<'a>> {
-        if self.locked.get() {
-            return Err(Error::new(BadOperation, format!("currently busy")));
-        }
-
-        self.locked.set(true);
-
-        Ok(MutexGuard { mutex: self })
-    }
+#[must_use = "if unused the LevelLock will immediately unlock"]
+pub struct LevelGuard<'a, L: Copy + Ord> {
+    level: L,
+    lock: &'a LevelLock<L>,
 }
 
-#[must_use = "if unused the Mutex will immediately unlock"]
-pub struct MutexGuard<'a> {
-    mutex: &'a Mutex,
-}
-
-impl<'a> Drop for MutexGuard<'a> {
+impl<'a, L: Copy + Ord> Drop for LevelGuard<'a, L> {
     fn drop(&mut self) {
-        self.mutex.locked.set(false);
+        self.lock.level.set(self.level);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_level_lock() {
+        let lock = LevelLock::new(0);
+        assert!(lock.try_lock(0).is_err());
+        {
+            let guard = lock.try_lock(1);
+            assert!(guard.is_ok());
+            assert!(lock.try_lock(1).is_err());
+            assert!(lock.try_lock(2).is_ok());
+        }
+        println!("{:?}", lock.level);
+        assert!(lock.try_lock(1).is_ok());
     }
 }

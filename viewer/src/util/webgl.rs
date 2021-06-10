@@ -3,13 +3,13 @@ use std::mem::size_of;
 
 use glam::Mat4;
 use web_sys::{
-    WebGl2RenderingContext, WebGlProgram, WebGlShader, WebGlUniformLocation,
+    WebGlProgram, WebGlRenderingContext, WebGlShader, WebGlUniformLocation,
 };
 
 use base::defs::{Error, ErrorKind::WebGlError, Result};
 
 pub fn compile_shader(
-    context: &WebGl2RenderingContext,
+    context: &WebGlRenderingContext,
     shader_type: u32,
     source: &str,
 ) -> Result<WebGlShader> {
@@ -19,7 +19,7 @@ pub fn compile_shader(
     context.compile_shader(&shader);
 
     if !context
-        .get_shader_parameter(&shader, WebGl2RenderingContext::COMPILE_STATUS)
+        .get_shader_parameter(&shader, WebGlRenderingContext::COMPILE_STATUS)
         .as_bool()
         .unwrap_or(false)
     {
@@ -32,7 +32,7 @@ pub fn compile_shader(
 }
 
 pub fn link_program(
-    context: &WebGl2RenderingContext,
+    context: &WebGlRenderingContext,
     vert_shader: &WebGlShader,
     frag_shader: &WebGlShader,
 ) -> Result<WebGlProgram> {
@@ -43,7 +43,7 @@ pub fn link_program(
     context.link_program(&program);
 
     if !context
-        .get_program_parameter(&program, WebGl2RenderingContext::LINK_STATUS)
+        .get_program_parameter(&program, WebGlRenderingContext::LINK_STATUS)
         .as_bool()
         .unwrap_or(false)
     {
@@ -56,7 +56,7 @@ pub fn link_program(
 }
 
 pub fn define_attribute<T>(
-    context: &WebGl2RenderingContext,
+    context: &WebGlRenderingContext,
     program: &WebGlProgram,
     name: &str,
     size: usize,
@@ -64,11 +64,11 @@ pub fn define_attribute<T>(
     offset: usize,
 ) -> Result<()> {
     let r#type = match type_name::<T>() {
-        "f32" => WebGl2RenderingContext::FLOAT,
-        "i8" => WebGl2RenderingContext::BYTE,
-        "i16" => WebGl2RenderingContext::SHORT,
-        "u8" => WebGl2RenderingContext::UNSIGNED_BYTE,
-        "u16" => WebGl2RenderingContext::UNSIGNED_SHORT,
+        "f32" => WebGlRenderingContext::FLOAT,
+        "i8" => WebGlRenderingContext::BYTE,
+        "i16" => WebGlRenderingContext::SHORT,
+        "u8" => WebGlRenderingContext::UNSIGNED_BYTE,
+        "u16" => WebGlRenderingContext::UNSIGNED_SHORT,
         _ => panic!("unsupported WebGL attribute type"),
     };
 
@@ -92,21 +92,8 @@ pub fn define_attribute<T>(
     Ok(())
 }
 
-pub fn set_uniform_i32_array(
-    context: &WebGl2RenderingContext,
-    program: &WebGlProgram,
-    name: &str,
-    array: &[i32],
-) -> Result<()> {
-    let location = get_uniform_location(context, program, name)?;
-
-    context.uniform1iv_with_i32_array(Some(&location), array);
-
-    Ok(())
-}
-
 pub fn get_uniform_location(
-    context: &WebGl2RenderingContext,
+    context: &WebGlRenderingContext,
     program: &WebGlProgram,
     name: &str,
 ) -> Result<WebGlUniformLocation> {
@@ -117,7 +104,7 @@ pub fn get_uniform_location(
 }
 
 pub fn set_uniform_mat4(
-    context: &WebGl2RenderingContext,
+    context: &WebGlRenderingContext,
     program: &WebGlProgram,
     name: &str,
     matrix: &Mat4,

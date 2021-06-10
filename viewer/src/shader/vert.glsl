@@ -1,18 +1,17 @@
-#version 300 es
-
 precision mediump float;
 
-in vec2 texture;
-in vec3 position;
+attribute float element;
+attribute vec2 texture;
+attribute vec3 vertex;
 
-out vec2 vert_texture;
-flat out int vert_vertex_id;
+varying float vert_element;
+varying vec2 vert_texture;
 
 uniform mat4 projection;
 uniform mat4 view;
 
 void main() {
+    vert_element = element;
     vert_texture = texture;
-    vert_vertex_id = gl_VertexID;
-    gl_Position = projection * view * vec4(position, 1.0);
+    gl_Position = projection * view * vec4(vertex, 1.0);
 }

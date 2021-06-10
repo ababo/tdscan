@@ -12,7 +12,6 @@ use crate::controller::Controller;
 use crate::defs::IntoJsResult;
 use crate::webgl_adapter::WebGlAdapter;
 use base::fm;
-use base::fm::Read as _;
 use base::model;
 
 // The async-syntax is avoided because of a known wasm-bindgen issue,
@@ -25,32 +24,6 @@ pub struct Viewer {
 
 #[wasm_bindgen]
 impl Viewer {
-    fn seconds_to_time(seconds: f64) -> model::Time {
-        (seconds * 1E9) as model::Time
-    }
-
-    #[wasm_bindgen(js_name = animateAll)]
-    pub fn animate_all(&self) -> Promise {
-        let controller = self.controller.clone();
-
-        future_to_promise(async move {
-            controller.animate_all().await.into_result()?;
-            Ok(JsValue::NULL)
-        })
-    }
-
-    #[wasm_bindgen(js_name = animateRange)]
-    pub fn animate_range(&self, from: f64, to: f64) -> Promise {
-        let from = Self::seconds_to_time(from);
-        let to = Self::seconds_to_time(to);
-        let controller = self.controller.clone();
-
-        future_to_promise(async move {
-            controller.animate_range(from, to).await.into_result()?;
-            Ok(JsValue::NULL)
-        })
-    }
-
     pub fn create(canvas: HtmlCanvasElement) -> StdResult<Viewer, JsValue> {
         #[cfg(feature = "console_error_panic_hook")]
         console_error_panic_hook::set_once();
@@ -66,31 +39,50 @@ impl Viewer {
 
     #[wasm_bindgen(js_name = loadFmBuffer)]
     pub fn load_fm_buffer(&self, buffer: ArrayBuffer) -> Promise {
-        let buffer = js_sys::Uint8Array::new(&buffer).to_vec();
-
         let controller = self.controller.clone();
-        controller.clear();
+        let buffer = Cursor::new(js_sys::Uint8Array::new(&buffer).to_vec());
 
         future_to_promise(async move {
-            let mut reader =
-                fm::Reader::new(Cursor::new(buffer)).into_result()?;
-
-            loop {
-                match reader.read_record().into_result()? {
-                    Some(rec) => {
-                        controller.add_record(rec).await.into_result()?
-                    }
-                    None => break,
-                }
-            }
-
+            let mut reader = fm::Reader::new(buffer).into_result()?;
+            controller.load(&mut reader).await.into_result()?;
             Ok(JsValue::NULL)
         })
     }
 
-    #[wasm_bindgen(js_name = showScene)]
-    pub fn show_scene(&self, time: f64) -> StdResult<(), JsValue> {
-        let time = Self::seconds_to_time(time);
-        self.controller.show_scene(time).into_result()
+    #[wasm_bindgen(js_name = renderAll)]
+    pub fn render_all(&self) -> Promise {
+        let controller = self.controller.clone();
+
+        future_to_promise(async move {
+            controller.render_all().await.into_result()?;
+            Ok(JsValue::NULL)
+        })
+    }
+
+    #[wasm_bindgen(js_name = renderMoment)]
+    pub fn render_moment(&self, at: f64) -> StdResult<(), JsValue> {
+        let at = Self::seconds_to_time(at);
+        self.controller.render_moment(at).into_result()
+    }
+
+    #[wasm_bindgen(js_name = renderPeriod)]
+    pub fn render_period(&self, from: f64, to: f64) -> Promise {
+        let controller = self.controller.clone();
+        let from = Self::seconds_to_time(from);
+        let to = Self::seconds_to_time(to);
+
+        future_to_promise(async move {
+            controller.render_period(from, to).await.into_result()?;
+            Ok(JsValue::NULL)
+        })
+    }
+
+    #[wasm_bindgen(js_name = resetEyePosition)]
+    pub fn reset_eye_position(&self) -> StdResult<(), JsValue> {
+        self.controller.reset_eye_position().into_result()
+    }
+
+    fn seconds_to_time(seconds: f64) -> model::Time {
+        (seconds * 1E9) as model::Time
     }
 }

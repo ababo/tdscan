@@ -40,7 +40,7 @@ features = [
   'Url',
   'WebGlBuffer',
   'WebGlProgram',
-  'WebGl2RenderingContext',
+  'WebGlRenderingContext',
   'WebGlShader',
   'WebGlTexture',
   'WebGlUniformLocation',

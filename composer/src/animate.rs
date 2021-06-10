@@ -305,14 +305,14 @@ mod tests {
         let script = r#"
             function update_view_state(time)
                 view_state.time = time
-                for i, v in pairs(view_state.vertices) do
+                for i, v in ipairs(view_state.vertices) do
                     view_state.vertices[i] = {
                         x = v.x + 0.01,
                         y = v.y + 0.02,
                         z = v.z + 0.03,
                     }
                 end
-                for i, v in pairs(view_state.normals) do
+                for i, v in ipairs(view_state.normals) do
                     view_state.normals[i] = {
                         x = v.x + 0.04,
                         y = v.y + 0.05,

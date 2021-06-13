@@ -96,7 +96,7 @@ struct ElementData {
     vertices: Vec<(u16, u16)>,
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 struct ElementState {
     vertices: Vec<model::Point3>,
     normals: Vec<model::Point3>,
@@ -111,18 +111,138 @@ struct ControllerData {
 }
 
 impl ControllerData {
-    fn no_states(&self) -> bool {
+    fn interpolate_linear(
+        at: model::Time,
+        a: (&model::Time, &ElementState),
+        b: (&model::Time, &ElementState),
+    ) -> ElementState {
+        #[inline]
+        fn interpolate(at: f32, a: (f32, f32), b: (f32, f32)) -> f32 {
+            (b.1 - a.1) / (b.0 - a.0) * (at - b.0) + b.1
+        }
+
+        fn interpolate_points(
+            at: f32,
+            a: (f32, &Vec<model::Point3>),
+            b: (f32, &Vec<model::Point3>),
+        ) -> Vec<model::Point3> {
+            a.1.iter()
+                .zip(b.1)
+                .map(|(a1, b1)| model::Point3 {
+                    x: interpolate(at, (a.0, a1.x), (b.0, b1.x)),
+                    y: interpolate(at, (a.0, a1.y), (b.0, b1.y)),
+                    z: interpolate(at, (a.0, a1.z), (b.0, b1.z)),
+                })
+                .collect()
+        }
+
+        let (atf, a0, b0) = (at as f32, *a.0 as f32, *b.0 as f32);
+
+        ElementState {
+            vertices: interpolate_points(
+                atf,
+                (a0, &a.1.vertices),
+                (b0, &b.1.vertices),
+            ),
+            normals: interpolate_points(
+                atf,
+                (a0, &a.1.normals),
+                (b0, &b.1.normals),
+            ),
+        }
+    }
+
+    fn interpolate_quadratic(
+        at: model::Time,
+        a: (&model::Time, &ElementState),
+        b: (&model::Time, &ElementState),
+        c: (&model::Time, &ElementState),
+    ) -> ElementState {
+        #[inline]
+        fn interpolate(
+            at: f32,
+            a: (f32, f32),
+            b: (f32, f32),
+            c: (f32, f32),
+        ) -> f32 {
+            ((at - c.0)
+                * ((at - b.0) * (b.0 - c.0) * a.1
+                    + (at - a.0) * (-a.0 + c.0) * b.1)
+                + (at - a.0) * (at - b.0) * (a.0 - b.0) * c.1)
+                / ((a.0 - b.0) * (a.0 - c.0) * (b.0 - c.0))
+        }
+
+        fn interpolate_points(
+            at: f32,
+            a: (f32, &Vec<model::Point3>),
+            b: (f32, &Vec<model::Point3>),
+            c: (f32, &Vec<model::Point3>),
+        ) -> Vec<model::Point3> {
+            a.1.iter()
+                .zip(b.1)
+                .zip(c.1)
+                .map(|((a1, b1), c1)| model::Point3 {
+                    x: interpolate(at, (a.0, a1.x), (b.0, b1.x), (c.0, c1.x)),
+                    y: interpolate(at, (a.0, a1.y), (b.0, b1.y), (c.0, c1.y)),
+                    z: interpolate(at, (a.0, a1.z), (b.0, b1.z), (c.0, c1.z)),
+                })
+                .collect()
+        }
+
+        let (atf, a0, b0, c0) =
+            (at as f32, *a.0 as f32, *b.0 as f32, *c.0 as f32);
+
+        ElementState {
+            vertices: interpolate_points(
+                atf,
+                (a0, &a.1.vertices),
+                (b0, &b.1.vertices),
+                (c0, &c.1.vertices),
+            ),
+            normals: interpolate_points(
+                atf,
+                (a0, &a.1.normals),
+                (b0, &b.1.normals),
+                (c0, &c.1.normals),
+            ),
+        }
+    }
+
+    pub fn no_states(&self) -> bool {
         self.states.iter().map(|s| s.len()).max().unwrap_or(0) == 0
     }
 
-    fn states_at<'a>(
-        &'a self,
+    fn state_at(
+        states: &BTreeMap<model::Time, ElementState>,
         at: model::Time,
-    ) -> Vec<Option<&'a ElementState>> {
+    ) -> Option<ElementState> {
+        if let Some(state) = states.get(&at) {
+            return Some(state.clone());
+        }
+
+        let mut prange = states.range((Unbounded, Excluded(at)));
+        let prev = prange.next_back()?;
+
+        let mut nrange = states.range((Excluded(at), Unbounded));
+        let next = if let Some(next) = nrange.next() {
+            next
+        } else {
+            return Some(prev.1.clone());
+        };
+
+        Some(if let Some(nnext) = nrange.next() {
+            ControllerData::interpolate_quadratic(at, prev, next, nnext)
+        } else if let Some(pprev) = prange.next_back() {
+            ControllerData::interpolate_quadratic(at, pprev, prev, next)
+        } else {
+            ControllerData::interpolate_linear(at, prev, next)
+        })
+    }
+
+    pub fn states_at(&self, at: model::Time) -> Vec<Option<ElementState>> {
         let mut states = Vec::with_capacity(self.elements.len());
         for element_states in &self.states {
-            let range = element_states.range((Unbounded, Included(at)));
-            states.push(range.rev().next().map(|(_, s)| s))
+            states.push(Self::state_at(element_states, at));
         }
         states
     }
@@ -549,7 +669,7 @@ impl<A: Adapter + 'static> Controller<A> {
         let states = data.states_at(at);
 
         for (_, element) in &data.elements {
-            let element_state = states[element.index];
+            let element_state = &states[element.index];
             for (i, (vn, nn)) in element.vertices.iter().enumerate() {
                 let j = element.vertex_base as usize + i;
                 match element_state {
@@ -576,6 +696,7 @@ mod tests {
     use async_attributes::test;
 
     use super::*;
+    use base::assert_eq_point3;
     use base::util::test::{
         create_reader_with_records, new_element_view_rec,
         new_element_view_state_rec, new_ev_face, new_point2, new_point3,
@@ -1117,6 +1238,106 @@ mod tests {
             let mut data = controller.adapter.data.borrow_mut();
             data.destroy_mock.args.pop().unwrap();
         }
+    }
+
+    #[test]
+    async fn test_interpolate() {
+        let controller = create_controller();
+        let view_a = new_simple_view("a");
+        let view_b = new_simple_view("b");
+        let view_c = new_simple_view("c");
+
+        let state_a1 = new_element_view_state_rec(model::ElementViewState {
+            element: format!("a"),
+            time: 0,
+            vertices: vec![new_point3(3.0, 6.0, 12.0)],
+            normals: vec![new_point3(6.0, 12.0, 24.0)],
+        });
+
+        let state_b1 = new_element_view_state_rec(model::ElementViewState {
+            element: format!("b"),
+            time: 0,
+            vertices: vec![new_point3(1.0, 2.0, 4.0)],
+            normals: vec![new_point3(2.0, 4.0, 8.0)],
+        });
+
+        let state_a2 = new_element_view_state_rec(model::ElementViewState {
+            element: format!("a"),
+            time: 10,
+            vertices: vec![new_point3(6.0, 12.0, 24.0)],
+            normals: vec![new_point3(12.0, 24.0, 48.0)],
+        });
+
+        let state_b2 = new_element_view_state_rec(model::ElementViewState {
+            element: format!("b"),
+            time: 10,
+            vertices: vec![new_point3(2.0, 4.0, 8.0)],
+            normals: vec![new_point3(4.0, 8.0, 16.0)],
+        });
+
+        let state_a3 = new_element_view_state_rec(model::ElementViewState {
+            element: format!("a"),
+            time: 20,
+            vertices: vec![new_point3(11.0, 22.0, 44.0)],
+            normals: vec![new_point3(22.0, 44.0, 88.0)],
+        });
+
+        let mut reader = create_reader_with_records(&vec![
+            view_a, view_b, view_c, state_a1, state_b1, state_a2, state_b2,
+            state_a3,
+        ]);
+
+        {
+            let mut data = controller.adapter.data.borrow_mut();
+            data.set_texture_mock.rets.push(Ok(()));
+            data.set_texture_mock.rets.push(Ok(()));
+            data.set_texture_mock.rets.push(Ok(()));
+            data.set_faces_mock.rets.push(Ok(()));
+            data.set_vertices_mock.rets.push(Ok(()));
+            data.render_moment_mock.rets.push(Ok(()));
+        }
+
+        controller.load(&mut reader).await.unwrap();
+        controller.render_moment(5).unwrap();
+
+        let vertices;
+        {
+            let mut data = controller.adapter.data.borrow_mut();
+            data.set_texture_mock.args.pop().unwrap();
+            data.set_texture_mock.args.pop().unwrap();
+            data.set_texture_mock.args.pop().unwrap();
+            data.set_faces_mock.args.pop().unwrap();
+            vertices = data.set_vertices_mock.args.pop().unwrap();
+            data.render_moment_mock.args.pop().unwrap();
+
+            data.set_vertices_mock.rets.push(Ok(()));
+            data.render_moment_mock.rets.push(Ok(()));
+        }
+
+        controller.render_moment(15).unwrap();
+
+        assert_eq!(vertices.len(), 3);
+        assert_eq_point3!(vertices[0].vertex, new_point3(4.25, 8.5, 17.0));
+        assert_eq_point3!(vertices[0].normal, new_point3(8.5, 17.0, 34.0));
+        assert_eq_point3!(vertices[1].vertex, new_point3(1.5, 3.0, 6.0));
+        assert_eq_point3!(vertices[1].normal, new_point3(3.0, 6.0, 12.0));
+        assert_eq_point3!(vertices[2].vertex, new_point3(0.0, 0.0, 0.0));
+        assert_eq_point3!(vertices[2].normal, new_point3(0.0, 0.0, 0.0));
+
+        let vertices;
+        {
+            let mut data = controller.adapter.data.borrow_mut();
+            vertices = data.set_vertices_mock.args.pop().unwrap();
+            data.render_moment_mock.args.pop().unwrap();
+        }
+
+        assert_eq!(vertices.len(), 3);
+        assert_eq_point3!(vertices[0].vertex, new_point3(8.25, 16.5, 33.0));
+        assert_eq_point3!(vertices[0].normal, new_point3(16.5, 33.0, 66.0));
+        assert_eq_point3!(vertices[1].vertex, new_point3(2.0, 4.0, 8.0));
+        assert_eq_point3!(vertices[1].normal, new_point3(4.0, 8.0, 16.0));
+        assert_eq_point3!(vertices[2].vertex, new_point3(0.0, 0.0, 0.0));
+        assert_eq_point3!(vertices[2].normal, new_point3(0.0, 0.0, 0.0));
     }
 
     #[test]

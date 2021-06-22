@@ -15,9 +15,9 @@ use base::fm;
 use base::model;
 
 const DEFAULT_EYE_POSITION: model::Point3 = model::Point3 {
-    x: 100.0,
-    y: 100.0,
-    z: 100.0,
+    x: 1.0,
+    y: 1.0,
+    z: 1.0,
 };
 
 const MOUSE_MOVE_ANGLE_FACTOR: f32 = 0.01;

@@ -475,7 +475,6 @@ impl<A: Adapter + 'static> Controller<A> {
         for VertexDesc(vn, tn, nn) in vertex_descs {
             check_not_zero(vn, "zero vertex number")?;
             check_not_zero(tn, "zero texture point number")?;
-            check_not_zero(nn, "zero normal number")?;
 
             let tn = tn as usize;
             if tn > view.texture_points.len() {
@@ -676,8 +675,12 @@ impl<A: Adapter + 'static> Controller<A> {
                     Some(s) => {
                         let k = vn.clone() as usize - 1;
                         vertices[j].vertex = s.vertices[k].clone();
-                        let k = nn.clone() as usize - 1;
-                        vertices[j].normal = s.normals[k].clone();
+                        vertices[j].normal = if *nn != 0 {
+                            let k = nn.clone() as usize - 1;
+                            s.normals[k].clone()
+                        } else {
+                            model::Point3::default()
+                        };
                     }
                     None => {
                         vertices[j].vertex = model::Point3::default();
@@ -1150,30 +1153,6 @@ mod tests {
             assert_eq!(image.r#type, png);
             assert_eq!(image.data, vec![1, 2, 3]);
         }
-
-        controller.adapter.finish();
-    }
-
-    #[test]
-    async fn test_add_view_zero_normal_number() {
-        let controller = create_controller();
-
-        let view = new_element_view_rec(model::ElementView {
-            element: format!("a"),
-            texture: Some(model::Image::default()),
-            texture_points: vec![new_point2(0.0, 0.0)],
-            faces: vec![new_ev_face(1, 1, 1, 1, 1, 1, 1, 0, 1)],
-            ..Default::default()
-        });
-
-        let mut reader = create_reader_with_records(&vec![view]);
-
-        assert_eq!(
-            controller.load(&mut reader).await,
-            inconsistent_state_result(
-                "zero normal number in view face for element 'a'"
-            ),
-        );
 
         controller.adapter.finish();
     }

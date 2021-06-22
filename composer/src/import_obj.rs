@@ -153,7 +153,7 @@ fn import_f(data: &mut ImportData, parts: &Vec<&str>) -> Result<()> {
         let mut iter = part.split("/");
         let vertex = parse_f_component(data.line, &mut iter, i + 1, false)?;
         let texture = parse_f_component(data.line, &mut iter, i + 1, true)?;
-        let normal = parse_f_component(data.line, &mut iter, i + 1, false)?;
+        let normal = parse_f_component(data.line, &mut iter, i + 1, true)?;
         if iter.next().is_some() {
             // Too many components, so emit the same error.
             parse_f_component(data.line, &mut iter, i + 1, false)?;
@@ -192,10 +192,10 @@ fn parse_f_component(
     line: usize,
     iter: &mut std::str::Split<&str>,
     vnum: usize,
-    tex: bool,
+    relax: bool,
 ) -> Result<u32> {
     let component: &str = iter.next().unwrap_or_default();
-    if component.is_empty() && tex {
+    if component.is_empty() && relax {
         return Ok(0);
     }
 

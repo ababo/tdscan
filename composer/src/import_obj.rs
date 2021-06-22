@@ -239,7 +239,10 @@ fn import_mtllib<F: Fn(&Path) -> Result<Vec<u8>>>(
             if !parts.is_empty() {
                 match parts[0] {
                     "map_Ka" => {
-                        import_mtl_map_ka(&read_file, mtl_dir, data, &parts)?
+                        import_mtl_map_kad(&read_file, mtl_dir, data, &parts)?
+                    }
+                    "map_Kd" => {
+                        import_mtl_map_kad(&read_file, mtl_dir, data, &parts)?
                     }
                     "newmtl" => import_mtl_newmtl(data, &parts)?,
                     _ => (),
@@ -268,15 +271,17 @@ fn import_usemtl(data: &mut ImportData, parts: &Vec<&str>) -> Result<()> {
     Ok(())
 }
 
-fn import_mtl_map_ka<F: Fn(&Path) -> Result<Vec<u8>>>(
+fn import_mtl_map_kad<F: Fn(&Path) -> Result<Vec<u8>>>(
     read_file: &F,
     mtl_dir: &Path,
     data: &mut ImportData,
     parts: &Vec<&str>,
 ) -> Result<()> {
     if parts.len() != 2 {
-        let desc =
-            format!("malformed map_Ka-statement at line {}", data.mtl_line);
+        let desc = format!(
+            "malformed map_Ka or map_Kd statement at line {}",
+            data.mtl_line
+        );
         return Err(Error::new(MalformedData, desc));
     }
 
@@ -296,7 +301,7 @@ fn import_mtl_map_ka<F: Fn(&Path) -> Result<Vec<u8>>>(
             let desc = format!(
                 concat!(
                     "missing or unsupported file extension ",
-                    "in map_Ka-statement at line {}"
+                    "in map_Ka or map_Kd statement at line {}"
                 ),
                 data.line
             );
@@ -531,7 +536,7 @@ mod tests {
         assert_eq!(err.kind, MalformedData);
         assert_eq!(
             err.description.as_str(),
-            "malformed map_Ka-statement at line 1"
+            "malformed map_Ka or map_Kd statement at line 1"
         );
     }
 
@@ -544,7 +549,7 @@ mod tests {
             err.description.as_str(),
             concat!(
                 "missing or unsupported file extension ",
-                "in map_Ka-statement at line 1"
+                "in map_Ka or map_Kd statement at line 1"
             )
         );
     }

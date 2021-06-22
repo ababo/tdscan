@@ -1,8 +1,8 @@
-use js_sys::{Array, Uint8Array};
+use js_sys::{Array, Promise, Uint8Array};
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
-use web_sys::{Blob, Event, EventTarget, HtmlImageElement, Url};
+use web_sys::{window, Blob, Event, EventTarget, HtmlImageElement, Url};
 
 use crate::defs::IntoResult;
 use base::defs::{Error, ErrorKind::*, Result};
@@ -26,6 +26,13 @@ pub async fn decode_image(image: &model::Image) -> Result<HtmlImageElement> {
     res?;
 
     Ok(img)
+}
+
+pub async fn next_frame() -> f64 {
+    let promise = Promise::new(&mut |resolve, _| {
+        window().unwrap().request_animation_frame(&resolve).unwrap();
+    });
+    JsFuture::from(promise).await.unwrap().as_f64().unwrap()
 }
 
 pub struct Subscription(

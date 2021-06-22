@@ -59,7 +59,7 @@ pub trait Adapter {
 
     fn set_faces(self: &Rc<Self>, faces: &[Face]) -> Result<()>;
 
-    fn set_now(self: &Rc<Self>, now: model::Time);
+    async fn set_now(self: &Rc<Self>, now: model::Time);
 
     async fn set_texture(
         self: &Rc<Self>,
@@ -586,7 +586,7 @@ impl<A: Adapter + 'static> Controller<A> {
         from: model::Time,
         to: model::Time,
     ) -> Result<()> {
-        self.adapter.set_now(from);
+        self.adapter.set_now(from).await;
 
         self.set_vertices(from)?;
         self.adapter.render_frame()?;
@@ -775,7 +775,7 @@ mod tests {
             self.data.borrow_mut().set_faces_mock.call(faces.to_vec())
         }
 
-        fn set_now(self: &Rc<Self>, now: model::Time) {
+        async fn set_now(self: &Rc<Self>, now: model::Time) {
             self.data.borrow_mut().set_now_mock.call(now)
         }
 

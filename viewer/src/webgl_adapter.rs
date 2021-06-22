@@ -6,11 +6,10 @@ use std::slice::from_raw_parts;
 
 use async_trait::async_trait;
 use glam::{Mat4, Vec3};
-use js_sys::{Promise, Uint16Array, Uint8Array};
+use js_sys::{Uint16Array, Uint8Array};
 use memoffset::offset_of;
 use wasm_bindgen::JsCast;
-use wasm_bindgen_futures::JsFuture;
-use web_sys::{window, HtmlCanvasElement, WebGlProgram, WebGlRenderingContext};
+use web_sys::{HtmlCanvasElement, WebGlProgram, WebGlRenderingContext};
 
 use crate::controller::{Adapter, Face, MouseEvent, VertexData};
 use crate::defs::IntoResult;
@@ -104,7 +103,6 @@ impl WebGlAdapter {
         });
 
         adapter.set_projection()?;
-        adapter.set_now(0);
 
         Ok(adapter)
     }
@@ -144,10 +142,7 @@ impl Adapter for WebGlAdapter {
     fn destroy(self: &Rc<Self>) {}
 
     async fn next_frame(self: &Rc<Self>) -> model::Time {
-        let promise = Promise::new(&mut |resolve, _| {
-            window().unwrap().request_animation_frame(&resolve).unwrap();
-        });
-        let now = JsFuture::from(promise).await.unwrap().as_f64().unwrap();
+        let now = web::next_frame().await;
         milliseconds_to_time(now) + self.now_offset.get()
     }
 
@@ -192,8 +187,11 @@ impl Adapter for WebGlAdapter {
         Ok(())
     }
 
-    fn set_now(self: &Rc<Self>, now: model::Time) {
-        let jsnow = window().unwrap().performance().unwrap().now();
+    async fn set_now(self: &Rc<Self>, now: model::Time) {
+        // Cannot use performance.now() here because of inconsistency
+        // with requestAnimationFrame() timestamps on Chrome, see
+        // https://stackoverflow.com/a/46121920/2772588.
+        let jsnow = web::next_frame().await;
         self.now_offset.set(now - milliseconds_to_time(jsnow));
     }
 

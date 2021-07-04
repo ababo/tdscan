@@ -264,20 +264,36 @@ impl Ord for Item {
             }
         }
 
+        use model::record::Type;
+
+        fn type_prio(r#type: &Type) -> i8 {
+            match r#type {
+                Type::ElementView(_) => 0,
+                Type::ElementViewState(_) => 1,
+                Type::Scan(_) => 0,
+                Type::ScanFrame(_) => 1,
+            }
+        }
+
+        fn type_time(r#type: &Type) -> model::Time {
+            match r#type {
+                Type::ElementViewState(model::ElementViewState {
+                    time,
+                    ..
+                })
+                | Type::ScanFrame(model::ScanFrame { time, .. }) => *time,
+                _ => 0,
+            }
+        }
+
         fn cmp_items(a: &Item, b: &Item) -> StdResult<(), Ordering> {
             let (this, that) = cmp_options(&a.0, &b.0)?;
             let (this, that) = cmp_options(&this.r#type, &that.r#type)?;
-
-            use model::record::Type;
-            Err(match this {
-                Type::ElementView(_) => match that {
-                    Type::ElementViewState(_) => Less,
-                    _ => Equal,
-                },
-                Type::ElementViewState(this) => match that {
-                    Type::ElementView(_) => Greater,
-                    Type::ElementViewState(that) => this.time.cmp(&that.time),
-                },
+            let ordering = type_prio(this).cmp(&type_prio(that));
+            Err(if ordering == Equal {
+                type_time(this).cmp(&type_time(that))
+            } else {
+                ordering
             })
         }
 

@@ -50,9 +50,25 @@ message ElementViewState {
   repeated Point3 normals = 4;
 }
 
+message Scan {
+  string name = 1;
+  float angular_velocity = 2;
+  Point3 eye_position = 3;
+  float view_elevation = 4;
+}
+
+message ScanFrame {
+  string scan = 1;
+  int64 time = 2;
+  Image frame = 3;
+  repeated float depths = 4;
+}
+
 message Record {
   oneof type {
     ElementView element_view = 1;
     ElementViewState element_view_state = 2;
+    Scan scan = 3;
+    ScanFrame scan_frame = 4;
   }
 }

@@ -12,7 +12,6 @@ use crate::controller::Controller;
 use crate::defs::IntoJsResult;
 use crate::webgl_adapter::WebGlAdapter;
 use base::fm;
-use base::model;
 
 // The async-syntax is avoided because of a known wasm-bindgen issue,
 // see https://github.com/rustwasm/wasm-bindgen/issues/2195.
@@ -82,7 +81,7 @@ impl Viewer {
         self.controller.reset_eye_position().into_result()
     }
 
-    fn seconds_to_time(seconds: f64) -> model::Time {
-        (seconds * 1E9) as model::Time
+    fn seconds_to_time(seconds: f64) -> fm::Time {
+        (seconds * 1E9) as fm::Time
     }
 }

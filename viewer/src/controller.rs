@@ -12,9 +12,8 @@ use glam::{EulerRot, Quat, Vec3};
 use crate::util::sync::LevelLock;
 use base::defs::{Error, ErrorKind::*, Result};
 use base::fm;
-use base::model;
 
-const DEFAULT_EYE_POSITION: model::Point3 = model::Point3 {
+const DEFAULT_EYE_POSITION: fm::Point3 = fm::Point3 {
     x: 1.0,
     y: 1.0,
     z: 1.0,
@@ -27,9 +26,9 @@ const MOUSE_WHEEL_SCALE_FACTOR: f32 = -0.001;
 #[repr(C)]
 pub struct VertexData {
     pub element: u8,
-    pub normal: model::Point3,
-    pub texture: model::Point2,
-    pub vertex: model::Point3,
+    pub normal: fm::Point3,
+    pub texture: fm::Point2,
+    pub vertex: fm::Point3,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -53,23 +52,23 @@ pub trait Adapter {
 
     fn destroy(self: &Rc<Self>);
 
-    async fn next_frame(self: &Rc<Self>) -> model::Time;
+    async fn next_frame(self: &Rc<Self>) -> fm::Time;
 
     fn render_frame(self: &Rc<Self>) -> Result<()>;
 
     fn set_faces(self: &Rc<Self>, faces: &[Face]) -> Result<()>;
 
-    async fn set_now(self: &Rc<Self>, now: model::Time);
+    async fn set_now(self: &Rc<Self>, now: fm::Time);
 
     async fn set_texture(
         self: &Rc<Self>,
         index: usize,
-        image: model::Image,
+        image: fm::Image,
     ) -> Result<()>;
 
     fn set_vertices(self: &Rc<Self>, vertices: &[VertexData]) -> Result<()>;
 
-    fn set_eye_position(self: &Rc<Self>, eye: &model::Point3) -> Result<()>;
+    fn set_eye_position(self: &Rc<Self>, eye: &fm::Point3) -> Result<()>;
 
     fn subscribe_to_mouse_move<F: Fn(&MouseEvent) + 'static>(
         self: &Rc<Self>,
@@ -98,23 +97,23 @@ struct ElementData {
 
 #[derive(Clone, Default)]
 struct ElementState {
-    vertices: Vec<model::Point3>,
-    normals: Vec<model::Point3>,
+    vertices: Vec<fm::Point3>,
+    normals: Vec<fm::Point3>,
 }
 
 #[derive(Default)]
 struct ControllerData {
     elements: HashMap<String, ElementData>,
-    eye_pos: model::Point3,
+    eye_pos: fm::Point3,
     faces: Vec<Face>,
-    states: Vec<BTreeMap<model::Time, ElementState>>,
+    states: Vec<BTreeMap<fm::Time, ElementState>>,
 }
 
 impl ControllerData {
     fn interpolate_linear(
-        at: model::Time,
-        a: (&model::Time, &ElementState),
-        b: (&model::Time, &ElementState),
+        at: fm::Time,
+        a: (&fm::Time, &ElementState),
+        b: (&fm::Time, &ElementState),
     ) -> ElementState {
         #[inline]
         fn interpolate(at: f32, a: (f32, f32), b: (f32, f32)) -> f32 {
@@ -123,12 +122,12 @@ impl ControllerData {
 
         fn interpolate_points(
             at: f32,
-            a: (f32, &Vec<model::Point3>),
-            b: (f32, &Vec<model::Point3>),
-        ) -> Vec<model::Point3> {
+            a: (f32, &Vec<fm::Point3>),
+            b: (f32, &Vec<fm::Point3>),
+        ) -> Vec<fm::Point3> {
             a.1.iter()
                 .zip(b.1)
-                .map(|(a1, b1)| model::Point3 {
+                .map(|(a1, b1)| fm::Point3 {
                     x: interpolate(at, (a.0, a1.x), (b.0, b1.x)),
                     y: interpolate(at, (a.0, a1.y), (b.0, b1.y)),
                     z: interpolate(at, (a.0, a1.z), (b.0, b1.z)),
@@ -153,10 +152,10 @@ impl ControllerData {
     }
 
     fn interpolate_quadratic(
-        at: model::Time,
-        a: (&model::Time, &ElementState),
-        b: (&model::Time, &ElementState),
-        c: (&model::Time, &ElementState),
+        at: fm::Time,
+        a: (&fm::Time, &ElementState),
+        b: (&fm::Time, &ElementState),
+        c: (&fm::Time, &ElementState),
     ) -> ElementState {
         #[inline]
         fn interpolate(
@@ -174,14 +173,14 @@ impl ControllerData {
 
         fn interpolate_points(
             at: f32,
-            a: (f32, &Vec<model::Point3>),
-            b: (f32, &Vec<model::Point3>),
-            c: (f32, &Vec<model::Point3>),
-        ) -> Vec<model::Point3> {
+            a: (f32, &Vec<fm::Point3>),
+            b: (f32, &Vec<fm::Point3>),
+            c: (f32, &Vec<fm::Point3>),
+        ) -> Vec<fm::Point3> {
             a.1.iter()
                 .zip(b.1)
                 .zip(c.1)
-                .map(|((a1, b1), c1)| model::Point3 {
+                .map(|((a1, b1), c1)| fm::Point3 {
                     x: interpolate(at, (a.0, a1.x), (b.0, b1.x), (c.0, c1.x)),
                     y: interpolate(at, (a.0, a1.y), (b.0, b1.y), (c.0, c1.y)),
                     z: interpolate(at, (a.0, a1.z), (b.0, b1.z), (c.0, c1.z)),
@@ -213,8 +212,8 @@ impl ControllerData {
     }
 
     fn state_at(
-        states: &BTreeMap<model::Time, ElementState>,
-        at: model::Time,
+        states: &BTreeMap<fm::Time, ElementState>,
+        at: fm::Time,
     ) -> Option<ElementState> {
         if let Some(state) = states.get(&at) {
             return Some(state.clone());
@@ -239,7 +238,7 @@ impl ControllerData {
         })
     }
 
-    pub fn states_at(&self, at: model::Time) -> Vec<Option<ElementState>> {
+    pub fn states_at(&self, at: fm::Time) -> Vec<Option<ElementState>> {
         let mut states = Vec::with_capacity(self.elements.len());
         for element_states in &self.states {
             states.push(Self::state_at(element_states, at));
@@ -379,7 +378,7 @@ impl<A: Adapter + 'static> Controller<A> {
                 break;
             }
 
-            use model::record::Type::*;
+            use fm::record::Type::*;
             match rec.unwrap().r#type {
                 Some(ElementView(v)) => self.load_element_view(v).await?,
                 Some(ElementViewState(s)) => self.load_element_view_state(s)?,
@@ -392,7 +391,7 @@ impl<A: Adapter + 'static> Controller<A> {
 
     async fn load_element_view(
         self: &Rc<Self>,
-        view: model::ElementView,
+        view: fm::ElementView,
     ) -> Result<()> {
         let mut data = self.data.borrow_mut();
         let mut all_vertices = self.vertices.borrow_mut();
@@ -506,7 +505,7 @@ impl<A: Adapter + 'static> Controller<A> {
 
     fn load_element_view_state(
         self: &Rc<Self>,
-        view_state: model::ElementViewState,
+        view_state: fm::ElementViewState,
     ) -> Result<()> {
         let mut data = self.data.borrow_mut();
 
@@ -582,8 +581,8 @@ impl<A: Adapter + 'static> Controller<A> {
 
     async fn render(
         self: &Rc<Self>,
-        from: model::Time,
-        to: model::Time,
+        from: fm::Time,
+        to: fm::Time,
     ) -> Result<()> {
         self.adapter.set_now(from).await;
 
@@ -616,14 +615,14 @@ impl<A: Adapter + 'static> Controller<A> {
             from = *data
                 .states
                 .iter()
-                .map(|s| s.keys().next().unwrap_or(&model::Time::MAX))
+                .map(|s| s.keys().next().unwrap_or(&fm::Time::MAX))
                 .min()
                 .unwrap();
 
             to = *data
                 .states
                 .iter()
-                .map(|s| s.keys().next_back().unwrap_or(&model::Time::MIN))
+                .map(|s| s.keys().next_back().unwrap_or(&fm::Time::MIN))
                 .max()
                 .unwrap();
         }
@@ -631,7 +630,7 @@ impl<A: Adapter + 'static> Controller<A> {
         self.render(from, to).await
     }
 
-    pub fn render_moment(self: &Rc<Self>, at: model::Time) -> Result<()> {
+    pub fn render_moment(self: &Rc<Self>, at: fm::Time) -> Result<()> {
         let _guard = self.state.try_lock(ControllerState::HandlingOp).unwrap();
         self.set_vertices(at)?;
         self.adapter.render_frame()
@@ -639,8 +638,8 @@ impl<A: Adapter + 'static> Controller<A> {
 
     pub async fn render_period(
         self: &Rc<Self>,
-        from: model::Time,
-        to: model::Time,
+        from: fm::Time,
+        to: fm::Time,
     ) -> Result<()> {
         let _guard = self.state.try_lock(ControllerState::HandlingOp).unwrap();
         self.render(from, to).await
@@ -661,7 +660,7 @@ impl<A: Adapter + 'static> Controller<A> {
         self.adapter.render_frame()
     }
 
-    fn set_vertices(self: &Rc<Self>, at: model::Time) -> Result<()> {
+    fn set_vertices(self: &Rc<Self>, at: fm::Time) -> Result<()> {
         let data = self.data.borrow();
         let mut vertices = self.vertices.borrow_mut();
 
@@ -679,12 +678,12 @@ impl<A: Adapter + 'static> Controller<A> {
                             let k = nn.clone() as usize - 1;
                             s.normals[k].clone()
                         } else {
-                            model::Point3::default()
+                            fm::Point3::default()
                         };
                     }
                     None => {
-                        vertices[j].vertex = model::Point3::default();
-                        vertices[j].normal = model::Point3::default();
+                        vertices[j].vertex = fm::Point3::default();
+                        vertices[j].normal = fm::Point3::default();
                     }
                 }
             }
@@ -708,12 +707,12 @@ mod tests {
 
     struct TestAdapterData {
         destroy_mock: MethodMock<(), Result<()>>,
-        next_frame_mock: MethodMock<(), model::Time>,
+        next_frame_mock: MethodMock<(), fm::Time>,
         render_moment_mock: MethodMock<(), Result<()>>,
-        set_eye_position_mock: MethodMock<model::Point3, Result<()>>,
+        set_eye_position_mock: MethodMock<fm::Point3, Result<()>>,
         set_faces_mock: MethodMock<Vec<Face>, Result<()>>,
-        set_now_mock: MethodMock<model::Time, ()>,
-        set_texture_mock: MethodMock<(usize, model::Image), Result<()>>,
+        set_now_mock: MethodMock<fm::Time, ()>,
+        set_texture_mock: MethodMock<(usize, fm::Image), Result<()>>,
         set_vertices_mock: MethodMock<Vec<VertexData>, Result<()>>,
         subscribe_to_mouse_move_mock:
             MethodMock<Box<dyn Fn(&MouseEvent)>, Result<String>>,
@@ -766,7 +765,7 @@ mod tests {
             let _ = self.data.borrow_mut().destroy_mock.call(());
         }
 
-        async fn next_frame(self: &Rc<Self>) -> model::Time {
+        async fn next_frame(self: &Rc<Self>) -> fm::Time {
             self.data.borrow_mut().next_frame_mock.call(())
         }
 
@@ -778,14 +777,14 @@ mod tests {
             self.data.borrow_mut().set_faces_mock.call(faces.to_vec())
         }
 
-        async fn set_now(self: &Rc<Self>, now: model::Time) {
+        async fn set_now(self: &Rc<Self>, now: fm::Time) {
             self.data.borrow_mut().set_now_mock.call(now)
         }
 
         async fn set_texture(
             self: &Rc<Self>,
             index: usize,
-            image: model::Image,
+            image: fm::Image,
         ) -> Result<()> {
             self.data.borrow_mut().set_texture_mock.call((index, image))
         }
@@ -800,10 +799,7 @@ mod tests {
                 .call(vertices.to_vec())
         }
 
-        fn set_eye_position(
-            self: &Rc<Self>,
-            eye: &model::Point3,
-        ) -> Result<()> {
+        fn set_eye_position(self: &Rc<Self>, eye: &fm::Point3) -> Result<()> {
             self.data
                 .borrow_mut()
                 .set_eye_position_mock
@@ -852,10 +848,10 @@ mod tests {
         controller
     }
 
-    fn new_simple_view(element: &str) -> model::Record {
-        new_element_view_rec(model::ElementView {
+    fn new_simple_view(element: &str) -> fm::Record {
+        new_element_view_rec(fm::ElementView {
             element: format!("{}", element),
-            texture: Some(model::Image::default()),
+            texture: Some(fm::Image::default()),
             texture_points: vec![new_point2(0.0, 0.0)],
             faces: vec![new_ev_face(1, 1, 1, 1, 1, 1, 1, 1, 1)],
             ..Default::default()
@@ -883,7 +879,7 @@ mod tests {
         let controller = create_controller();
 
         let view = new_simple_view("a");
-        let state = new_element_view_state_rec(model::ElementViewState {
+        let state = new_element_view_state_rec(fm::ElementViewState {
             element: format!("a"),
             time: 0,
             vertices: vec![(new_point3(0.0, 0.0, 0.0))],
@@ -944,14 +940,14 @@ mod tests {
     #[test]
     async fn test_add_view_state_bad_num_of_vertices_normals() {
         async fn test(
-            vertices: Vec<model::Point3>,
-            normals: Vec<model::Point3>,
+            vertices: Vec<fm::Point3>,
+            normals: Vec<fm::Point3>,
             err_desc: &str,
         ) {
             let controller = create_controller();
 
             let view = new_simple_view("a");
-            let state = new_element_view_state_rec(model::ElementViewState {
+            let state = new_element_view_state_rec(fm::ElementViewState {
                 element: format!("a"),
                 time: 0,
                 vertices: vertices,
@@ -995,7 +991,7 @@ mod tests {
         let controller = create_controller();
 
         let view = new_simple_view("a");
-        let state = new_element_view_state_rec(model::ElementViewState {
+        let state = new_element_view_state_rec(fm::ElementViewState {
             element: format!("a"),
             time: 123,
             vertices: vec![new_point3(0.0, 0.0, 0.0)],
@@ -1031,7 +1027,7 @@ mod tests {
         let controller = create_controller();
 
         let view = new_simple_view("a");
-        let state = model::ElementViewState {
+        let state = fm::ElementViewState {
             element: format!("a"),
             time: 123,
             vertices: vec![new_point3(0.0, 0.0, 0.0)],
@@ -1071,7 +1067,7 @@ mod tests {
     async fn test_add_view_state_unknown_element() {
         let controller = create_controller();
 
-        let state = new_element_view_state_rec(model::ElementViewState {
+        let state = new_element_view_state_rec(fm::ElementViewState {
             element: format!("a"),
             time: 0,
             vertices: vec![(new_point3(0.0, 0.0, 0.0))],
@@ -1091,13 +1087,13 @@ mod tests {
     async fn test_add_view_valid() {
         let controller = create_controller();
 
-        let png = model::image::Type::Png as i32;
-        let image = model::Image {
+        let png = fm::image::Type::Png as i32;
+        let image = fm::Image {
             r#type: png,
             data: vec![1, 2, 3],
         };
 
-        let view = new_element_view_rec(model::ElementView {
+        let view = new_element_view_rec(fm::ElementView {
             element: format!("a"),
             texture: Some(image),
             texture_points: vec![
@@ -1161,9 +1157,9 @@ mod tests {
     async fn test_add_view_zero_texture_point_number() {
         let controller = create_controller();
 
-        let view = new_element_view_rec(model::ElementView {
+        let view = new_element_view_rec(fm::ElementView {
             element: format!("a"),
-            texture: Some(model::Image::default()),
+            texture: Some(fm::Image::default()),
             texture_points: vec![new_point2(0.0, 0.0)],
             faces: vec![new_ev_face(1, 1, 1, 0, 1, 1, 1, 1, 1)],
             ..Default::default()
@@ -1185,9 +1181,9 @@ mod tests {
     async fn test_add_view_zero_vertex_number() {
         let controller = create_controller();
 
-        let view = new_element_view_rec(model::ElementView {
+        let view = new_element_view_rec(fm::ElementView {
             element: format!("a"),
-            texture: Some(model::Image::default()),
+            texture: Some(fm::Image::default()),
             texture_points: vec![new_point2(0.0, 0.0)],
             faces: vec![new_ev_face(1, 1, 0, 1, 1, 1, 1, 1, 1)],
             ..Default::default()
@@ -1226,35 +1222,35 @@ mod tests {
         let view_b = new_simple_view("b");
         let view_c = new_simple_view("c");
 
-        let state_a1 = new_element_view_state_rec(model::ElementViewState {
+        let state_a1 = new_element_view_state_rec(fm::ElementViewState {
             element: format!("a"),
             time: 0,
             vertices: vec![new_point3(3.0, 6.0, 12.0)],
             normals: vec![new_point3(6.0, 12.0, 24.0)],
         });
 
-        let state_b1 = new_element_view_state_rec(model::ElementViewState {
+        let state_b1 = new_element_view_state_rec(fm::ElementViewState {
             element: format!("b"),
             time: 0,
             vertices: vec![new_point3(1.0, 2.0, 4.0)],
             normals: vec![new_point3(2.0, 4.0, 8.0)],
         });
 
-        let state_a2 = new_element_view_state_rec(model::ElementViewState {
+        let state_a2 = new_element_view_state_rec(fm::ElementViewState {
             element: format!("a"),
             time: 10,
             vertices: vec![new_point3(6.0, 12.0, 24.0)],
             normals: vec![new_point3(12.0, 24.0, 48.0)],
         });
 
-        let state_b2 = new_element_view_state_rec(model::ElementViewState {
+        let state_b2 = new_element_view_state_rec(fm::ElementViewState {
             element: format!("b"),
             time: 10,
             vertices: vec![new_point3(2.0, 4.0, 8.0)],
             normals: vec![new_point3(4.0, 8.0, 16.0)],
         });
 
-        let state_a3 = new_element_view_state_rec(model::ElementViewState {
+        let state_a3 = new_element_view_state_rec(fm::ElementViewState {
             element: format!("a"),
             time: 20,
             vertices: vec![new_point3(11.0, 22.0, 44.0)],
@@ -1327,21 +1323,21 @@ mod tests {
         let view2 = new_simple_view("b");
         let view3 = new_simple_view("c");
 
-        let state = new_element_view_state_rec(model::ElementViewState {
+        let state = new_element_view_state_rec(fm::ElementViewState {
             element: format!("a"),
             time: 123,
             vertices: vec![new_point3(0.123, 0.234, 0.345)],
             normals: vec![new_point3(0.456, 0.567, 0.678)],
         });
 
-        let state2 = new_element_view_state_rec(model::ElementViewState {
+        let state2 = new_element_view_state_rec(fm::ElementViewState {
             element: format!("b"),
             time: 234,
             vertices: vec![new_point3(0.789, 0.890, 0.901)],
             normals: vec![new_point3(0.012, 0.123, 0.234)],
         });
 
-        let state3 = new_element_view_state_rec(model::ElementViewState {
+        let state3 = new_element_view_state_rec(fm::ElementViewState {
             element: format!("b"),
             time: 345,
             vertices: vec![new_point3(0.345, 0.456, 0.567)],
@@ -1384,8 +1380,8 @@ mod tests {
         assert_eq!(vertices[1].normal, new_point3(0.678, 0.789, 0.890));
         assert_eq!(vertices[1].vertex, new_point3(0.345, 0.456, 0.567));
         assert_eq!(vertices[2].element, 2);
-        assert_eq!(vertices[2].normal, model::Point3::default());
-        assert_eq!(vertices[2].vertex, model::Point3::default());
+        assert_eq!(vertices[2].normal, fm::Point3::default());
+        assert_eq!(vertices[2].vertex, fm::Point3::default());
 
         controller.adapter.finish();
     }

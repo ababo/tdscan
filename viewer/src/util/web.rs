@@ -6,9 +6,9 @@ use web_sys::{window, Blob, Event, EventTarget, HtmlImageElement, Url};
 
 use crate::defs::IntoResult;
 use base::defs::{Error, ErrorKind::*, Result};
-use base::model;
+use base::fm;
 
-pub async fn decode_image(image: &model::Image) -> Result<HtmlImageElement> {
+pub async fn decode_image(image: &fm::Image) -> Result<HtmlImageElement> {
     let array = Uint8Array::new_with_length(image.data.len() as u32);
     array.copy_from(&image.data);
 

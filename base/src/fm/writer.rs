@@ -6,8 +6,7 @@ use flate2::write::GzEncoder;
 use prost::Message;
 
 use crate::defs::{Error, IntoResult, Result};
-use crate::fm::{Compression, WriterParams, MAGIC, VERSION};
-use crate::model::Record;
+use crate::fm::{Compression, Record, WriterParams, MAGIC, VERSION};
 
 pub trait Write {
     fn write_record(&mut self, record: &Record) -> Result<()>;

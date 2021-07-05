@@ -16,13 +16,13 @@ use crate::defs::IntoResult;
 use crate::util::web;
 use crate::util::webgl;
 use base::defs::Result;
-use base::model;
+use base::fm;
 use base::util::glam::point3_to_vec3;
 
 pub struct WebGlAdapter {
     canvas: HtmlCanvasElement,
     context: WebGlRenderingContext,
-    now_offset: Cell<model::Time>,
+    now_offset: Cell<fm::Time>,
     program: WebGlProgram,
 }
 
@@ -81,7 +81,7 @@ impl WebGlAdapter {
             &context,
             &program,
             "texture",
-            size_of::<model::Point2>(),
+            size_of::<fm::Point2>(),
             size_of::<VertexData>(),
             offset_of!(VertexData, texture),
         )?;
@@ -90,7 +90,7 @@ impl WebGlAdapter {
             &context,
             &program,
             "vertex",
-            size_of::<model::Point3>(),
+            size_of::<fm::Point3>(),
             size_of::<VertexData>(),
             offset_of!(VertexData, vertex),
         )?;
@@ -131,8 +131,8 @@ fn texture_num(index: usize) -> u32 {
     WebGlRenderingContext::TEXTURE0 + index as u32
 }
 
-fn milliseconds_to_time(milliseconds: f64) -> model::Time {
-    (milliseconds * 1000000.0) as model::Time
+fn milliseconds_to_time(milliseconds: f64) -> fm::Time {
+    (milliseconds * 1000000.0) as fm::Time
 }
 
 #[async_trait(?Send)]
@@ -141,7 +141,7 @@ impl Adapter for WebGlAdapter {
 
     fn destroy(self: &Rc<Self>) {}
 
-    async fn next_frame(self: &Rc<Self>) -> model::Time {
+    async fn next_frame(self: &Rc<Self>) -> fm::Time {
         let now = web::next_frame().await;
         milliseconds_to_time(now) + self.now_offset.get()
     }
@@ -187,7 +187,7 @@ impl Adapter for WebGlAdapter {
         Ok(())
     }
 
-    async fn set_now(self: &Rc<Self>, now: model::Time) {
+    async fn set_now(self: &Rc<Self>, now: fm::Time) {
         // Cannot use performance.now() here because of inconsistency
         // with requestAnimationFrame() timestamps on Chrome, see
         // https://stackoverflow.com/a/46121920/2772588.
@@ -198,7 +198,7 @@ impl Adapter for WebGlAdapter {
     async fn set_texture(
         self: &Rc<Self>,
         index: usize,
-        image: model::Image,
+        image: fm::Image,
     ) -> Result<()> {
         self.context.active_texture(texture_num(index));
 
@@ -268,7 +268,7 @@ impl Adapter for WebGlAdapter {
         Ok(())
     }
 
-    fn set_eye_position(self: &Rc<Self>, eye: &model::Point3) -> Result<()> {
+    fn set_eye_position(self: &Rc<Self>, eye: &fm::Point3) -> Result<()> {
         let eye = point3_to_vec3(eye);
         let center = Vec3::new(0.0, 0.0, 0.0);
         let up = Vec3::new(0.0, 0.0, 1.0);

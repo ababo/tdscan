@@ -1,6 +1,6 @@
 use crate::fm;
+
 use crate::fm::Write as _;
-use crate::model;
 use std::io;
 
 #[macro_export]
@@ -64,7 +64,7 @@ impl<Args, Ret> MethodMock<Args, Ret> {
 }
 
 pub fn create_reader_with_records(
-    records: &Vec<model::Record>,
+    records: &Vec<fm::Record>,
 ) -> fm::Reader<io::Cursor<Vec<u8>>> {
     let mut writer = create_writer();
 
@@ -79,17 +79,17 @@ pub fn create_writer() -> fm::Writer<Vec<u8>> {
     fm::Writer::new(Vec::new(), &fm::WriterParams::default()).unwrap()
 }
 
-pub fn new_element_view_rec(view: model::ElementView) -> model::Record {
-    model::Record {
-        r#type: Some(model::record::Type::ElementView(view)),
+pub fn new_element_view_rec(view: fm::ElementView) -> fm::Record {
+    fm::Record {
+        r#type: Some(fm::record::Type::ElementView(view)),
     }
 }
 
 pub fn new_element_view_state_rec(
-    view_state: model::ElementViewState,
-) -> model::Record {
-    use model::record::Type;
-    model::Record {
+    view_state: fm::ElementViewState,
+) -> fm::Record {
+    use fm::record::Type;
+    fm::Record {
         r#type: Some(Type::ElementViewState(view_state)),
     }
 }
@@ -104,8 +104,8 @@ pub fn new_ev_face(
     normal1: u32,
     normal2: u32,
     normal3: u32,
-) -> model::element_view::Face {
-    model::element_view::Face {
+) -> fm::element_view::Face {
+    fm::element_view::Face {
         vertex1,
         vertex2,
         vertex3,
@@ -118,12 +118,12 @@ pub fn new_ev_face(
     }
 }
 
-pub fn new_point2(x: f32, y: f32) -> model::Point2 {
-    model::Point2 { x, y }
+pub fn new_point2(x: f32, y: f32) -> fm::Point2 {
+    fm::Point2 { x, y }
 }
 
-pub fn new_point3(x: f32, y: f32, z: f32) -> model::Point3 {
-    model::Point3 { x, y, z }
+pub fn new_point3(x: f32, y: f32, z: f32) -> fm::Point3 {
+    fm::Point3 { x, y, z }
 }
 
 pub fn writer_to_reader(

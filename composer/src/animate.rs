@@ -6,7 +6,6 @@ use structopt::StructOpt;
 
 use base::defs::{Error, ErrorKind::*, Result};
 use base::fm;
-use base::model;
 use base::util::fs;
 
 #[derive(StructOpt)]
@@ -77,11 +76,11 @@ pub fn animate(
 
     let mut time = state.time.clone();
 
-    use model::record::Type::*;
-    writer.write_record(&model::Record {
+    use fm::record::Type::*;
+    writer.write_record(&fm::Record {
         r#type: Some(ElementView(view)),
     })?;
-    writer.write_record(&model::Record {
+    writer.write_record(&fm::Record {
         r#type: Some(ElementViewState(state)),
     })?;
 
@@ -97,7 +96,7 @@ pub fn animate(
             })
             .map_err(lua_err_to_err)?;
 
-        writer.write_record(&model::Record {
+        writer.write_record(&fm::Record {
             r#type: Some(ElementViewState(state)),
         })?;
     }
@@ -107,7 +106,7 @@ pub fn animate(
 
 fn read_element(
     reader: &mut dyn fm::Read,
-) -> Result<(model::ElementView, model::ElementViewState)> {
+) -> Result<(fm::ElementView, fm::ElementViewState)> {
     let err = |desc| Error::new(InconsistentState, format!("{}", desc));
 
     let read_record = |reader: &mut dyn fm::Read, desc| {
@@ -117,7 +116,7 @@ fn read_element(
     let desc = "no element view as a first record";
     let rec = read_record(reader, desc)?;
 
-    use model::record::Type::*;
+    use fm::record::Type::*;
     let view = if let Some(ElementView(view)) = rec.r#type {
         Ok(view)
     } else {
@@ -146,7 +145,7 @@ fn lua_err_to_err(err: rlua::Error) -> Error {
 
 fn set_view_state(
     ctx: &rlua::Context,
-    state: &model::ElementViewState,
+    state: &fm::ElementViewState,
 ) -> rlua::Result<()> {
     let vertices = ctx.create_table()?;
     for (i, v) in state.vertices.iter().enumerate() {
@@ -171,7 +170,7 @@ fn set_view_state(
 
 fn create_point3_table<'a>(
     ctx: &rlua::Context<'a>,
-    point: &model::Point3,
+    point: &fm::Point3,
 ) -> rlua::Result<rlua::Table<'a>> {
     let table = ctx.create_table()?;
     table.set("x", point.x)?;
@@ -180,9 +179,7 @@ fn create_point3_table<'a>(
     Ok(table)
 }
 
-fn get_view_state(
-    ctx: &rlua::Context,
-) -> rlua::Result<model::ElementViewState> {
+fn get_view_state(ctx: &rlua::Context) -> rlua::Result<fm::ElementViewState> {
     let view_state: rlua::Table = ctx.globals().get("view_state")?;
 
     let view_state_vertices: rlua::Table = view_state.get("vertices")?;
@@ -203,7 +200,7 @@ fn get_view_state(
         normals.push(normal);
     }
 
-    Ok(model::ElementViewState {
+    Ok(fm::ElementViewState {
         element: view_state.get("element")?,
         time: view_state.get("time")?,
         vertices,
@@ -211,8 +208,8 @@ fn get_view_state(
     })
 }
 
-fn get_point3(point: &rlua::Table) -> rlua::Result<model::Point3> {
-    Ok(model::Point3 {
+fn get_point3(point: &rlua::Table) -> rlua::Result<fm::Point3> {
+    Ok(fm::Point3 {
         x: point.get("x")?,
         y: point.get("y")?,
         z: point.get("z")?,
@@ -225,7 +222,7 @@ mod tests {
     use base::fm::Read as _;
     use base::util::test::*;
     use base::{assert_eq_point3, record_variant};
-    use model::record::Type::*;
+    use fm::record::Type::*;
 
     const EMPTY_SCRIPT: &str = r#"
         function update_view_state(time)
@@ -246,7 +243,7 @@ mod tests {
 
     #[test]
     fn test_animate_no_view_state() {
-        let view = new_element_view_rec(model::ElementView {
+        let view = new_element_view_rec(fm::ElementView {
             element: format!("abc"),
             ..Default::default()
         });
@@ -262,11 +259,11 @@ mod tests {
 
     #[test]
     fn test_animate_unknown_element() {
-        let view = new_element_view_rec(model::ElementView {
+        let view = new_element_view_rec(fm::ElementView {
             element: format!("abc"),
             ..Default::default()
         });
-        let state = new_element_view_state_rec(model::ElementViewState {
+        let state = new_element_view_state_rec(fm::ElementViewState {
             element: format!("bcd"),
             time: 123,
             vertices: vec![],
@@ -281,11 +278,11 @@ mod tests {
 
     #[test]
     fn test_animate_valid_element() {
-        let view = new_element_view_rec(model::ElementView {
+        let view = new_element_view_rec(fm::ElementView {
             element: format!("abc"),
             ..Default::default()
         });
-        let state = new_element_view_state_rec(model::ElementViewState {
+        let state = new_element_view_state_rec(fm::ElementViewState {
             element: format!("abc"),
             time: 123,
             vertices: vec![

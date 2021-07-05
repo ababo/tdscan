@@ -1,3 +1,9 @@
+pub type Time = i64; // Monotonic time with nanosecond precision.
+
+mod data {
+    include!(concat!(env!("OUT_DIR"), "/base.fm.data.rs"));
+}
+
 mod reader;
 mod writer;
 
@@ -7,6 +13,7 @@ use std::str::FromStr;
 use structopt::StructOpt;
 
 use crate::defs::{Error, ErrorKind::*, Result};
+pub use data::*;
 pub use reader::*;
 pub use writer::*;
 

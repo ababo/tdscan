@@ -7,7 +7,6 @@ use structopt::StructOpt;
 
 use base::defs::{Error, ErrorKind::*, Result};
 use base::fm;
-use base::model;
 use base::util::fs;
 
 const MAX_NUM_FACE_VERTICES: usize = 10;
@@ -81,11 +80,11 @@ pub fn import_obj<F: Fn(&Path) -> Result<Vec<u8>>>(
     element: &str,
 ) -> Result<()> {
     let mut data = ImportData {
-        view: model::ElementView {
+        view: fm::ElementView {
             element: element.to_string(),
             ..Default::default()
         },
-        state: model::ElementViewState {
+        state: fm::ElementViewState {
             element: element.to_string(),
             ..Default::default()
         },
@@ -113,13 +112,13 @@ pub fn import_obj<F: Fn(&Path) -> Result<Vec<u8>>>(
         }
     }
 
-    use model::record::Type;
+    use fm::record::Type;
 
-    writer.write_record(&model::Record {
+    writer.write_record(&fm::Record {
         r#type: Some(Type::ElementView(take(&mut data.view))),
     })?;
 
-    writer.write_record(&model::Record {
+    writer.write_record(&fm::Record {
         r#type: Some(Type::ElementViewState(take(&mut data.state))),
     })?;
 
@@ -129,8 +128,8 @@ pub fn import_obj<F: Fn(&Path) -> Result<Vec<u8>>>(
 #[derive(Default)]
 struct ImportData {
     line: usize,
-    view: model::ElementView,
-    state: model::ElementViewState,
+    view: fm::ElementView,
+    state: fm::ElementViewState,
     mtl_line: usize,
     mtl_material: Option<String>,
     mtl_dir: PathBuf,
@@ -172,7 +171,7 @@ fn import_f(data: &mut ImportData, parts: &Vec<&str>) -> Result<()> {
         validate_face_vertex(&data, v2, t2, n2)?;
         validate_face_vertex(&data, v2, t2, n2)?;
 
-        data.view.faces.push(model::element_view::Face {
+        data.view.faces.push(fm::element_view::Face {
             vertex1: v1,
             vertex2: v2,
             vertex3: v3,
@@ -295,8 +294,8 @@ fn import_mtl_map_kad<F: Fn(&Path) -> Result<Vec<u8>>>(
         .to_lowercase();
 
     let image_type = match ext.as_str() {
-        "png" => model::image::Type::Png,
-        "jpg" => model::image::Type::Jpeg,
+        "png" => fm::image::Type::Png,
+        "jpg" => fm::image::Type::Jpeg,
         _ => {
             let desc = format!(
                 concat!(
@@ -309,7 +308,7 @@ fn import_mtl_map_kad<F: Fn(&Path) -> Result<Vec<u8>>>(
         }
     };
 
-    let texture = model::Image {
+    let texture = fm::Image {
         r#type: image_type as i32,
         data: read_file(&mtl_dir.join(path))?,
     };
@@ -342,7 +341,7 @@ fn import_v(data: &mut ImportData, parts: &Vec<&str>) -> Result<()> {
     let y = parse_coord("y-coordinate of v-statement", data.line, parts[2])?;
     let z = parse_coord("z-coordinate of v-statement", data.line, parts[3])?;
 
-    data.state.vertices.push(model::Point3 { x, y, z });
+    data.state.vertices.push(fm::Point3 { x, y, z });
 
     Ok(())
 }
@@ -359,7 +358,7 @@ fn import_vn(data: &mut ImportData, parts: &Vec<&str>) -> Result<()> {
     let y = parse_coord("y-coordinate of vn-statement", data.line, parts[2])?;
     let z = parse_coord("z-coordinate of vn-statement", data.line, parts[3])?;
 
-    data.state.normals.push(model::Point3 { x, y, z });
+    data.state.normals.push(fm::Point3 { x, y, z });
 
     Ok(())
 }
@@ -376,7 +375,7 @@ fn import_vt(data: &mut ImportData, parts: &Vec<&str>) -> Result<()> {
     let y = parse_coord("y-coordinate of vt-statement", data.line, parts[2])?;
 
     // Fm uses OpenGL-compatible texture coordinates while .obj doesn't.
-    let point = model::Point2 { x, y: 1.0 - y };
+    let point = fm::Point2 { x, y: 1.0 - y };
     data.view.texture_points.push(point);
 
     Ok(())
@@ -430,8 +429,8 @@ mod tests {
     use super::*;
     use base::record_variant;
     use base::util::test::*;
+    use fm::record::Type::*;
     use fm::Read as _;
-    use model::record::Type::*;
 
     fn dont_read_file(_: &Path) -> Result<Vec<u8>> {
         panic!("unexpected call to read_file");
@@ -649,7 +648,7 @@ mod tests {
         assert_eq!(view.element.as_str(), "buzz");
 
         let texture = view.texture.unwrap();
-        assert_eq!(texture.r#type, model::image::r#Type::Jpeg as i32);
+        assert_eq!(texture.r#type, fm::image::r#Type::Jpeg as i32);
         assert_eq!(texture.data, vec![1, 2, 3]);
 
         let texture_points = view.texture_points;

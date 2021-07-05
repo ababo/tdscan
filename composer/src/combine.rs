@@ -10,7 +10,6 @@ use structopt::StructOpt;
 
 use base::defs::{Error, ErrorKind::*, Result};
 use base::fm;
-use base::model;
 use base::util::cli::parse_key_val;
 use base::util::fs;
 use base::util::glam::{point3_to_vec3, vec3_to_point3};
@@ -186,7 +185,7 @@ pub fn combine(
             break;
         }
 
-        if let Some(model::record::Type::ElementViewState(state)) =
+        if let Some(fm::record::Type::ElementViewState(state)) =
             &mut item.0.as_mut().unwrap().r#type
         {
             if let Some(disp) = displacements.get(&state.element) {
@@ -247,7 +246,7 @@ pub fn combine(
     Ok(())
 }
 
-struct Item(Option<model::Record>);
+struct Item(Option<fm::Record>);
 
 impl Ord for Item {
     fn cmp(&self, other: &Self) -> Ordering {
@@ -264,7 +263,7 @@ impl Ord for Item {
             }
         }
 
-        use model::record::Type;
+        use fm::record::Type;
 
         fn type_prio(r#type: &Type) -> i8 {
             match r#type {
@@ -275,13 +274,12 @@ impl Ord for Item {
             }
         }
 
-        fn type_time(r#type: &Type) -> model::Time {
+        fn type_time(r#type: &Type) -> fm::Time {
             match r#type {
-                Type::ElementViewState(model::ElementViewState {
-                    time,
-                    ..
+                Type::ElementViewState(fm::ElementViewState {
+                    time, ..
                 })
-                | Type::ScanFrame(model::ScanFrame { time, .. }) => *time,
+                | Type::ScanFrame(fm::ScanFrame { time, .. }) => *time,
                 _ => 0,
             }
         }
@@ -320,8 +318,8 @@ mod tests {
     use super::*;
     use base::util::test::*;
     use base::{assert_eq_point3, record_variant};
+    use fm::record::Type::*;
     use fm::Read as _;
-    use model::record::Type::*;
 
     fn new_displacement(dx: f32, dy: f32, dz: f32) -> Displacement {
         Displacement { dx, dy, dz }
@@ -335,8 +333,8 @@ mod tests {
         }
     }
 
-    fn new_simple_element_view_rec(element: &str) -> model::Record {
-        new_element_view_rec(model::ElementView {
+    fn new_simple_element_view_rec(element: &str) -> fm::Record {
+        new_element_view_rec(fm::ElementView {
             element: format!("{}", element),
             ..Default::default()
         })
@@ -345,8 +343,8 @@ mod tests {
     fn new_simple_element_view_state_rec(
         element: &str,
         time: i64,
-    ) -> model::Record {
-        new_element_view_state_rec(model::ElementViewState {
+    ) -> fm::Record {
+        new_element_view_state_rec(fm::ElementViewState {
             element: format!("{}", element),
             time: time,
             vertices: vec![new_point3(0.1, 0.2, 0.3)],

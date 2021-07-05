@@ -5,8 +5,7 @@ use flate2::read::GzDecoder;
 use prost::Message;
 
 use crate::defs::{Error, ErrorKind::*, IntoResult, Result};
-use crate::fm::{Compression, MAGIC, VERSION};
-use crate::model::Record;
+use crate::fm::{Compression, Record, MAGIC, VERSION};
 
 pub trait Read {
     fn read_record(&mut self) -> Result<Option<Record>>;

@@ -1,6 +1,6 @@
 use std::cmp::{Eq, Ord, Ordering, Ordering::*, PartialEq, PartialOrd};
 use std::collections::HashMap;
-use std::io::stdout;
+use std::io::{stdin, stdout};
 use std::path::PathBuf;
 use std::result::Result as StdResult;
 use std::str::FromStr;
@@ -137,6 +137,10 @@ pub fn combine_with_params(params: &CombineParams) -> Result<()> {
     for path in &params.in_paths {
         let file = fs::open_file(path)?;
         readers.push(Box::new(fm::Reader::new(file)?));
+    }
+    if readers.is_empty() {
+        let reader = fm::Reader::new(stdin())?;
+        readers.push(Box::new(reader) as Box<dyn fm::Read>);
     }
 
     let mut reader_refs: Vec<&mut dyn fm::Read> = Vec::new();

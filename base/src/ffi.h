@@ -1,5 +1,5 @@
-#ifndef FITSME_SCANNER_H_
-#define FITSME_SCANNER_H_
+#ifndef FITSME_BASE_FFI_H_
+#define FITSME_BASE_FFI_H_
 
 #include <stddef.h>
 #include <stdint.h>
@@ -13,9 +13,11 @@ enum FmError {
 
 typedef void *FmWriter;
 
-FmError fm_create_file_writer(const char *filename, FmWriter *writer);
+typedef FmError (*FmWriteCallback)(const char *data, size_t size);
 
-FmError fm_close_file_writer(FmWriter *writer);
+FmError fm_create_writer(FmWriteCallback callback, FmWriter *writer);
+
+FmError fm_close_writer(FmWriter writer);
 
 struct FmPoint3 {
   float x;
@@ -30,7 +32,7 @@ struct FmScan {
   float view_elevation;
 };
 
-FmError fm_write_scan(FmWriter *writer, const FmScan *scan);
+FmError fm_write_scan(FmWriter writer, const struct FmScan *scan);
 
 struct FmScanFrame {
   int64_t time;
@@ -40,6 +42,6 @@ struct FmScanFrame {
   size_t depths_size;
 };
 
-FmError fm_write_scan_frame(FmWriter *writer, const FmScanFrame *frame);
+FmError fm_write_scan_frame(FmWriter writer, const struct FmScanFrame *frame);
 
-#endif  // FITSME_SCANNER_H_
+#endif  // FITSME_BASE_FFI_H_

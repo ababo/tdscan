@@ -13,11 +13,11 @@ enum FmError {
 
 typedef void *FmWriter;
 
-typedef FmError (*FmWriteCallback)(const char *data, size_t size);
+typedef enum FmError (*FmWriteCallback)(const char *data, size_t size);
 
-FmError fm_create_writer(FmWriteCallback callback, FmWriter *writer);
+enum FmError fm_create_writer(FmWriteCallback callback, FmWriter *writer);
 
-FmError fm_close_writer(FmWriter writer);
+enum FmError fm_close_writer(FmWriter writer);
 
 struct FmPoint3 {
   float x;
@@ -28,11 +28,11 @@ struct FmPoint3 {
 struct FmScan {
   const char *name;
   float angular_velocity;
-  FmPoint3 eye_position;
+  struct FmPoint3 eye_position;
   float view_elevation;
 };
 
-FmError fm_write_scan(FmWriter writer, const struct FmScan *scan);
+enum FmError fm_write_scan(FmWriter writer, const struct FmScan *scan);
 
 struct FmScanFrame {
   int64_t time;
@@ -42,6 +42,6 @@ struct FmScanFrame {
   size_t depths_size;
 };
 
-FmError fm_write_scan_frame(FmWriter writer, const struct FmScanFrame *frame);
+enum FmError fm_write_scan_frame(FmWriter writer, const struct FmScanFrame *frame);
 
 #endif  // FITSME_BASE_FFI_H_

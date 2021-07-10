@@ -20,6 +20,7 @@
 		4076160C26972ADF004BBFD4 /* GCDWebServerStreamedResponse.m in Sources */ = {isa = PBXBuildFile; fileRef = 4076160426972ADE004BBFD4 /* GCDWebServerStreamedResponse.m */; };
 		4076160D26972ADF004BBFD4 /* GCDWebServerErrorResponse.m in Sources */ = {isa = PBXBuildFile; fileRef = 4076160526972ADE004BBFD4 /* GCDWebServerErrorResponse.m */; };
 		4076160E26972ADF004BBFD4 /* GCDWebServerFileResponse.m in Sources */ = {isa = PBXBuildFile; fileRef = 4076160826972ADF004BBFD4 /* GCDWebServerFileResponse.m */; };
+		407CC4CD269A379D0085D920 /* Dimmer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 407CC4CC269A379D0085D920 /* Dimmer.swift */; };
 		40FF91BD2690CD3C009F58F8 /* ScannerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40FF91BC2690CD3C009F58F8 /* ScannerApp.swift */; };
 		40FF91BF2690CD3C009F58F8 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40FF91BE2690CD3C009F58F8 /* ContentView.swift */; };
 		40FF91C12690CD3E009F58F8 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 40FF91C02690CD3E009F58F8 /* Assets.xcassets */; };
@@ -56,6 +57,7 @@
 		4076160826972ADF004BBFD4 /* GCDWebServerFileResponse.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = GCDWebServerFileResponse.m; path = GCDWebServer/Responses/GCDWebServerFileResponse.m; sourceTree = "<group>"; };
 		4076160926972ADF004BBFD4 /* GCDWebServerErrorResponse.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = GCDWebServerErrorResponse.h; path = GCDWebServer/Responses/GCDWebServerErrorResponse.h; sourceTree = "<group>"; };
 		4076160A26972ADF004BBFD4 /* GCDWebServerStreamedResponse.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = GCDWebServerStreamedResponse.h; path = GCDWebServer/Responses/GCDWebServerStreamedResponse.h; sourceTree = "<group>"; };
+		407CC4CC269A379D0085D920 /* Dimmer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Dimmer.swift; sourceTree = "<group>"; };
 		40FF91B92690CD3C009F58F8 /* Fitsme Scanner.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Fitsme Scanner.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		40FF91BC2690CD3C009F58F8 /* ScannerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScannerApp.swift; sourceTree = "<group>"; };
 		40FF91BE2690CD3C009F58F8 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -160,6 +162,7 @@
 				40FF91C02690CD3E009F58F8 /* Assets.xcassets */,
 				40FF91C52690CD3E009F58F8 /* Info.plist */,
 				40FF91C22690CD3E009F58F8 /* Preview Content */,
+				407CC4CC269A379D0085D920 /* Dimmer.swift */,
 			);
 			path = "Fitsme Scanner";
 			sourceTree = "<group>";
@@ -247,6 +250,7 @@
 				4076160D26972ADF004BBFD4 /* GCDWebServerErrorResponse.m in Sources */,
 				40FF91BF2690CD3C009F58F8 /* ContentView.swift in Sources */,
 				4076160E26972ADF004BBFD4 /* GCDWebServerFileResponse.m in Sources */,
+				407CC4CD269A379D0085D920 /* Dimmer.swift in Sources */,
 				407615F026971F20004BBFD4 /* GCDWebServerDataRequest.m in Sources */,
 				407615E526971EBF004BBFD4 /* GCDWebServer.m in Sources */,
 				407615E426971EBF004BBFD4 /* GCDWebServerConnection.m in Sources */,

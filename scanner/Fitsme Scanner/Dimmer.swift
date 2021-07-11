@@ -31,40 +31,46 @@ struct Dimmer<Content: View>: View {
           )
           .edgesIgnoringSafeArea(.all)
           .onTapGesture {
-            restore()
+            handleTap()
           }
       } else {
         content()
           .onReceive(timer) { now in
-            if !active {
-              return
-            }
-            let elapsed = now.timeIntervalSince(lastTapped)
-            if elapsed >= coverTimeout {
-              covered = true
-            } else if elapsed >= dimTimeout {
-              UIScreen.main.brightness = 0
+            if active {
+              let elapsed = now.timeIntervalSince(lastTapped)
+              if elapsed >= coverTimeout {
+                covered = true
+              } else if elapsed >= dimTimeout {
+                UIScreen.main.brightness = 0
+              }
             }
           }
+          .frame(
+            width: screenBounds.width,
+            height: screenBounds.height
+          )
+          .contentShape(Rectangle())
           .onTapGesture {
-            restore()
+            handleTap()
           }
       }
     }.onReceive(
       willResignActivePublisher,
       perform: { output in
         active = false
-        restore()
+        UIScreen.main.brightness = normalBrightness
       }
     ).onReceive(
       willEnterForegroundPublisher,
       perform: { output in
         active = true
-        restore()
+        covered = false
+        lastTapped = Date()
+        normalBrightness = UIScreen.main.brightness
       })
   }
 
-  func restore() {
+  func handleTap() {
     UIScreen.main.brightness = normalBrightness
     lastTapped = Date()
     covered = false

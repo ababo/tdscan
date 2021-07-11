@@ -3,7 +3,11 @@ import SwiftUI
 struct ContentView: View {
   var body: some View {
     Dimmer {
-      Text("Main View")
+      VStack {
+        Spacer()
+        Text("Main View")
+        Spacer()
+      }
     }
   }
 }

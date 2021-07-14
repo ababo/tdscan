@@ -10,8 +10,8 @@
 		401DDA18269DFCD30027B23B /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 401DDA17269DFCD30027B23B /* AppDelegate.swift */; };
 		401DDA1A269DFCD30027B23B /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 401DDA19269DFCD30027B23B /* ContentView.swift */; };
 		401DDA1E269DFCD60027B23B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 401DDA1D269DFCD60027B23B /* Assets.xcassets */; };
-		401DDA21269DFCD60027B23B /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 401DDA20269DFCD60027B23B /* Preview Assets.xcassets */; };
 		401DDA29269E04DC0027B23B /* Dimmer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 401DDA28269E04DC0027B23B /* Dimmer.swift */; };
+		40332297269F5F7500D740A9 /* ScanSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40332296269F5F7500D740A9 /* ScanSession.swift */; };
 		40624985269E1DFC00C72812 /* GCDWebServerResponse.m in Sources */ = {isa = PBXBuildFile; fileRef = 40624969269E1DFC00C72812 /* GCDWebServerResponse.m */; };
 		40624986269E1DFC00C72812 /* GCDWebServerRequest.m in Sources */ = {isa = PBXBuildFile; fileRef = 4062496C269E1DFC00C72812 /* GCDWebServerRequest.m */; };
 		40624987269E1DFC00C72812 /* GCDWebServerFunctions.m in Sources */ = {isa = PBXBuildFile; fileRef = 4062496F269E1DFC00C72812 /* GCDWebServerFunctions.m */; };
@@ -32,9 +32,9 @@
 		401DDA17269DFCD30027B23B /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		401DDA19269DFCD30027B23B /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		401DDA1D269DFCD60027B23B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		401DDA20269DFCD60027B23B /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		401DDA22269DFCD60027B23B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		401DDA28269E04DC0027B23B /* Dimmer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Dimmer.swift; sourceTree = "<group>"; };
+		40332296269F5F7500D740A9 /* ScanSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanSession.swift; sourceTree = "<group>"; };
 		40624967269E1DFC00C72812 /* GCDWebServerFunctions.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = GCDWebServerFunctions.h; sourceTree = "<group>"; };
 		40624968269E1DFC00C72812 /* GCDWebServerPrivate.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = GCDWebServerPrivate.h; sourceTree = "<group>"; };
 		40624969269E1DFC00C72812 /* GCDWebServerResponse.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = GCDWebServerResponse.m; sourceTree = "<group>"; };
@@ -102,18 +102,10 @@
 				401DDA19269DFCD30027B23B /* ContentView.swift */,
 				401DDA1D269DFCD60027B23B /* Assets.xcassets */,
 				401DDA22269DFCD60027B23B /* Info.plist */,
-				401DDA1F269DFCD60027B23B /* Preview Content */,
 				401DDA28269E04DC0027B23B /* Dimmer.swift */,
+				40332296269F5F7500D740A9 /* ScanSession.swift */,
 			);
 			path = "Fitsme Scanner";
-			sourceTree = "<group>";
-		};
-		401DDA1F269DFCD60027B23B /* Preview Content */ = {
-			isa = PBXGroup;
-			children = (
-				401DDA20269DFCD60027B23B /* Preview Assets.xcassets */,
-			);
-			path = "Preview Content";
 			sourceTree = "<group>";
 		};
 		40624965269E1DFC00C72812 /* GCDWebServer */ = {
@@ -232,7 +224,6 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				401DDA21269DFCD60027B23B /* Preview Assets.xcassets in Resources */,
 				401DDA1E269DFCD60027B23B /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -257,6 +248,7 @@
 				401DDA18269DFCD30027B23B /* AppDelegate.swift in Sources */,
 				40624985269E1DFC00C72812 /* GCDWebServerResponse.m in Sources */,
 				4062498A269E1DFC00C72812 /* GCDWebServerErrorResponse.m in Sources */,
+				40332297269F5F7500D740A9 /* ScanSession.swift in Sources */,
 				40624989269E1DFC00C72812 /* GCDWebServerConnection.m in Sources */,
 				40624986269E1DFC00C72812 /* GCDWebServerRequest.m in Sources */,
 				4062498B269E1DFC00C72812 /* GCDWebServerFileResponse.m in Sources */,
@@ -390,7 +382,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_ASSET_PATHS = "\"Fitsme Scanner/Preview Content\"";
+				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = 5KDYG33HXH;
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = "Fitsme Scanner/Info.plist";
@@ -411,7 +403,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_ASSET_PATHS = "\"Fitsme Scanner/Preview Content\"";
+				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = 5KDYG33HXH;
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = "Fitsme Scanner/Info.plist";

@@ -3,8 +3,14 @@ import UIKit
 
 @main
 class AppDelegate: UIResponder, UIApplicationDelegate {
+  let session = ScanSession()
   let webServer = GCDWebServer()
   var window: UIWindow?
+
+  override init() {
+    super.init()
+    session.onFrame = onFrame
+  }
 
   func application(
     _ application: UIApplication,
@@ -15,9 +21,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     startWebServer()
     return true
   }
-  
+
   func createWindow() {
-    let contentView = ContentView()
+    let contentView = ContentView(session: session)
     let window = UIWindow(frame: UIScreen.main.bounds)
     window.rootViewController = UIHostingController(rootView: contentView)
     self.window = window
@@ -50,5 +56,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         block("this is a block ".data(using: .utf8), nil)
       })
     return resp
+  }
+
+  func onFrame() {
+
   }
 }

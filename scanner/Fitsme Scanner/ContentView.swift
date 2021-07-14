@@ -1,56 +1,46 @@
-import ARKit
 import RealityKit
 import SwiftUI
 
 struct ContentView: View {
-  @State var viewContainer = ARViewContainer()
+  struct ARViewContainer: UIViewRepresentable {
+    let session: ScanSession
+
+    func makeUIView(context: Context) -> ARView {
+      let view = ARView(
+        frame: .zero, cameraMode: .ar, automaticallyConfigureSession: false)
+      view.session = session.arSession
+      return view
+    }
+
+    func updateUIView(_ uiView: ARView, context: Context) {}
+  }
+
+  @State var session: ScanSession
+
+  let viewTopOffset: CGFloat = 50
+  let viewBottomOffset: CGFloat = 50
 
   var body: some View {
     Dimmer {
-      viewContainer
-        .edgesIgnoringSafeArea(.all)
-        .onAppear {
-          viewContainer.activate()
+      ZStack {
+        Color.black
+          .ignoresSafeArea()
+        VStack {
+          Rectangle()
+            .fill(Color.black)
+            .frame(height: viewTopOffset)
+          ARViewContainer(session: session)
+            .onAppear {
+              session.activate()
+            }
+            .onDisappear {
+              session.release()
+            }
+          Rectangle()
+            .fill(Color.black)
+            .frame(height: viewBottomOffset)
         }
-        .onDisappear {
-          viewContainer.release()
-        }
+      }
     }
   }
 }
-
-struct ARViewContainer: UIViewRepresentable {
-  let session = ARSession()
-  var useCount = 0
-
-  public mutating func activate() {
-    if useCount == 0 {
-      session.run(ARObjectScanningConfiguration())
-    }
-    useCount += 1
-  }
-
-  public mutating func release() {
-    useCount -= 1
-    if useCount == 0 {
-      session.pause()
-    }
-  }
-
-  func makeUIView(context: Context) -> ARView {
-    let view = ARView(
-      frame: .zero, cameraMode: .ar, automaticallyConfigureSession: false)
-    view.session = session
-    return view
-  }
-
-  func updateUIView(_ uiView: ARView, context: Context) {}
-}
-
-#if DEBUG
-  struct ContentView_Previews: PreviewProvider {
-    static var previews: some View {
-      ContentView()
-    }
-  }
-#endif

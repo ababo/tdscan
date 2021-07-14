@@ -1,4 +1,3 @@
-import Foundation
 import SwiftUI
 
 struct Dimmer<Content: View>: View {
@@ -45,10 +44,6 @@ struct Dimmer<Content: View>: View {
               }
             }
           }
-          .frame(
-            width: screenBounds.width,
-            height: screenBounds.height
-          )
           .contentShape(Rectangle())
           .onTapGesture {
             handleTap()

@@ -1,3 +1,4 @@
+import ARKit
 import SwiftUI
 import UIKit
 
@@ -31,10 +32,14 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
   }
 
   func startWebServer() {
-    webServer.addDefaultHandler(
-      forMethod: "GET",
+    webServer.addHandler(
+      forMethod: "GET", path: "/formats", request: GCDWebServerRequest.self,
+      processBlock: handleFormatsRequest)
+
+    webServer.addHandler(
+      forMethod: "GET", path: "/scan",
       request: GCDWebServerRequest.self,
-      processBlock: handleWebRequest)
+      processBlock: handleScanRequest)
 
     let options: [String: Any] = [
       "AutomaticallySuspendInBackground": false,
@@ -47,7 +52,31 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     try! webServer.start(options: options)
   }
 
-  func handleWebRequest(request: GCDWebServerRequest)
+  func handleFormatsRequest(request: GCDWebServerRequest)
+    -> GCDWebServerResponse
+  {
+    var formats: [[String: Any]] = []
+    for format in ARWorldTrackingConfiguration.supportedVideoFormats {
+      let devicePosition: String
+      switch format.captureDevicePosition {
+      case AVCaptureDevice.Position.front: devicePosition = "front"
+      case AVCaptureDevice.Position.back: devicePosition = "back"
+      default: devicePosition = "unspecified"
+      }
+
+      formats.append([
+        "devicePosition": devicePosition,
+        "deviceType": format.captureDeviceType.rawValue,
+        "framesPerSecond": format.framesPerSecond,
+        "imageHeight": format.imageResolution.height,
+        "imageWidth": format.imageResolution.width,
+      ])
+    }
+
+    return GCDWebServerDataResponse.init(jsonObject: formats)!
+  }
+
+  func handleScanRequest(request: GCDWebServerRequest)
     -> GCDWebServerResponse?
   {
     let resp = GCDWebServerStreamedResponse.init(

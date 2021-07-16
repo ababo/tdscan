@@ -52,16 +52,28 @@ message ElementViewState {
 
 message Scan {
   string name = 1;
-  float angular_velocity = 2;
-  Point3 eye_position = 3;
+  Point3 camera_position = 2;
+  float camera_velocity = 3;
   float view_elevation = 4;
+  uint32 image_width = 5;
+  uint32 image_height = 6;
+  uint32 depth_width = 7;
+  uint32 depth_height = 8;
 }
 
 message ScanFrame {
+  enum DepthConfidence {
+    NONE = 0;
+    LOW = 1;
+    MEDIUM = 2;
+    HIGH = 3;
+  }
+
   string scan = 1;
   int64 time = 2;
-  Image frame = 3;
+  Image image = 3;
   repeated float depths = 4;
+  repeated DepthConfidence depth_confidences = 5;
 }
 
 message Record {

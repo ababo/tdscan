@@ -1,8 +1,15 @@
 import ARKit
 
+struct ScanFrame {
+  let time: TimeInterval
+  let image: CGImage
+  let depths: [Float]
+  let depthConfidences: [UInt8]
+}
+
 class ScanSession: NSObject, ARSessionDelegate {
   public let arSession = ARSession()
-  public var onFrame: (() -> Void)?
+  public var onFrame: ((ScanFrame) -> Void)?
 
   var useCount = 0
 
@@ -14,7 +21,9 @@ class ScanSession: NSObject, ARSessionDelegate {
   public func activate() {
     assert(useCount >= 0)
     if useCount == 0 {
-      arSession.run(ARObjectScanningConfiguration())
+      let config = ARWorldTrackingConfiguration()
+      config.frameSemantics = .sceneDepth
+      arSession.run(config)
     }
     useCount += 1
   }
@@ -28,9 +37,45 @@ class ScanSession: NSObject, ARSessionDelegate {
   }
 
   func session(_ session: ARSession, didUpdate: ARFrame) {
-    let image = UIImage(
-      ciImage: CIImage(cvPixelBuffer: didUpdate.capturedImage))
-    // print("png size", image.pngData()?.count) Too slow!!!
-    onFrame?()
+    let context = CIContext(options: nil)
+    let ciImage = CIImage(cvPixelBuffer: didUpdate.capturedImage)
+    let cgImage = context.createCGImage(ciImage, from: ciImage.extent)!
+
+    let depthMap = didUpdate.sceneDepth!.depthMap
+    let confidenceMap = didUpdate.sceneDepth!.confidenceMap!
+    let depthWidth = CVPixelBufferGetWidth(depthMap)
+    let depthHeight = CVPixelBufferGetHeight(depthMap)
+
+    var depths: [Float] = []
+    var depthConfidences: [UInt8] = []
+    depths.reserveCapacity(depthWidth * depthHeight)
+    depthConfidences.reserveCapacity(depthWidth * depthHeight)
+
+    let lockFlags = CVPixelBufferLockFlags(rawValue: 0)
+    CVPixelBufferLockBaseAddress(depthMap, lockFlags)
+    let depthBuf = unsafeBitCast(
+      CVPixelBufferGetBaseAddress(depthMap),
+      to: UnsafeMutablePointer<Float32>.self)
+
+    CVPixelBufferLockBaseAddress(confidenceMap, lockFlags)
+    let confidenceBuf = unsafeBitCast(
+      CVPixelBufferGetBaseAddress(confidenceMap),
+      to: UnsafeMutablePointer<UInt8>.self)
+
+    for i in 0...depthWidth * depthHeight - 1 {
+      depths.append(depthBuf[i])
+      depthConfidences.append(confidenceBuf[i] + 1)
+    }
+
+    CVPixelBufferUnlockBaseAddress(depthMap, lockFlags)
+    CVPixelBufferUnlockBaseAddress(confidenceMap, lockFlags)
+
+    onFrame?(
+      ScanFrame(
+        time: didUpdate.timestamp,
+        image: cgImage,
+        depths: depths,
+        depthConfidences: depthConfidences
+      ))
   }
 }

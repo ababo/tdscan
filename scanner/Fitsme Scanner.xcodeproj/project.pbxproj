@@ -81,8 +81,8 @@
 			isa = PBXGroup;
 			children = (
 				40624992269E1E0E00C72812 /* Bridging-Header.h */,
-				40624965269E1DFC00C72812 /* GCDWebServer */,
 				401DDA16269DFCD30027B23B /* Fitsme Scanner */,
+				40624965269E1DFC00C72812 /* GCDWebServer */,
 				401DDA15269DFCD30027B23B /* Products */,
 			);
 			sourceTree = "<group>";

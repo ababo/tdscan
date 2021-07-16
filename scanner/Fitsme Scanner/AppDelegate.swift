@@ -58,7 +58,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     return resp
   }
 
-  func onFrame() {
+  func onFrame(frame: ScanFrame) {
 
   }
 }

@@ -1,10 +1,46 @@
 import ARKit
 
 struct ScanFrame {
-  let time: TimeInterval
-  let image: CGImage
-  let depths: [Float]
-  let depthConfidences: [UInt8]
+  public let time: TimeInterval
+  public let image: CGImage
+  public let depths: [Float]
+  public let depthConfidences: [UInt8]
+
+  //  public static func read(from: URL) -> ScanFrame {
+  //
+  //  }
+
+  public func write(to: URL) {
+    var data = Data()
+
+    var time = self.time
+    data.append(
+      Data(
+        bytes: &time,
+        count: MemoryLayout<TimeInterval>.size))
+
+    let imageData = image.dataProvider!.data! as Data
+    var imageCount = imageData.count
+    data.append(
+      Data(
+        bytes: &imageCount,
+        count: MemoryLayout<Int>.size))
+    data.append(imageData)
+
+    var depths = self.depths
+    var depthsCount = depths.count
+    data.append(
+      Data(
+        bytes: &depthsCount,
+        count: MemoryLayout<Int>.size))
+    data.append(
+      Data(
+        bytes: &depths,
+        count: MemoryLayout<Float>.stride * depthsCount))
+    data.append(Data(depthConfidences))
+
+    try! data.write(to: to)
+  }
 }
 
 class ScanSession: NSObject, ARSessionDelegate {

@@ -88,6 +88,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
   }
 
   func onFrame(frame: ScanFrame) {
-
+    // frame.write(to:URL(fileURLWithPath: ""))
   }
 }

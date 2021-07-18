@@ -88,6 +88,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
   }
 
   func onFrame(frame: ScanFrame) {
-    // frame.write(to:URL(fileURLWithPath: ""))
+    var data = frame.encode()
+    let frame2 = ScanFrame.decode(data: &data)
   }
 }

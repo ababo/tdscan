@@ -6,11 +6,64 @@ struct ScanFrame {
   public let depths: [Float]
   public let depthConfidences: [UInt8]
 
-  //  public static func read(from: URL) -> ScanFrame {
-  //
-  //  }
+  public static func decode(data: inout Data) -> ScanFrame {
+    var offset = 0
+    let time = data.withUnsafeBytes { ptr in
+      (ptr.baseAddress! + offset).load(as: TimeInterval.self)
+    }
+    offset += MemoryLayout<TimeInterval>.size
 
-  public func write(to: URL) {
+    let imageWidth = data.withUnsafeBytes { ptr in
+      (ptr.baseAddress! + offset).load(as: Int.self)
+    }
+    offset += MemoryLayout<Int>.size
+
+    let imageHeight = data.withUnsafeBytes { ptr in
+      (ptr.baseAddress! + offset).load(as: Int.self)
+    }
+    offset += MemoryLayout<Int>.size
+
+    var imageContext: CGContext?
+    data.withUnsafeMutableBytes { ptr in
+      imageContext = CGContext(
+        data: ptr.baseAddress! + offset, width: imageWidth, height: imageHeight,
+        bitsPerComponent: 8,
+        bytesPerRow: imageWidth * 4,
+        space: CGColorSpaceCreateDeviceRGB(),
+        bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)
+    }
+    offset += imageWidth * 4 * imageHeight
+    let image = imageContext!.makeImage()!
+
+    let depthCount = data.withUnsafeBytes { ptr in
+      (ptr.baseAddress! + offset).load(as: Int.self)
+    }
+    offset += MemoryLayout<Int>.size
+
+    var depths: [Float] = []
+    depths.reserveCapacity(depthCount)
+    data.withUnsafeBytes { ptr in
+      for i in 0..<depthCount {
+        depths.append(
+          (ptr.baseAddress! + offset + i * MemoryLayout<Float>.stride).load(
+            as: Float.self))
+      }
+    }
+    offset += MemoryLayout<Float>.stride * depthCount
+
+    let depthConfidences = [UInt8](
+      data.subdata(in: offset..<offset + depthCount))
+    assert(data.count == offset + depthCount)
+
+    return ScanFrame(
+      time: time,
+      image: image,
+      depths: depths,
+      depthConfidences: depthConfidences
+    )
+  }
+
+  public func encode() -> Data {
     var data = Data()
 
     var time = self.time
@@ -19,12 +72,17 @@ struct ScanFrame {
         bytes: &time,
         count: MemoryLayout<TimeInterval>.size))
 
-    let imageData = image.dataProvider!.data! as Data
-    var imageCount = imageData.count
+    var imageWidth = image.width
     data.append(
       Data(
-        bytes: &imageCount,
+        bytes: &imageWidth,
         count: MemoryLayout<Int>.size))
+    var imageHeight = image.height
+    data.append(
+      Data(
+        bytes: &imageHeight,
+        count: MemoryLayout<Int>.size))
+    let imageData = image.dataProvider!.data! as Data
     data.append(imageData)
 
     var depths = self.depths
@@ -39,7 +97,7 @@ struct ScanFrame {
         count: MemoryLayout<Float>.stride * depthsCount))
     data.append(Data(depthConfidences))
 
-    try! data.write(to: to)
+    return data
   }
 }
 

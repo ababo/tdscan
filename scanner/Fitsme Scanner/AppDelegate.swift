@@ -4,8 +4,18 @@ import UIKit
 
 @main
 class AppDelegate: UIResponder, UIApplicationDelegate {
+  struct ScanState {
+    let fps: Double
+    var frameIndex: Int
+    let numFrames: Int
+    let start: TimeInterval
+  }
+
   let session = ScanSession()
   let webServer = GCDWebServer()
+
+  var scanLock = NSLock()
+  var scanState: ScanState?
   var window: UIWindow?
 
   override init() {
@@ -79,6 +89,27 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
   func handleScanRequest(request: GCDWebServerRequest)
     -> GCDWebServerResponse?
   {
+    scanLock.lock()
+
+    if scanState != nil {
+      scanLock.unlock()
+      return GCDWebServerResponse(
+        statusCode: GCDWebServerClientErrorHTTPStatusCode
+          .httpStatusCode_Conflict.rawValue)
+    }
+
+    scanState = ScanState(
+      fps: Double(request.query?["fps"] ?? "0")!,
+      frameIndex: 0,
+      numFrames: Int(request.query?["nframes"] ?? "1")!,
+      start: TimeInterval(request.query?["start"] ?? "0")!
+    )
+
+    let format = Int(request.query?["format"] ?? "0")!
+    session.activate(videoFormat: format)
+
+    scanLock.unlock()
+
     let resp = GCDWebServerStreamedResponse.init(
       contentType: "text/plain",
       asyncStreamBlock: { block in
@@ -88,7 +119,22 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
   }
 
   func onFrame(frame: ScanFrame) {
-    var data = frame.encode()
-    let frame2 = ScanFrame.decode(data: &data)
+    scanLock.lock()
+    if scanState == nil {
+      scanLock.unlock()
+      return
+    }
+
+    if scanState!.fps != 0
+      && (Date().timeIntervalSince1970 - scanState!.start) * scanState!.fps
+        <= Double(scanState!.frameIndex)
+    {
+      scanLock.unlock()
+      return
+    }
+
+    ///
+
+    scanLock.unlock()
   }
 }

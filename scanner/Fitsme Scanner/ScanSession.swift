@@ -115,10 +115,20 @@ class ScanSession: NSObject, ARSessionDelegate {
   public func activate() {
     assert(useCount >= 0)
     if useCount == 0 {
-      let config = ARWorldTrackingConfiguration()
-      config.frameSemantics = .sceneDepth
-      arSession.run(config)
+      arSession.run(ARWorldTrackingConfiguration())
     }
+    useCount += 1
+  }
+
+  public func activate(videoFormat: Int) {
+    assert(useCount >= 0)
+
+    let formats = ARWorldTrackingConfiguration.supportedVideoFormats
+    let config = ARWorldTrackingConfiguration()
+    config.frameSemantics = .sceneDepth
+    config.videoFormat = formats[videoFormat]
+    arSession.run(config)
+
     useCount += 1
   }
 

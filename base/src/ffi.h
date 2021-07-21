@@ -13,9 +13,11 @@ enum FmError {
 
 typedef void *FmWriter;
 
-typedef enum FmError (*FmWriteCallback)(const char *data, size_t size);
+typedef enum FmError (*FmWriteCallback)(const uint8_t *fm_data, size_t fm_size,
+                                        void *cb_data);
 
-enum FmError fm_create_writer(FmWriteCallback callback, FmWriter *writer);
+enum FmError fm_create_writer(FmWriteCallback callback, void *cb_data,
+                              FmWriter *writer);
 
 enum FmError fm_close_writer(FmWriter writer);
 

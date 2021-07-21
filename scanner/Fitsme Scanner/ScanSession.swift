@@ -3,6 +3,8 @@ import ARKit
 struct ScanFrame {
   public let time: TimeInterval
   public let image: CGImage
+  public let depthWidth: Int
+  public let depthHeight: Int
   public let depths: [Float]
   public let depthConfidences: [UInt8]
 
@@ -35,10 +37,17 @@ struct ScanFrame {
     offset += imageWidth * 4 * imageHeight
     let image = imageContext!.makeImage()!
 
-    let depthCount = data.withUnsafeBytes { ptr in
+    let depthWidth = data.withUnsafeBytes { ptr in
       (ptr.baseAddress! + offset).load(as: Int.self)
     }
     offset += MemoryLayout<Int>.size
+
+    let depthHeight = data.withUnsafeBytes { ptr in
+      (ptr.baseAddress! + offset).load(as: Int.self)
+    }
+    offset += MemoryLayout<Int>.size
+
+    let depthCount = depthHeight * depthWidth
 
     var depths: [Float] = []
     depths.reserveCapacity(depthCount)
@@ -58,6 +67,8 @@ struct ScanFrame {
     return ScanFrame(
       time: time,
       image: image,
+      depthWidth: depthWidth,
+      depthHeight: depthHeight,
       depths: depths,
       depthConfidences: depthConfidences
     )
@@ -85,16 +96,21 @@ struct ScanFrame {
     let imageData = image.dataProvider!.data! as Data
     data.append(imageData)
 
-    var depths = self.depths
-    var depthsCount = depths.count
+    var depthWidth = self.depthWidth
     data.append(
       Data(
-        bytes: &depthsCount,
+        bytes: &depthWidth,
         count: MemoryLayout<Int>.size))
+    var depthHeight = self.depthHeight
+    data.append(
+      Data(
+        bytes: &depthHeight,
+        count: MemoryLayout<Int>.size))
+    var depths = self.depths
     data.append(
       Data(
         bytes: &depths,
-        count: MemoryLayout<Float>.stride * depthsCount))
+        count: depthHeight * depthWidth * MemoryLayout<Float>.stride))
     data.append(Data(depthConfidences))
 
     return data
@@ -115,21 +131,23 @@ class ScanSession: NSObject, ARSessionDelegate {
   public func activate() {
     assert(useCount >= 0)
     if useCount == 0 {
-      arSession.run(ARWorldTrackingConfiguration())
+      run(videoFormat: 0)
     }
     useCount += 1
   }
 
   public func activate(videoFormat: Int) {
     assert(useCount >= 0)
+    run(videoFormat: videoFormat)
+    useCount += 1
+  }
 
+  func run(videoFormat: Int) {
     let formats = ARWorldTrackingConfiguration.supportedVideoFormats
     let config = ARWorldTrackingConfiguration()
-    config.frameSemantics = .sceneDepth
     config.videoFormat = formats[videoFormat]
+    config.frameSemantics = .sceneDepth
     arSession.run(config)
-
-    useCount += 1
   }
 
   public func release() {
@@ -166,7 +184,7 @@ class ScanSession: NSObject, ARSessionDelegate {
       CVPixelBufferGetBaseAddress(confidenceMap),
       to: UnsafeMutablePointer<UInt8>.self)
 
-    for i in 0...depthWidth * depthHeight - 1 {
+    for i in 0..<depthWidth * depthHeight {
       depths.append(depthBuf[i])
       depthConfidences.append(confidenceBuf[i] + 1)
     }
@@ -178,6 +196,8 @@ class ScanSession: NSObject, ARSessionDelegate {
       ScanFrame(
         time: didUpdate.timestamp,
         image: cgImage,
+        depthWidth: depthWidth,
+        depthHeight: depthHeight,
         depths: depths,
         depthConfidences: depthConfidences
       ))

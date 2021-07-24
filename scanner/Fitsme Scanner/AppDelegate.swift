@@ -4,19 +4,69 @@ import UIKit
 
 @main
 class AppDelegate: UIResponder, UIApplicationDelegate {
-  struct ScanState {
-    let fps: Double
-    var frameIndex: Int
-    let numFrames: Int
-    let start: TimeInterval
+  class Scan {
+    public let campos: FmPoint3
+    public let camvel: Float
+    public let fps: Double
+    public let name: String
+    public let nframes: Int
+    public let start: TimeInterval
+    public let viewel: Float
+
+    public var inFrameIndex = 0
+    public var outFrameIndex = 0
+    public var writer: FmWriter?
+    public var block: GCDWebServerBodyReaderCompletionBlock?
+
+    public init(
+      campos: FmPoint3, camvel: Float, fps: Double, name: String, nframes: Int,
+      start: TimeInterval, viewel: Float
+    ) {
+      self.campos = campos
+      self.camvel = camvel
+      self.fps = fps
+      self.name = name
+      self.nframes = nframes
+      self.start = start
+      self.viewel = viewel
+    }
+
+    public func nextOutFrameReady() -> Bool { inFrameIndex > outFrameIndex }
+    public func noMoreInFrames() -> Bool { inFrameIndex == nframes }
+    public func noMoreOutFrames() -> Bool { outFrameIndex == nframes }
   }
 
+  let lock = NSLock()
   let session = ScanSession()
   let webServer = GCDWebServer()
 
-  var scanLock = NSLock()
-  var scanState: ScanState?
+  var scan: Scan?
   var window: UIWindow?
+
+  func getScan() -> Scan? {
+    var scan: Scan?
+    lock.lock()
+    scan = self.scan
+    lock.unlock()
+    return scan
+  }
+
+  func setScan(scan: Scan?) {
+    lock.lock()
+    self.scan = scan
+    lock.unlock()
+  }
+
+  func setScanIfNone(scan: Scan) -> Bool {
+    var set = false
+    lock.lock()
+    if self.scan == nil {
+      self.scan = scan
+      set = true
+    }
+    lock.unlock()
+    return set
+  }
 
   override init() {
     super.init()
@@ -44,12 +94,12 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
   func startWebServer() {
     webServer.addHandler(
       forMethod: "GET", path: "/formats", request: GCDWebServerRequest.self,
-      processBlock: handleFormatsRequest)
+      processBlock: onFormatsRequest)
 
     webServer.addHandler(
       forMethod: "GET", path: "/scan",
       request: GCDWebServerRequest.self,
-      processBlock: handleScanRequest)
+      processBlock: onScanRequest)
 
     let options: [String: Any] = [
       "AutomaticallySuspendInBackground": false,
@@ -62,7 +112,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     try! webServer.start(options: options)
   }
 
-  func handleFormatsRequest(request: GCDWebServerRequest)
+  func onFormatsRequest(request: GCDWebServerRequest)
     -> GCDWebServerResponse
   {
     var formats: [[String: Any]] = []
@@ -86,55 +136,158 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     return GCDWebServerDataResponse.init(jsonObject: formats)!
   }
 
-  func handleScanRequest(request: GCDWebServerRequest)
+  func onScanRequest(request: GCDWebServerRequest)
     -> GCDWebServerResponse?
   {
-    scanLock.lock()
+    let uts = Date().timeIntervalSince1970
+    let uptime = ProcessInfo.processInfo.systemUptime
 
-    if scanState != nil {
-      scanLock.unlock()
+    let campos = request.query?["campos"]?.split(separator: ",")
+      .map(Float.init).compactMap { $0 }
+    let camvel = Float(request.query?["camvel"] ?? "")
+    let fmt = UInt(request.query?["fmt"] ?? "0")
+    let fps = Double(request.query?["fps"] ?? "0")
+    let name = request.query?["name"] ?? "\(UIDevice.current.name)-\(uts)"
+    let nframes = UInt(request.query?["nframes"] ?? "1")
+    let start = TimeInterval(request.query?["start"] ?? String(uts))
+    let viewel = Float(request.query?["viewel"] ?? "0")
+
+    let numFormats = ARWorldTrackingConfiguration.supportedVideoFormats.count
+    if campos == nil || campos!.count != 3 || camvel == nil || fmt == nil
+      || fmt! >= numFormats || fps == nil || fps! < 0 || nframes == nil
+      || start == nil || start! < uts || viewel == nil
+    {
+      return GCDWebServerResponse(
+        statusCode: GCDWebServerClientErrorHTTPStatusCode
+          .httpStatusCode_BadRequest.rawValue)
+    }
+
+    let scan = Scan(
+      campos: FmPoint3(x: campos![0], y: campos![1], z: campos![2]),
+      camvel: camvel!, fps: fps!, name: name, nframes: Int(nframes!),
+      start: start! - uts + uptime, viewel: viewel!)
+
+    if !setScanIfNone(scan: scan) {
       return GCDWebServerResponse(
         statusCode: GCDWebServerClientErrorHTTPStatusCode
           .httpStatusCode_Conflict.rawValue)
     }
 
-    scanState = ScanState(
-      fps: Double(request.query?["fps"] ?? "0")!,
-      frameIndex: 0,
-      numFrames: Int(request.query?["nframes"] ?? "1")!,
-      start: TimeInterval(request.query?["start"] ?? "0")!
-    )
+    session.activate(videoFormat: Int(fmt!))
 
-    let format = Int(request.query?["format"] ?? "0")!
-    session.activate(videoFormat: format)
-
-    scanLock.unlock()
-
-    let resp = GCDWebServerStreamedResponse.init(
+    return GCDWebServerStreamedResponse(
       contentType: "text/plain",
-      asyncStreamBlock: { block in
-        block("this is a block ".data(using: .utf8), nil)
-      })
-    return resp
+      asyncStreamBlock: onStreamBlock)
   }
 
+  func onStreamBlock(block: @escaping GCDWebServerBodyReaderCompletionBlock) {
+    var scan: Scan?
+    while true {
+      scan = getScan()
+      if scan!.nextOutFrameReady() || scan!.noMoreOutFrames() {
+        break
+      }
+      Thread.sleep(forTimeInterval: 0.01)
+    }
+
+    if scan!.noMoreOutFrames() {
+      let err = fm_close_writer(scan!.writer)
+      assert(err == kFmOk)
+      block(Data(), nil)
+      setScan(scan: nil)
+    }
+
+    let url = AppDelegate.frameURL(index: scan!.outFrameIndex)
+    var data = try! Data(contentsOf: url)
+    try! FileManager.default.removeItem(at: url)
+    let frame = ScanFrame.decode(data: &data)
+
+    if scan!.writer == nil {
+      scan!.writer = createWriter(block: block, scan: scan!, frame: frame)
+    }
+
+    let png = [UInt8](UIImage(cgImage: frame.image).pngData()!)
+    png.withUnsafeBufferPointer { pngPtr in
+      frame.depths.withUnsafeBufferPointer { depthsPtr in
+        frame.depthConfidences.withUnsafeBufferPointer { depthConfidencesPtr in
+          let image = FmImage(
+            type: kFmImagePng, data: pngPtr.baseAddress, data_size: png.count)
+          var fmFrame = FmScanFrame(
+            scan: (scan!.name as NSString).utf8String,
+            time: Int64((frame.time - scan!.start) * 1_000_000_000),
+            image: image, depths: depthsPtr.baseAddress,
+            depths_size: frame.depths.count,
+            depth_confidences: depthConfidencesPtr.baseAddress,
+            depth_confidences_size: frame.depthConfidences.count)
+          let err = fm_write_scan_frame(scan!.writer, &fmFrame)
+          assert(err == kFmOk)
+        }
+      }
+    }
+
+    scan!.outFrameIndex += 1
+    setScan(scan: scan)
+  }
+
+  func createWriter(
+    block: @escaping GCDWebServerBodyReaderCompletionBlock, scan: Scan,
+    frame: ScanFrame
+  ) -> FmWriter {
+    var writer: FmWriter?
+
+    scan.block = block
+    let scanPtr = UnsafeMutableRawPointer(
+      Unmanaged.passRetained(scan).toOpaque())
+    var err = fm_create_writer(onWriterCallback, scanPtr, &writer)
+    assert(err == kFmOk)
+
+    var fmScan = FmScan(
+      name: (scan.name as NSString).utf8String, camera_position: scan.campos,
+      camera_velocity: scan.camvel, view_elevation: scan.viewel,
+      image_width: Int32(frame.image.width),
+      image_height: Int32(frame.image.height),
+      depth_width: Int32(frame.depthWidth),
+      depth_height: Int32(frame.depthHeight)
+    )
+    err = fm_write_scan(writer, &fmScan)
+    assert(err == kFmOk)
+
+    return writer!
+  }
+
+  let onWriterCallback:
+    @convention(c) (UnsafePointer<UInt8>?, Int, UnsafeMutableRawPointer?) ->
+      FmError = { (fm_data, fm_size, cb_data) in
+        let scan = Unmanaged<Scan>.fromOpaque(cb_data!).takeRetainedValue()
+        scan.block!(Data(bytes: fm_data!, count: fm_size), nil)
+        return kFmOk
+      }
+
   func onFrame(frame: ScanFrame) {
-    scanLock.lock()
-    if scanState == nil {
-      scanLock.unlock()
+    let scan = getScan()
+    if scan == nil || scan!.noMoreInFrames() {
       return
     }
 
-    if scanState!.fps != 0
-      && (Date().timeIntervalSince1970 - scanState!.start) * scanState!.fps
-        <= Double(scanState!.frameIndex)
+    if scan!.fps != 0
+      && (frame.time - scan!.start) * scan!.fps <= Double(scan!.inFrameIndex)
     {
-      scanLock.unlock()
       return
     }
 
-    ///
+    let url = AppDelegate.frameURL(index: scan!.inFrameIndex)
+    try! frame.encode().write(to: url)
+    scan!.inFrameIndex += 1
+    setScan(scan: scan)
 
-    scanLock.unlock()
+    if scan!.inFrameIndex == scan!.nframes {
+      session.release()
+    }
+  }
+
+  static func frameURL(index: Int) -> URL {
+    let tempDir = FileManager.default.temporaryDirectory
+    let fileName = "frame\(index).bin"
+    return tempDir.appendingPathComponent(fileName)
   }
 }

@@ -19,23 +19,23 @@ enum FmError fm_create_writer(FmWriteCallback callback, void *cb_data,
   impl->callback = callback;
   impl->cb_data = cb_data;
   *writer = impl;
-  call_callback(impl, "fm_create_writer ");
+  call_callback(impl, "fm_create_writer\n");
   return kFmOk;
 }
 
 enum FmError fm_close_writer(FmWriter writer) {
-  call_callback(writer, "fm_close_writer ");
+  call_callback(writer, "fm_close_writer\n");
   free(writer);
   return kFmOk;
 }
 
 enum FmError fm_write_scan(FmWriter writer, const struct FmScan *scan) {
-  call_callback(writer, "fm_write_scan ");
+  call_callback(writer, "fm_write_scan\n");
   return kFmOk;
 }
 
 enum FmError fm_write_scan_frame(FmWriter writer,
                                  const struct FmScanFrame *frame) {
-  call_callback(writer, "fm_write_scan_frame ");
+  call_callback(writer, "fm_write_scan_frame\n");
   return kFmOk;
 }

@@ -111,6 +111,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
       "BonjourName": "Fitsme Server",
       "ConnectedStateCoalescingInterval": 2.0,
       "Port": 8080,
+      "ServerName": "Fitsme Scanner",
     ]
 
     try! webServer.start(options: options)

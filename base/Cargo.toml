@@ -5,6 +5,10 @@ version = "0.1.0"
 authors = ["Simon Prykhodko <semion.ababo@gmail.com>"]
 edition = "2018"
 
+[lib]
+# TODO: Specify "staticlib" for aarch64-apple-ios only when it's supported.
+crate-type = ["rlib", "staticlib"]
+
 [dependencies]
 glam = "0.15.2"
 flate2 = "1.0"

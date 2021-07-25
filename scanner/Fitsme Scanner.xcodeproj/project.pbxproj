@@ -26,6 +26,7 @@
 		4062498F269E1DFC00C72812 /* GCDWebServerMultiPartFormRequest.m in Sources */ = {isa = PBXBuildFile; fileRef = 40624981269E1DFC00C72812 /* GCDWebServerMultiPartFormRequest.m */; };
 		40624990269E1DFC00C72812 /* GCDWebServerDataRequest.m in Sources */ = {isa = PBXBuildFile; fileRef = 40624982269E1DFC00C72812 /* GCDWebServerDataRequest.m */; };
 		40624991269E1DFC00C72812 /* GCDWebServerFileRequest.m in Sources */ = {isa = PBXBuildFile; fileRef = 40624983269E1DFC00C72812 /* GCDWebServerFileRequest.m */; };
+		40DF99A226ADCBA600049AC3 /* libbase.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 40DF99A126ADCA8200049AC3 /* libbase.a */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -66,6 +67,7 @@
 		40624983269E1DFC00C72812 /* GCDWebServerFileRequest.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = GCDWebServerFileRequest.m; sourceTree = "<group>"; };
 		40624984269E1DFC00C72812 /* GCDWebServerURLEncodedFormRequest.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = GCDWebServerURLEncodedFormRequest.h; sourceTree = "<group>"; };
 		40624992269E1E0E00C72812 /* Bridging-Header.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "Bridging-Header.h"; sourceTree = "<group>"; };
+		40DF99A126ADCA8200049AC3 /* libbase.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libbase.a; path = "../target/aarch64-apple-ios/release/libbase.a"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -73,6 +75,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				40DF99A226ADCBA600049AC3 /* libbase.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -87,6 +90,7 @@
 				401DDA16269DFCD30027B23B /* Fitsme Scanner */,
 				40624965269E1DFC00C72812 /* GCDWebServer */,
 				401DDA15269DFCD30027B23B /* Products */,
+				40DF99A026ADCA8200049AC3 /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
@@ -168,6 +172,14 @@
 				40624984269E1DFC00C72812 /* GCDWebServerURLEncodedFormRequest.h */,
 			);
 			path = Requests;
+			sourceTree = "<group>";
+		};
+		40DF99A026ADCA8200049AC3 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				40DF99A126ADCA8200049AC3 /* libbase.a */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -394,6 +406,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				"LIBRARY_SEARCH_PATHS[arch=*]" = "../target/aarch64-apple-ios/release";
 				PRODUCT_BUNDLE_IDENTIFIER = fitsme.scanner;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
@@ -415,6 +428,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				"LIBRARY_SEARCH_PATHS[arch=*]" = "../target/aarch64-apple-ios/release";
 				PRODUCT_BUNDLE_IDENTIFIER = fitsme.scanner;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;

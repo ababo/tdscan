@@ -17,6 +17,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     public var outFrameIndex = 0
     public var writer: FmWriter?
     public var block: GCDWebServerBodyReaderCompletionBlock?
+    public var lastOutUptime: TimeInterval = 0
 
     public init(
       campos: FmPoint3, camvel: Float, fps: Double, name: String, nframes: Int,
@@ -39,6 +40,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
   let lock = NSLock()
   let session = ScanSession()
   let webServer = GCDWebServer()
+  let outQueue = DispatchQueue(label: "out")
 
   var scan: Scan?
   var window: UIWindow?
@@ -92,6 +94,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
   }
 
   func startWebServer() {
+    GCDWebServer.setLogLevel(3)  // Warning.
+
     webServer.addHandler(
       forMethod: "GET", path: "/formats", request: GCDWebServerRequest.self,
       processBlock: onFormatsRequest)
@@ -139,8 +143,19 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
   func onScanRequest(request: GCDWebServerRequest)
     -> GCDWebServerResponse?
   {
+    print(
+      "Processing '/scan' request with query "
+        + (request.query?.description ?? ""))
+
     let uts = Date().timeIntervalSince1970
     let uptime = ProcessInfo.processInfo.systemUptime
+
+    if let scan = getScan() {
+      if uptime - scan.lastOutUptime > 5 {
+        finishScan(output: false)
+        print("Finished previously aborted '/scan' request")
+      }
+    }
 
     let campos = request.query?["campos"]?.split(separator: ",")
       .map(Float.init).compactMap { $0 }
@@ -157,6 +172,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
       || fmt! >= numFormats || fps == nil || fps! < 0 || nframes == nil
       || start == nil || start! < uts || viewel == nil
     {
+      print("Bad '/scan' request arguments")
       return GCDWebServerResponse(
         statusCode: GCDWebServerClientErrorHTTPStatusCode
           .httpStatusCode_BadRequest.rawValue)
@@ -168,6 +184,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
       start: start! - uts + uptime, viewel: viewel!)
 
     if !setScanIfNone(scan: scan) {
+      print("Refused '/scan' request, busy handling previous request")
       return GCDWebServerResponse(
         statusCode: GCDWebServerClientErrorHTTPStatusCode
           .httpStatusCode_Conflict.rawValue)
@@ -177,24 +194,32 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     return GCDWebServerStreamedResponse(
       contentType: "text/plain",
-      asyncStreamBlock: onStreamBlock)
+      asyncStreamBlock: { block in
+        self.outQueue.sync { self.onStreamBlock(block: block) }
+      })
   }
 
   func onStreamBlock(block: @escaping GCDWebServerBodyReaderCompletionBlock) {
     var scan: Scan?
     while true {
       scan = getScan()
-      if scan!.nextOutFrameReady() || scan!.noMoreOutFrames() {
+      if scan == nil || scan!.nextOutFrameReady() || scan!.noMoreOutFrames() {
         break
       }
       Thread.sleep(forTimeInterval: 0.01)
     }
 
-    if scan!.noMoreOutFrames() {
-      let err = fm_close_writer(scan!.writer)
-      assert(err == kFmOk)
+    if scan == nil {
       block(Data(), nil)
-      setScan(scan: nil)
+      return
+    }
+
+    scan!.lastOutUptime = ProcessInfo.processInfo.systemUptime
+
+    if scan!.noMoreOutFrames() {
+      finishScan(output: true)
+      print("Finished '/scan' request")
+      return
     }
 
     let url = AppDelegate.frameURL(index: scan!.outFrameIndex)
@@ -225,8 +250,22 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
       }
     }
 
+    print("Sent frame \(scan!.outFrameIndex)")
     scan!.outFrameIndex += 1
     setScan(scan: scan)
+  }
+
+  func finishScan(output: Bool) {
+    let scan = getScan()!
+
+    if !output {
+      scan.block = nil
+    }
+    setScan(scan: scan)
+    let err = fm_close_writer(scan.writer)
+    assert(err == kFmOk)
+
+    setScan(scan: nil)
   }
 
   func createWriter(
@@ -237,7 +276,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     scan.block = block
     let scanPtr = UnsafeMutableRawPointer(
-      Unmanaged.passRetained(scan).toOpaque())
+      Unmanaged.passUnretained(scan).toOpaque())
     var err = fm_create_writer(onWriterCallback, scanPtr, &writer)
     assert(err == kFmOk)
 
@@ -258,8 +297,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
   let onWriterCallback:
     @convention(c) (UnsafePointer<UInt8>?, Int, UnsafeMutableRawPointer?) ->
       FmError = { (fm_data, fm_size, cb_data) in
-        let scan = Unmanaged<Scan>.fromOpaque(cb_data!).takeRetainedValue()
-        scan.block!(Data(bytes: fm_data!, count: fm_size), nil)
+        let scan = Unmanaged<Scan>.fromOpaque(cb_data!).takeUnretainedValue()
+        scan.block?(Data(bytes: fm_data!, count: fm_size), nil)
         return kFmOk
       }
 

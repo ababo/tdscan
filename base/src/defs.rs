@@ -1,4 +1,7 @@
 use std::error::Error as StdError;
+use std::fmt::Display;
+use std::marker::Sync;
+use std::os::raw::c_int;
 use std::result;
 
 #[derive(Debug, PartialEq)]
@@ -11,6 +14,7 @@ pub enum ErrorKind {
     MalformedData = 6,
     UnsupportedFeature = 7,
     WebGlError = 8,
+    UnknownError = 9,
 }
 
 #[derive(Debug)]
@@ -42,7 +46,7 @@ impl Error {
     }
 }
 
-impl std::fmt::Display for Error {
+impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match &self.source {
             Some(err) => write!(f, "{}: {}", self.description, err),
@@ -64,6 +68,7 @@ impl StdError for Error {
 }
 
 unsafe impl Send for Error {}
+unsafe impl Sync for Error {}
 
 pub type Result<T> = result::Result<T, Error>;
 
@@ -82,5 +87,28 @@ impl<T> IntoResult<T> for result::Result<T, prost::DecodeError> {
         self.map_err(|e| {
             Error::with_source(ErrorKind::MalformedData, desc_fn(), e)
         })
+    }
+}
+
+impl IntoResult<()> for c_int {
+    fn into_result<F: FnOnce() -> String>(self, desc_fn: F) -> Result<()> {
+        if self == 0 {
+            return Ok(());
+        }
+
+        use ErrorKind::*;
+        let kind = match self {
+            1 => BadOperation,
+            2 => InconsistentState,
+            3 => IoError,
+            4 => JsError,
+            5 => LuaError,
+            6 => MalformedData,
+            7 => UnsupportedFeature,
+            8 => WebGlError,
+            _ => UnknownError,
+        };
+
+        Err(Error::new(kind, desc_fn()))
     }
 }

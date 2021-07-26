@@ -279,6 +279,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     let scanPtr = UnsafeMutableRawPointer(
       Unmanaged.passUnretained(scan).toOpaque())
     var err = fm_create_writer(onWriterCallback, scanPtr, &writer)
+    print("writer \(writer!)")
     assert(err == kFmOk)
 
     var fmScan = FmScan(

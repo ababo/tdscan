@@ -12,7 +12,6 @@
 		401DDA1E269DFCD60027B23B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 401DDA1D269DFCD60027B23B /* Assets.xcassets */; };
 		401DDA29269E04DC0027B23B /* Dimmer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 401DDA28269E04DC0027B23B /* Dimmer.swift */; };
 		40332297269F5F7500D740A9 /* ScanSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40332296269F5F7500D740A9 /* ScanSession.swift */; };
-		403DA63E26A9EEAF008FB56A /* ffi_mock.c in Sources */ = {isa = PBXBuildFile; fileRef = 403DA63D26A9EEAF008FB56A /* ffi_mock.c */; };
 		40624985269E1DFC00C72812 /* GCDWebServerResponse.m in Sources */ = {isa = PBXBuildFile; fileRef = 40624969269E1DFC00C72812 /* GCDWebServerResponse.m */; };
 		40624986269E1DFC00C72812 /* GCDWebServerRequest.m in Sources */ = {isa = PBXBuildFile; fileRef = 4062496C269E1DFC00C72812 /* GCDWebServerRequest.m */; };
 		40624987269E1DFC00C72812 /* GCDWebServerFunctions.m in Sources */ = {isa = PBXBuildFile; fileRef = 4062496F269E1DFC00C72812 /* GCDWebServerFunctions.m */; };
@@ -37,7 +36,6 @@
 		401DDA22269DFCD60027B23B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		401DDA28269E04DC0027B23B /* Dimmer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Dimmer.swift; sourceTree = "<group>"; };
 		40332296269F5F7500D740A9 /* ScanSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanSession.swift; sourceTree = "<group>"; };
-		403DA63D26A9EEAF008FB56A /* ffi_mock.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = ffi_mock.c; sourceTree = "<group>"; };
 		40624967269E1DFC00C72812 /* GCDWebServerFunctions.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = GCDWebServerFunctions.h; sourceTree = "<group>"; };
 		40624968269E1DFC00C72812 /* GCDWebServerPrivate.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = GCDWebServerPrivate.h; sourceTree = "<group>"; };
 		40624969269E1DFC00C72812 /* GCDWebServerResponse.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = GCDWebServerResponse.m; sourceTree = "<group>"; };
@@ -85,7 +83,6 @@
 		401DDA0B269DFCD30027B23B = {
 			isa = PBXGroup;
 			children = (
-				403DA63D26A9EEAF008FB56A /* ffi_mock.c */,
 				40624992269E1E0E00C72812 /* Bridging-Header.h */,
 				401DDA16269DFCD30027B23B /* Fitsme Scanner */,
 				40624965269E1DFC00C72812 /* GCDWebServer */,
@@ -267,7 +264,6 @@
 				40624989269E1DFC00C72812 /* GCDWebServerConnection.m in Sources */,
 				40624986269E1DFC00C72812 /* GCDWebServerRequest.m in Sources */,
 				4062498B269E1DFC00C72812 /* GCDWebServerFileResponse.m in Sources */,
-				403DA63E26A9EEAF008FB56A /* ffi_mock.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

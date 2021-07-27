@@ -192,6 +192,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     session.activate(videoFormat: Int(fmt!))
+    AudioServicesPlaySystemSound(1113)
 
     return GCDWebServerStreamedResponse(
       contentType: "text/plain",
@@ -322,6 +323,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     setScan(scan: scan)
 
     if scan!.inFrameIndex == scan!.nframes {
+      AudioServicesPlaySystemSound(1114)
       session.release()
     }
   }

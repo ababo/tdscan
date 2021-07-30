@@ -3,96 +3,15 @@ use std::collections::HashMap;
 use std::io::{stdin, stdout};
 use std::path::PathBuf;
 use std::result::Result as StdResult;
-use std::str::FromStr;
 
 use glam::{EulerRot, Quat};
 use structopt::StructOpt;
 
-use base::defs::{Error, ErrorKind::*, Result};
+use base::defs::Result;
 use base::fm;
-use base::util::cli::parse_key_val;
+use base::util::cli::{parse_key_val, Array as CliArray};
 use base::util::fs;
 use base::util::glam::{point3_to_vec3, vec3_to_point3};
-
-#[derive(Default, Clone, Copy)]
-pub struct Displacement {
-    dx: f32,
-    dy: f32,
-    dz: f32,
-}
-
-impl FromStr for Displacement {
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<Self> {
-        let malformed_err = || {
-            let desc = format!("malformed displacement '{}'", s);
-            Error::new(MalformedData, desc)
-        };
-
-        let parse = |iter: &mut std::str::Split<&str>| {
-            let part = iter.next().ok_or_else(|| malformed_err())?;
-            if part.is_empty() {
-                Ok(0.0)
-            } else {
-                part.parse::<f32>().or_else(|_| Err(malformed_err()))
-            }
-        };
-
-        let mut iter = s.split(",");
-        let dx = parse(&mut iter)?;
-        let dy = parse(&mut iter)?;
-        let dz = parse(&mut iter)?;
-
-        if iter.next().is_some() {
-            return Err(malformed_err());
-        }
-
-        Ok(Displacement { dx, dy, dz })
-    }
-}
-
-#[derive(Default, Clone, Copy)]
-pub struct Rotation {
-    around_x: f32,
-    around_y: f32,
-    around_z: f32,
-}
-
-impl FromStr for Rotation {
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<Self> {
-        let malformed_err = || {
-            let desc = format!("malformed rotation '{}'", s);
-            Error::new(MalformedData, desc)
-        };
-
-        let parse = |iter: &mut std::str::Split<&str>| {
-            let part = iter.next().ok_or_else(|| malformed_err())?;
-            if part.is_empty() {
-                Ok(0.0)
-            } else {
-                part.parse::<f32>().or_else(|_| Err(malformed_err()))
-            }
-        };
-
-        let mut iter = s.split(",");
-        let around_x = parse(&mut iter)?;
-        let around_y = parse(&mut iter)?;
-        let around_z = parse(&mut iter)?;
-
-        if iter.next().is_some() {
-            return Err(malformed_err());
-        }
-
-        Ok(Rotation {
-            around_x,
-            around_y,
-            around_z,
-        })
-    }
-}
 
 #[derive(StructOpt)]
 #[structopt(about = "Combine multiple .fm files")]
@@ -105,7 +24,7 @@ pub struct CombineParams {
             parse(try_from_str = parse_key_val),
             short = "d"
         )]
-    displacements: Vec<(String, Displacement)>,
+    displacements: Vec<(String, CliArray<f32, 3>)>,
     #[structopt(
             help=concat!("Element rotation in form ",
                 "'element=around_x,around_y,around_z' using radians"),
@@ -114,7 +33,7 @@ pub struct CombineParams {
             parse(try_from_str = parse_key_val),
             short = "r"
         )]
-    rotations: Vec<(String, Rotation)>,
+    rotations: Vec<(String, CliArray<f32, 3>)>,
     #[structopt(help="Element scaling in form 'element=scale'",
             long = "scaling",
             number_of_values = 1,
@@ -148,8 +67,16 @@ pub fn combine_with_params(params: &CombineParams) -> Result<()> {
         reader_refs.push(reader.as_mut());
     }
 
-    let displacements = params.displacements.iter().cloned().collect();
-    let rotations = params.rotations.iter().cloned().collect();
+    let displacements = params
+        .displacements
+        .iter()
+        .map(|d| (d.0.clone(), d.1 .0))
+        .collect();
+    let rotations = params
+        .rotations
+        .iter()
+        .map(|d| (d.0.clone(), d.1 .0))
+        .collect();
     let scalings = params.scalings.iter().cloned().collect();
 
     let mut writer = if let Some(path) = &params.out_path {
@@ -172,8 +99,8 @@ pub fn combine_with_params(params: &CombineParams) -> Result<()> {
 
 pub fn combine(
     readers: &mut [&mut dyn fm::Read],
-    displacements: &HashMap<String, Displacement>,
-    rotations: &HashMap<String, Rotation>,
+    displacements: &HashMap<String, [f32; 3]>,
+    rotations: &HashMap<String, [f32; 3]>,
     scalings: &HashMap<String, f32>,
     writer: &mut dyn fm::Write,
 ) -> Result<()> {
@@ -194,25 +121,21 @@ pub fn combine(
         {
             if let Some(disp) = displacements.get(&state.element) {
                 for i in 0..state.vertices.len() {
-                    state.vertices[i].x += disp.dx;
-                    state.vertices[i].y += disp.dy;
-                    state.vertices[i].z += disp.dz;
+                    state.vertices[i].x += disp[0];
+                    state.vertices[i].y += disp[1];
+                    state.vertices[i].z += disp[2];
                 }
 
                 for i in 0..state.normals.len() {
-                    state.normals[i].x += disp.dx;
-                    state.normals[i].y += disp.dy;
-                    state.normals[i].z += disp.dz;
+                    state.normals[i].x += disp[0];
+                    state.normals[i].y += disp[1];
+                    state.normals[i].z += disp[2];
                 }
             }
 
             if let Some(rot) = rotations.get(&state.element) {
-                let quat = Quat::from_euler(
-                    EulerRot::XYZ,
-                    rot.around_x,
-                    rot.around_y,
-                    rot.around_z,
-                );
+                let quat =
+                    Quat::from_euler(EulerRot::XYZ, rot[0], rot[1], rot[2]);
 
                 for i in 0..state.vertices.len() {
                     state.vertices[i] = vec3_to_point3(
@@ -325,18 +248,6 @@ mod tests {
     use fm::record::Type::*;
     use fm::Read as _;
 
-    fn new_displacement(dx: f32, dy: f32, dz: f32) -> Displacement {
-        Displacement { dx, dy, dz }
-    }
-
-    fn new_rotation(around_x: f32, around_y: f32, around_z: f32) -> Rotation {
-        Rotation {
-            around_x,
-            around_y,
-            around_z,
-        }
-    }
-
     fn new_simple_element_view_rec(element: &str) -> fm::Record {
         new_element_view_rec(fm::ElementView {
             element: format!("{}", element),
@@ -372,10 +283,10 @@ mod tests {
         let mut readers: [&mut dyn fm::Read; 2] = [&mut reader1, &mut reader2];
 
         let mut displacements = HashMap::new();
-        displacements.insert(format!("e2"), new_displacement(0.3, 0.4, 0.5));
+        displacements.insert(format!("e2"), [0.3, 0.4, 0.5]);
 
         let mut rotations = HashMap::new();
-        rotations.insert(format!("e1"), new_rotation(0.6, 0.7, 0.8));
+        rotations.insert(format!("e1"), [0.6, 0.7, 0.8]);
 
         let mut scales = HashMap::new();
         scales.insert(format!("e1"), 2.0);

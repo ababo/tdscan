@@ -1,20 +1,25 @@
 use std::error::Error as StdError;
 use std::fmt::Display;
+use std::io::Error as IoError;
 use std::marker::Sync;
 use std::os::raw::c_int;
-use std::result;
+use std::result::Result as StdResult;
+
+use prost::DecodeError as ProtobufError;
+use serde_json::Error as JsonError;
 
 #[derive(Debug, PartialEq)]
 pub enum ErrorKind {
-    BadOperation = 1,
-    InconsistentState = 2,
-    IoError = 3,
-    JsError = 4,
-    LuaError = 5,
-    MalformedData = 6,
-    UnsupportedFeature = 7,
-    WebGlError = 8,
-    UnknownError = 9,
+    UnknownError = 1,
+    BadOperation = 2,
+    InconsistentState = 3,
+    IoError = 4,
+    JsError = 5,
+    LuaError = 6,
+    MalformedData = 7,
+    UnsupportedFeature = 8,
+    WebGlError = 9,
+    JsonError = 10,
 }
 
 #[derive(Debug)]
@@ -33,7 +38,7 @@ impl Error {
         }
     }
 
-    pub fn with_source<E: std::error::Error + 'static>(
+    pub fn with_source<E: StdError + 'static>(
         kind: ErrorKind,
         description: String,
         source: E,
@@ -70,24 +75,10 @@ impl StdError for Error {
 unsafe impl Send for Error {}
 unsafe impl Sync for Error {}
 
-pub type Result<T> = result::Result<T, Error>;
+pub type Result<T> = StdResult<T, Error>;
 
 pub trait IntoResult<T> {
     fn into_result<F: FnOnce() -> String>(self, desc_fn: F) -> Result<T>;
-}
-
-impl<T> IntoResult<T> for result::Result<T, std::io::Error> {
-    fn into_result<F: FnOnce() -> String>(self, desc_fn: F) -> Result<T> {
-        self.map_err(|e| Error::with_source(ErrorKind::IoError, desc_fn(), e))
-    }
-}
-
-impl<T> IntoResult<T> for result::Result<T, prost::DecodeError> {
-    fn into_result<F: FnOnce() -> String>(self, desc_fn: F) -> Result<T> {
-        self.map_err(|e| {
-            Error::with_source(ErrorKind::MalformedData, desc_fn(), e)
-        })
-    }
 }
 
 impl IntoResult<()> for c_int {
@@ -110,5 +101,25 @@ impl IntoResult<()> for c_int {
         };
 
         Err(Error::new(kind, desc_fn()))
+    }
+}
+
+impl<T> IntoResult<T> for StdResult<T, JsonError> {
+    fn into_result<F: FnOnce() -> String>(self, desc_fn: F) -> Result<T> {
+        self.map_err(|e| Error::with_source(ErrorKind::JsonError, desc_fn(), e))
+    }
+}
+
+impl<T> IntoResult<T> for StdResult<T, ProtobufError> {
+    fn into_result<F: FnOnce() -> String>(self, desc_fn: F) -> Result<T> {
+        self.map_err(|e| {
+            Error::with_source(ErrorKind::MalformedData, desc_fn(), e)
+        })
+    }
+}
+
+impl<T> IntoResult<T> for StdResult<T, IoError> {
+    fn into_result<F: FnOnce() -> String>(self, desc_fn: F) -> Result<T> {
+        self.map_err(|e| Error::with_source(ErrorKind::IoError, desc_fn(), e))
     }
 }

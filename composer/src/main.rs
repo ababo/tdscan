@@ -1,7 +1,7 @@
 mod animate;
 mod combine;
+mod export_to_json;
 mod import_obj;
-
 use structopt::StructOpt;
 
 #[derive(StructOpt)]
@@ -15,6 +15,7 @@ struct Opts {
 enum Command {
     Animate(animate::AnimateParams),
     Combine(combine::CombineParams),
+    ExportToJson(export_to_json::ExportToJsonParams),
     ImportObj(import_obj::ImportObjParams),
 }
 
@@ -24,6 +25,9 @@ fn main() {
     let res = match opts.command {
         Command::Animate(params) => animate::animate_with_params(&params),
         Command::Combine(params) => combine::combine_with_params(&params),
+        Command::ExportToJson(params) => {
+            export_to_json::export_to_json_with_params(&params)
+        }
         Command::ImportObj(params) => {
             import_obj::import_obj_with_params(&params)
         }

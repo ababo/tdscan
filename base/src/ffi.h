@@ -6,9 +6,9 @@
 
 enum FmError {
   kFmOk = 0,
-  kFmIoError = 3,
-  kFmMalformedData = 6,
-  kFmUnsupportedFeature = 7,
+  kFmIoError = 4,
+  kFmMalformedData = 7,
+  kFmUnsupportedFeature = 8,
 };
 
 typedef void *FmWriter;

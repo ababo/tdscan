@@ -80,6 +80,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     didFinishLaunchingWithOptions launchOptions: [UIApplication
       .LaunchOptionsKey: Any]?
   ) -> Bool {
+    application.isIdleTimerDisabled = true
     createWindow()
     startWebServer()
     return true
@@ -110,7 +111,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
       "BindToLocalhost": false,
       "BonjourName": "Fitsme Server",
       "ConnectedStateCoalescingInterval": 2.0,
-      "Port": 8080,
+      "Port": 9321,
       "ServerName": "Fitsme Scanner",
     ]
 

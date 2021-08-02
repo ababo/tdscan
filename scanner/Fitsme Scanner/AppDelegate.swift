@@ -238,17 +238,19 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     png.withUnsafeBufferPointer { pngPtr in
       frame.depths.withUnsafeBufferPointer { depthsPtr in
         frame.depthConfidences.withUnsafeBufferPointer { depthConfidencesPtr in
-          let image = FmImage(
-            type: kFmImagePng, data: pngPtr.baseAddress, data_size: png.count)
-          var fmFrame = FmScanFrame(
-            scan: (scan!.name as NSString).utf8String,
-            time: Int64((frame.time - scan!.start) * 1_000_000_000),
-            image: image, depths: depthsPtr.baseAddress,
-            depths_size: frame.depths.count,
-            depth_confidences: depthConfidencesPtr.baseAddress,
-            depth_confidences_size: frame.depthConfidences.count)
-          let err = fm_write_scan_frame(scan!.writer, &fmFrame)
-          assert(err == kFmOk)
+          scan!.name.cString(using: .utf8)!.withUnsafeBufferPointer { namePtr in
+            let image = FmImage(
+              type: kFmImagePng, data: pngPtr.baseAddress, data_size: png.count)
+            var fmFrame = FmScanFrame(
+              scan: namePtr.baseAddress,
+              time: Int64((frame.time - scan!.start) * 1_000_000_000),
+              image: image, depths: depthsPtr.baseAddress,
+              depths_size: frame.depths.count,
+              depth_confidences: depthConfidencesPtr.baseAddress,
+              depth_confidences_size: frame.depthConfidences.count)
+            let err = fm_write_scan_frame(scan!.writer, &fmFrame)
+            assert(err == kFmOk)
+          }
         }
       }
     }
@@ -281,19 +283,20 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     let scanPtr = UnsafeMutableRawPointer(
       Unmanaged.passUnretained(scan).toOpaque())
     var err = fm_create_writer(onWriterCallback, scanPtr, &writer)
-    print("writer \(writer!)")
     assert(err == kFmOk)
 
-    var fmScan = FmScan(
-      name: (scan.name as NSString).utf8String, camera_position: scan.campos,
-      camera_velocity: scan.camvel, view_elevation: scan.viewel,
-      image_width: Int32(frame.image.width),
-      image_height: Int32(frame.image.height),
-      depth_width: Int32(frame.depthWidth),
-      depth_height: Int32(frame.depthHeight)
-    )
-    err = fm_write_scan(writer, &fmScan)
-    assert(err == kFmOk)
+    scan.name.cString(using: .utf8)!.withUnsafeBufferPointer { namePtr in
+      var fmScan = FmScan(
+        name: namePtr.baseAddress, camera_position: scan.campos,
+        camera_velocity: scan.camvel, view_elevation: scan.viewel,
+        image_width: Int32(frame.image.width),
+        image_height: Int32(frame.image.height),
+        depth_width: Int32(frame.depthWidth),
+        depth_height: Int32(frame.depthHeight)
+      )
+      err = fm_write_scan(writer, &fmScan)
+      assert(err == kFmOk)
+    }
 
     return writer!
   }

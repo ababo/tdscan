@@ -80,6 +80,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     didFinishLaunchingWithOptions launchOptions: [UIApplication
       .LaunchOptionsKey: Any]?
   ) -> Bool {
+    UIDevice.current.beginGeneratingDeviceOrientationNotifications()
     application.isIdleTimerDisabled = true
     createWindow()
     startWebServer()
@@ -285,10 +286,28 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var err = fm_create_writer(onWriterCallback, scanPtr, &writer)
     assert(err == kFmOk)
 
+    var angle_of_view: Float
+    switch session.arSession.configuration!.videoFormat.captureDeviceType {
+    case AVCaptureDevice.DeviceType.builtInWideAngleCamera:
+      // See https://photo.stackexchange.com/questions/106509.
+      angle_of_view = 1.17460658659
+    case AVCaptureDevice.DeviceType.builtInUltraWideCamera:
+      angle_of_view = 2.09439510239
+    default:
+      fatalError("Unknown angle of view")
+    }
+
+    let portrait_angle: Float =
+      UIDevice.current.orientation.isPortrait ? 0 : 1.57079632679
+
     scan.name.cString(using: .utf8)!.withUnsafeBufferPointer { namePtr in
       var fmScan = FmScan(
-        name: namePtr.baseAddress, camera_position: scan.campos,
-        camera_velocity: scan.camvel, view_elevation: scan.viewel,
+        name: namePtr.baseAddress,
+        camera_angle_of_view: angle_of_view,
+        camera_portrait_angle: portrait_angle,
+        camera_view_elevation: scan.viewel,
+        camera_angular_velocity: scan.camvel,
+        camera_initial_position: scan.campos,
         image_width: Int32(frame.image.width),
         image_height: Int32(frame.image.height),
         depth_width: Int32(frame.depthWidth),

@@ -52,13 +52,15 @@ message ElementViewState {
 
 message Scan {
   string name = 1;
-  Point3 camera_position = 2;
-  float camera_velocity = 3;
-  float view_elevation = 4;
-  uint32 image_width = 5;
-  uint32 image_height = 6;
-  uint32 depth_width = 7;
-  uint32 depth_height = 8;
+  float camera_angle_of_view = 2;
+  float camera_portrait_angle = 3;
+  float camera_view_elevation = 4;
+  float camera_angular_velocity = 5;
+  Point3 camera_initial_position = 6;
+  uint32 image_width = 7;
+  uint32 image_height = 8;
+  uint32 depth_width = 9;
+  uint32 depth_height = 10;
 }
 
 message ScanFrame {

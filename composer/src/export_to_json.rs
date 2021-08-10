@@ -1,7 +1,6 @@
 use std::io;
 use std::io::{stdin, stdout};
 use std::path::PathBuf;
-use std::str::from_utf8;
 
 use serde::ser::Serialize;
 use serde_json::{to_value, to_writer, to_writer_pretty, Value};

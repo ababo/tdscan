@@ -1,4 +1,5 @@
 mod animate;
+mod build_view;
 mod combine;
 mod export_to_json;
 mod import_obj;
@@ -14,6 +15,7 @@ struct Opts {
 #[derive(StructOpt)]
 enum Command {
     Animate(animate::AnimateParams),
+    BuildView(build_view::BuildViewParams),
     Combine(combine::CombineParams),
     ExportToJson(export_to_json::ExportToJsonParams),
     ImportObj(import_obj::ImportObjParams),
@@ -24,6 +26,9 @@ fn main() {
 
     let res = match opts.command {
         Command::Animate(params) => animate::animate_with_params(&params),
+        Command::BuildView(params) => {
+            build_view::build_view_with_params(&params)
+        }
         Command::Combine(params) => combine::combine_with_params(&params),
         Command::ExportToJson(params) => {
             export_to_json::export_to_json_with_params(&params)

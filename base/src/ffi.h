@@ -41,9 +41,11 @@ struct FmImage {
 
 struct FmScan {
   const char *name;
-  struct FmPoint3 camera_position;
-  float camera_velocity;
-  float view_elevation;
+  float camera_angle_of_view;
+  float camera_portrait_angle;
+  float camera_view_elevation;
+  float camera_angular_velocity;
+  struct FmPoint3 camera_initial_position;
   int image_width;
   int image_height;
   int depth_width;

@@ -74,7 +74,7 @@ pub struct FmPoint3 {
 pub struct FmScan {
     name: *const c_char,
     camera_angle_of_view: c_float,
-    camera_portrait_angle: c_float,
+    camera_landscape_angle: c_float,
     camera_view_elevation: c_float,
     camera_angular_velocity: c_float,
     camera_initial_position: FmPoint3,
@@ -93,7 +93,7 @@ pub unsafe extern "C" fn fm_write_scan(
         r#type: Some(Scan(fm::Scan {
             name: CStr::from_ptr(scan.name).to_str().unwrap().to_owned(),
             camera_angle_of_view: scan.camera_angle_of_view,
-            camera_portrait_angle: scan.camera_portrait_angle,
+            camera_landscape_angle: scan.camera_landscape_angle,
             camera_view_elevation: scan.camera_view_elevation,
             camera_angular_velocity: scan.camera_angular_velocity,
             camera_initial_position: Some(fm::Point3 {

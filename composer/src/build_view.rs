@@ -149,7 +149,7 @@ fn build_point_cloud(
     scan_frames: &Vec<fm::ScanFrame>,
 ) -> Vec<fm::Point3> {
     let mut points = Vec::new();
-    let time_base = scan_frames.first().map(|f| f.time).unwrap_or_default();
+    // let time_base = scan_frames.first().map(|f| f.time).unwrap_or_default();
 
     let mut file =
         std::fs::File::create("/Users/ababo/Desktop/foo.obj").unwrap();
@@ -157,9 +157,10 @@ fn build_point_cloud(
     for frame in scan_frames {
         let scan = scans.get(&frame.scan).unwrap();
         let tan = (scan.camera_angle_of_view as f32 / 2.0).tan();
-        let timestamp = (frame.time - time_base) as f32;
-        let camera_angle = timestamp * scan.camera_angular_velocity;
+        // let timestamp = (frame.time - time_base) as f32;
+        // let camera_angle = timestamp * scan.camera_angular_velocity;
 
+        let landscape_rot = Quat::from_rotation_z(-1.57079632679); //scan.camera_landscape_angle);
         let eye = scan.camera_initial_position.unwrap_or_default();
         let elev = Vec3::new(0.0, 0.0, scan.camera_view_elevation);
         let look = point3_to_vec3(&eye) - elev;
@@ -175,6 +176,7 @@ fn build_point_cloud(
             (look[2] / (look[0] * look[0] + look[1] * look[1]).sqrt()).atan()
                 + PI / 2.0;
         let look_rot = Quat::from_axis_angle(look_rot_axis, look_angle);
+        let rot = look_rot.mul_quat(landscape_rot);
 
         for i in 0..scan.depth_height {
             for j in 0..scan.depth_width {
@@ -193,7 +195,7 @@ fn build_point_cloud(
                 let x = (2.0 * depth as f32 * w * tan) / denom;
                 let y = (2.0 * depth as f32 * h * tan) / denom;
                 let z = (depth as f32 * scan.depth_width as f32) / denom;
-                let point = look_rot.mul_vec3(Vec3::new(x, y, z)) + look + elev;
+                let point = rot.mul_vec3(Vec3::new(x, y, z)) + look + elev;
 
                 let z_dist = (point[0] * point[0] + point[1] * point[1]).sqrt();
                 if point[2] < min_z

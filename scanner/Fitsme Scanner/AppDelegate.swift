@@ -297,14 +297,14 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
       fatalError("Unknown angle of view")
     }
 
-    let portrait_angle: Float =
-      UIDevice.current.orientation.isPortrait ? 0 : 1.57079632679
+    let landscape_angle: Float =
+      UIDevice.current.orientation.isLandscape ? 0 : -1.57079632679
 
     scan.name.cString(using: .utf8)!.withUnsafeBufferPointer { namePtr in
       var fmScan = FmScan(
         name: namePtr.baseAddress,
         camera_angle_of_view: angle_of_view,
-        camera_portrait_angle: portrait_angle,
+        camera_landscape_angle: landscape_angle,
         camera_view_elevation: scan.viewel,
         camera_angular_velocity: scan.camvel,
         camera_initial_position: scan.campos,

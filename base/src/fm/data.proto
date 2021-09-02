@@ -61,6 +61,8 @@ message Scan {
   uint32 image_height = 8;
   uint32 depth_width = 9;
   uint32 depth_height = 10;
+  // Whether depth designates a distance between sensor plane and object.
+  bool sensor_plane_depth = 11;
 }
 
 message ScanFrame {

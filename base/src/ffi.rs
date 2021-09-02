@@ -82,6 +82,7 @@ pub struct FmScan {
     image_height: c_int,
     depth_width: c_int,
     depth_height: c_int,
+    sensor_plane_depth: c_int,
 }
 
 #[no_mangle]
@@ -105,6 +106,7 @@ pub unsafe extern "C" fn fm_write_scan(
             image_height: scan.image_height as u32,
             depth_width: scan.depth_width as u32,
             depth_height: scan.depth_height as u32,
+            sensor_plane_depth: scan.sensor_plane_depth != 0,
         })),
     };
 

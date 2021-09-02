@@ -50,6 +50,7 @@ struct FmScan {
   int image_height;
   int depth_width;
   int depth_height;
+  int sensor_plane_depth;
 };
 
 enum FmError fm_write_scan(FmWriter writer, const struct FmScan *scan);

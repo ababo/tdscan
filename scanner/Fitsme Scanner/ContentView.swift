@@ -29,13 +29,24 @@ struct ContentView: View {
           Rectangle()
             .fill(Color.black)
             .frame(height: viewTopOffset)
-          ARViewContainer(session: session)
-            .onAppear {
-              session.activate()
+          ZStack {
+            ARViewContainer(session: session)
+              .onAppear {
+                session.activate()
+              }
+              .onDisappear {
+                session.release()
+              }
+            GeometryReader { geometry in
+              Path { path in
+                let size = geometry.size
+                path.move(to: CGPoint(x: 0, y: size.height / 2))
+                path.addLine(to: CGPoint(x: size.width, y: size.height / 2))
+                path.move(to: CGPoint(x: size.width / 2, y: 0))
+                path.addLine(to: CGPoint(x: size.width / 2, y: size.height))
+              }.stroke(Color.red)
             }
-            .onDisappear {
-              session.release()
-            }
+          }
           Rectangle()
             .fill(Color.black)
             .frame(height: viewBottomOffset)

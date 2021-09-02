@@ -5,13 +5,13 @@ import UIKit
 @main
 class AppDelegate: UIResponder, UIApplicationDelegate {
   class Scan {
-    public let campos: FmPoint3
-    public let camvel: Float
+    public let eye: FmPoint3
+    public let vel: Float
     public let fps: Double
     public let name: String
-    public let nframes: Int
-    public let start: TimeInterval
-    public let viewel: Float
+    public let nof: Int
+    public let at: TimeInterval
+    public let elev: Float
 
     public var inFrameIndex = 0
     public var outFrameIndex = 0
@@ -20,21 +20,21 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     public var lastOutUptime: TimeInterval = 0
 
     public init(
-      campos: FmPoint3, camvel: Float, fps: Double, name: String, nframes: Int,
-      start: TimeInterval, viewel: Float
+      eye: FmPoint3, vel: Float, fps: Double, name: String, nof: Int,
+      at: TimeInterval, elev: Float
     ) {
-      self.campos = campos
-      self.camvel = camvel
+      self.eye = eye
+      self.vel = vel
       self.fps = fps
       self.name = name
-      self.nframes = nframes
-      self.start = start
-      self.viewel = viewel
+      self.nof = nof
+      self.at = at
+      self.elev = elev
     }
 
     public func nextOutFrameReady() -> Bool { inFrameIndex > outFrameIndex }
-    public func noMoreInFrames() -> Bool { inFrameIndex == nframes }
-    public func noMoreOutFrames() -> Bool { outFrameIndex == nframes }
+    public func noMoreInFrames() -> Bool { inFrameIndex == nof }
+    public func noMoreOutFrames() -> Bool { outFrameIndex == nof }
   }
 
   let lock = NSLock()
@@ -160,20 +160,20 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
       }
     }
 
-    let campos = request.query?["campos"]?.split(separator: ",")
+    let eye = request.query?["eye"]?.split(separator: ",")
       .map(Float.init).compactMap { $0 }
-    let camvel = Float(request.query?["camvel"] ?? "")
+    let vel = Float(request.query?["vel"] ?? "")
     let fmt = UInt(request.query?["fmt"] ?? "0")
     let fps = Double(request.query?["fps"] ?? "0")
     let name = request.query?["name"] ?? "\(UIDevice.current.name)-\(uts)"
-    let nframes = UInt(request.query?["nframes"] ?? "1")
-    let start = TimeInterval(request.query?["start"] ?? String(uts))
-    let viewel = Float(request.query?["viewel"] ?? "0")
+    let nof = UInt(request.query?["nof"] ?? "1")
+    let at = TimeInterval(request.query?["at"] ?? String(uts))
+    let elev = Float(request.query?["elev"] ?? "0")
 
     let numFormats = ARWorldTrackingConfiguration.supportedVideoFormats.count
-    if campos == nil || campos!.count != 3 || camvel == nil || fmt == nil
-      || fmt! >= numFormats || fps == nil || fps! < 0 || nframes == nil
-      || start == nil || start! < uts || viewel == nil
+    if eye == nil || eye!.count != 3 || vel == nil || fmt == nil
+      || fmt! >= numFormats || fps == nil || fps! < 0 || nof == nil
+      || at == nil || at! < uts || elev == nil
     {
       print("Bad '/scan' request arguments")
       return GCDWebServerResponse(
@@ -182,9 +182,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     let scan = Scan(
-      campos: FmPoint3(x: campos![0], y: campos![1], z: campos![2]),
-      camvel: camvel!, fps: fps!, name: name, nframes: Int(nframes!),
-      start: start! - uts + uptime, viewel: viewel!)
+      eye: FmPoint3(x: eye![0], y: eye![1], z: eye![2]),
+      vel: vel!, fps: fps!, name: name, nof: Int(nof!),
+      at: at! - uts + uptime, elev: elev!)
 
     if !setScanIfNone(scan: scan) {
       print("Refused '/scan' request, busy handling previous request")
@@ -244,7 +244,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
               type: kFmImagePng, data: pngPtr.baseAddress, data_size: png.count)
             var fmFrame = FmScanFrame(
               scan: namePtr.baseAddress,
-              time: Int64((frame.time - scan!.start) * 1_000_000_000),
+              time: Int64((frame.time - scan!.at) * 1_000_000_000),
               image: image, depths: depthsPtr.baseAddress,
               depths_size: frame.depths.count,
               depth_confidences: depthConfidencesPtr.baseAddress,
@@ -305,13 +305,14 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         name: namePtr.baseAddress,
         camera_angle_of_view: angle_of_view,
         camera_landscape_angle: landscape_angle,
-        camera_view_elevation: scan.viewel,
-        camera_angular_velocity: scan.camvel,
-        camera_initial_position: scan.campos,
+        camera_view_elevation: scan.elev,
+        camera_angular_velocity: scan.vel,
+        camera_initial_position: scan.eye,
         image_width: Int32(frame.image.width),
         image_height: Int32(frame.image.height),
         depth_width: Int32(frame.depthWidth),
-        depth_height: Int32(frame.depthHeight)
+        depth_height: Int32(frame.depthHeight),
+        sensor_plane_depth: 1
       )
       err = fm_write_scan(writer, &fmScan)
       assert(err == kFmOk)
@@ -335,7 +336,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     if scan!.fps != 0
-      && (frame.time - scan!.start) * scan!.fps <= Double(scan!.inFrameIndex)
+      && (frame.time - scan!.at) * scan!.fps <= Double(scan!.inFrameIndex)
     {
       return
     }
@@ -345,7 +346,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     scan!.inFrameIndex += 1
     setScan(scan: scan)
 
-    if scan!.inFrameIndex == scan!.nframes {
+    if scan!.inFrameIndex == scan!.nof {
       AudioServicesPlaySystemSound(1114)
       session.release()
     }

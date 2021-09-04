@@ -119,6 +119,8 @@ fn write_record<T: Serialize>(
 
 #[cfg(test)]
 mod tests {
+    use std::str::from_utf8;
+
     use super::*;
     use base::util::test::*;
 

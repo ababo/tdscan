@@ -131,21 +131,11 @@ pub fn build_view(
 
         use fm::record::Type::*;
         match rec.unwrap().r#type {
-            Some(Scan(mut s)) => {
+            Some(Scan(s)) => {
                 if !scan_frames.is_empty() {
                     let desc = format!("scan '{}' after scan frame ", &s.name);
                     return Err(Error::new(InconsistentState, desc));
                 }
-
-                if let Some(eye) = camera_initial_positions.get(&s.name) {
-                    s.camera_initial_position =
-                        Some(vec3_to_point3(&Vec3::from(*eye)));
-                }
-
-                if let Some(elev) = camera_view_elevations.get(&s.name) {
-                    s.camera_view_elevation = *elev;
-                }
-
                 scans.insert(s.name.clone(), s);
             }
             Some(ScanFrame(f)) => {
@@ -164,6 +154,31 @@ pub fn build_view(
                 scan_frames.push(f);
             }
             _ => (),
+        }
+
+        let unknown_scan_err = |name| {
+            let desc = format!(
+                "unknown scan '{}' for camera initial position override",
+                name
+            );
+            return Err(Error::new(InconsistentState, desc));
+        };
+
+        for (name, eye) in camera_initial_positions {
+            if let Some(scan) = scans.get_mut(name) {
+                scan.camera_initial_position =
+                    Some(vec3_to_point3(&Vec3::from(*eye)));
+            } else {
+                return unknown_scan_err(name);
+            }
+        }
+
+        for (name, elev) in camera_view_elevations {
+            if let Some(scan) = scans.get_mut(name) {
+                scan.camera_view_elevation = *elev;
+            } else {
+                return unknown_scan_err(name);
+            }
         }
     }
 

@@ -256,7 +256,7 @@ fn build_point_cloud(
                 let depth_width = scan.depth_width as f32;
                 let w = j as f32 - depth_width / 2.0;
                 let h = i as f32 - scan.depth_height as f32 / 2.0;
-                let proj_square = w * w + h + h;
+                let proj_square = w * w + h * h;
                 if scan.sensor_plane_depth {
                     let fl = depth_width / tan / 2.0;
                     depth /= (proj_square.sqrt() / fl).atan().cos();

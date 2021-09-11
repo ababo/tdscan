@@ -60,6 +60,7 @@ pub struct WriterParams {
         long
     )]
     pub compression: Compression,
+
     #[structopt(
         name = "fm-gzip-level",
         help = "Level of gzip-compression for output .fm file",

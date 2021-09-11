@@ -18,6 +18,7 @@ use base::util::glam::{point3_to_vec3, vec3_to_point3};
 pub struct BuildViewParams {
     #[structopt(help = "Input scan .fm file (STDIN if omitted)")]
     in_path: Option<PathBuf>,
+
     #[structopt(
         help = "Camera initial position to override with",
         long = "camera-initial-position",
@@ -26,6 +27,7 @@ pub struct BuildViewParams {
             short = "y"
     )]
     camera_initial_positions: Vec<(String, CliArray<f32, 3>)>,
+
     #[structopt(
         help = "Camera view elevation to override with",
         long = "camera-view-elevation",
@@ -34,12 +36,14 @@ pub struct BuildViewParams {
             short = "e"
     )]
     camera_view_elevations: Vec<(String, f32)>,
+
     #[structopt(
         help = "Minimum depth confidence",
         long,
         default_value = "high"
     )]
     min_depth_confidence: DepthConfidence,
+
     #[structopt(
         help = "Minimum point Z-coordinate",
         long,
@@ -47,6 +51,7 @@ pub struct BuildViewParams {
         default_value = "-inf"
     )]
     min_z: f32,
+
     #[structopt(
         help = "Maximum point Z-coordinate",
         long,
@@ -54,6 +59,7 @@ pub struct BuildViewParams {
         default_value = "inf"
     )]
     max_z: f32,
+
     #[structopt(
         help = "Maximum point distance from Z axis",
         long,
@@ -61,12 +67,14 @@ pub struct BuildViewParams {
         default_value = "inf"
     )]
     max_z_distance: f32,
+
     #[structopt(
         help = "Output element view .fm file (STDOUT if omitted)",
         long,
         short = "o"
     )]
     out_path: Option<PathBuf>,
+
     #[structopt(flatten)]
     fm_write_params: fm::WriterParams,
 }

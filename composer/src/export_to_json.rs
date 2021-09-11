@@ -15,12 +15,14 @@ use base::util::fs;
 pub struct ExportToJsonParams {
     #[structopt(help = "Input .fm file (STDIN if omitted)")]
     in_path: Option<PathBuf>,
+
     #[structopt(
         help = "Output .json file (STDOUT if omitted)",
         long,
         short = "o"
     )]
     out_path: Option<PathBuf>,
+
     #[structopt(
         help = concat!("Maximum length for string, array ",
             "or object (the rest of elements to be truncated)"),
@@ -28,6 +30,7 @@ pub struct ExportToJsonParams {
         short = "m"
     )]
     max_len: Option<usize>,
+
     #[structopt(help = "Prettify JSON output", long, short = "p")]
     pretty: bool,
 }

@@ -18,6 +18,7 @@ use base::util::glam::{point3_to_vec3, vec3_to_point3};
 pub struct CombineParams {
     #[structopt(help = "Input .fm files")]
     in_paths: Vec<PathBuf>,
+
     #[structopt(help="Element displacement in form 'element=dx,dy,dz'",
             long = "displacement",
             number_of_values = 1,
@@ -25,6 +26,7 @@ pub struct CombineParams {
             short = "d"
         )]
     displacements: Vec<(String, CliArray<f32, 3>)>,
+
     #[structopt(
             help=concat!("Element rotation in form ",
                 "'element=around_x,around_y,around_z' using radians"),
@@ -34,6 +36,7 @@ pub struct CombineParams {
             short = "r"
         )]
     rotations: Vec<(String, CliArray<f32, 3>)>,
+
     #[structopt(help="Element scaling in form 'element=scale'",
             long = "scaling",
             number_of_values = 1,
@@ -41,12 +44,14 @@ pub struct CombineParams {
             short = "s"
         )]
     scalings: Vec<(String, f32)>,
+
     #[structopt(
         help = "Output .fm file (STDOUT if omitted)",
         long,
         short = "o"
     )]
     out_path: Option<PathBuf>,
+
     #[structopt(flatten)]
     fm_write_params: fm::WriterParams,
 }

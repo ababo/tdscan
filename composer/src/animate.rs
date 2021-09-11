@@ -13,18 +13,23 @@ use base::util::fs;
 pub struct AnimateParams {
     #[structopt(help = "Input .fm file (STDIN if omitted)")]
     in_path: Option<PathBuf>,
+
     #[structopt(help = "Input .lua animation script", short = "s")]
     script_path: PathBuf,
+
     #[structopt(help = "Timestep", short = "t")]
     timestep: i64,
+
     #[structopt(help = "Number of iterations", short = "n")]
     num_iters: i64,
+
     #[structopt(
         help = "Output .fm file (STDOUT if omitted)",
         long,
         short = "o"
     )]
     out_path: Option<PathBuf>,
+
     #[structopt(flatten)]
     fm_write_params: fm::WriterParams,
 }

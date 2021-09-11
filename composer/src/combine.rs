@@ -1,12 +1,13 @@
 use std::cmp::{Eq, Ord, Ordering, Ordering::*, PartialEq, PartialOrd};
 use std::collections::HashMap;
-use std::io::{stdin, stdout};
+use std::io::stdin;
 use std::path::PathBuf;
 use std::result::Result as StdResult;
 
 use glam::{EulerRot, Quat};
 use structopt::StructOpt;
 
+use crate::misc::fm_writer_to_file_or_stdout;
 use base::defs::Result;
 use base::fm;
 use base::util::cli::{parse_key_val, Array as CliArray};
@@ -84,14 +85,8 @@ pub fn combine_with_params(params: &CombineParams) -> Result<()> {
         .collect();
     let scalings = params.scalings.iter().cloned().collect();
 
-    let mut writer = if let Some(path) = &params.out_path {
-        let writer =
-            fm::Writer::new(fs::create_file(path)?, &params.fm_write_params)?;
-        Box::new(writer) as Box<dyn fm::Write>
-    } else {
-        let writer = fm::Writer::new(stdout(), &params.fm_write_params)?;
-        Box::new(writer) as Box<dyn fm::Write>
-    };
+    let mut writer =
+        fm_writer_to_file_or_stdout(&params.out_path, &params.fm_write_params)?;
 
     combine(
         &mut reader_refs,

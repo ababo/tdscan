@@ -1,11 +1,12 @@
 use std::io;
-use std::io::{stdin, stdout};
+use std::io::stdout;
 use std::path::PathBuf;
 
 use serde::ser::Serialize;
 use serde_json::{to_value, to_writer, to_writer_pretty, Value};
 use structopt::StructOpt;
 
+use crate::misc::fm_reader_from_file_or_stdin;
 use base::defs::{IntoResult, Result};
 use base::fm;
 use base::util::fs;
@@ -36,13 +37,7 @@ pub struct ExportToJsonParams {
 }
 
 pub fn export_to_json_with_params(params: &ExportToJsonParams) -> Result<()> {
-    let mut reader = if let Some(path) = &params.in_path {
-        let reader = fm::Reader::new(fs::open_file(path)?)?;
-        Box::new(reader) as Box<dyn fm::Read>
-    } else {
-        let reader = fm::Reader::new(stdin())?;
-        Box::new(reader) as Box<dyn fm::Read>
-    };
+    let mut reader = fm_reader_from_file_or_stdin(&params.in_path)?;
 
     let mut writer = if let Some(path) = &params.out_path {
         Box::new(fs::create_file(path)?) as Box<dyn io::Write>

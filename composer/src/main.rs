@@ -3,6 +3,8 @@ mod build_view;
 mod combine;
 mod export_to_json;
 mod import_obj;
+mod misc;
+
 use structopt::StructOpt;
 
 #[derive(StructOpt)]

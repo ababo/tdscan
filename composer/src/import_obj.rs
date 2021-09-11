@@ -1,10 +1,11 @@
 use std::io;
-use std::io::{stdin, stdout, BufRead, BufReader};
+use std::io::{stdin, BufRead, BufReader};
 use std::mem::take;
 use std::path::{Path, PathBuf};
 
 use structopt::StructOpt;
 
+use crate::misc::fm_writer_to_file_or_stdout;
 use base::defs::{Error, ErrorKind::*, Result};
 use base::fm;
 use base::util::fs;
@@ -38,14 +39,8 @@ pub fn import_obj_with_params(params: &ImportObjParams) -> Result<()> {
         Box::new(stdin()) as Box<dyn io::Read>
     };
 
-    let mut writer = if let Some(path) = &params.out_path {
-        let writer =
-            fm::Writer::new(fs::create_file(path)?, &params.fm_write_params)?;
-        Box::new(writer) as Box<dyn fm::Write>
-    } else {
-        let writer = fm::Writer::new(stdout(), &params.fm_write_params)?;
-        Box::new(writer) as Box<dyn fm::Write>
-    };
+    let mut writer =
+        fm_writer_to_file_or_stdout(&params.out_path, &params.fm_write_params)?;
 
     let element = if let Some(id) = &params.element {
         id.clone()

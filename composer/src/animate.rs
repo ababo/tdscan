@@ -1,9 +1,9 @@
-use std::io::{stdin, stdout};
 use std::path::PathBuf;
 
 use rlua;
 use structopt::StructOpt;
 
+use crate::misc::{fm_reader_from_file_or_stdin, fm_writer_to_file_or_stdout};
 use base::defs::{Error, ErrorKind::*, Result};
 use base::fm;
 use base::util::fs;
@@ -35,24 +35,12 @@ pub struct AnimateParams {
 }
 
 pub fn animate_with_params(params: &AnimateParams) -> Result<()> {
-    let mut reader = if let Some(path) = &params.in_path {
-        let reader = fm::Reader::new(fs::open_file(path)?)?;
-        Box::new(reader) as Box<dyn fm::Read>
-    } else {
-        let reader = fm::Reader::new(stdin())?;
-        Box::new(reader) as Box<dyn fm::Read>
-    };
+    let mut reader = fm_reader_from_file_or_stdin(&params.in_path)?;
 
     let script = fs::read_file_to_string(&params.script_path)?;
 
-    let mut writer = if let Some(path) = &params.out_path {
-        let writer =
-            fm::Writer::new(fs::create_file(path)?, &params.fm_write_params)?;
-        Box::new(writer) as Box<dyn fm::Write>
-    } else {
-        let writer = fm::Writer::new(stdout(), &params.fm_write_params)?;
-        Box::new(writer) as Box<dyn fm::Write>
-    };
+    let mut writer =
+        fm_writer_to_file_or_stdout(&params.out_path, &params.fm_write_params)?;
 
     animate(
         reader.as_mut(),

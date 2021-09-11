@@ -1,16 +1,17 @@
 use std::collections::HashMap;
 use std::f32::consts::PI;
-use std::io::{stdin, stdout};
 use std::path::PathBuf;
 
 use glam::{Quat, Vec3};
 use structopt::StructOpt;
 
+use crate::misc::{
+    fm_reader_from_file_or_stdin, fm_writer_to_file_or_stdout, read_scans,
+};
 use base::defs::{Error, ErrorKind::*, Result};
 use base::fm;
 use base::fm::scan_frame::DepthConfidence;
 use base::util::cli::{parse_key_val, Array as CliArray};
-use base::util::fs;
 use base::util::glam::{point3_to_vec3, vec3_to_point3};
 
 #[derive(StructOpt)]
@@ -27,6 +28,15 @@ pub struct BuildViewParams {
             short = "y"
     )]
     camera_initial_positions: Vec<(String, CliArray<f32, 3>)>,
+
+    #[structopt(
+        help = "Camera landscape angle to override with",
+        long = "camera-landscape-angle",
+            number_of_values = 1,
+            parse(try_from_str = parse_key_val),
+            short = "l"
+    )]
+    camera_landscape_angles: Vec<(String, f32)>,
 
     #[structopt(
         help = "Camera view elevation to override with",
@@ -80,34 +90,25 @@ pub struct BuildViewParams {
 }
 
 pub fn build_view_with_params(params: &BuildViewParams) -> Result<()> {
-    let mut reader = if let Some(path) = &params.in_path {
-        let reader = fm::Reader::new(fs::open_file(path)?)?;
-        Box::new(reader) as Box<dyn fm::Read>
-    } else {
-        let reader = fm::Reader::new(stdin())?;
-        Box::new(reader) as Box<dyn fm::Read>
-    };
+    let mut reader = fm_reader_from_file_or_stdin(&params.in_path)?;
 
     let camera_initial_positions = params
         .camera_initial_positions
         .iter()
         .map(|d| (d.0.clone(), d.1 .0))
         .collect();
+    let camera_landscape_angles =
+        params.camera_landscape_angles.iter().cloned().collect();
     let camera_view_elevations =
         params.camera_view_elevations.iter().cloned().collect();
 
-    let mut writer = if let Some(path) = &params.out_path {
-        let writer =
-            fm::Writer::new(fs::create_file(path)?, &params.fm_write_params)?;
-        Box::new(writer) as Box<dyn fm::Write>
-    } else {
-        let writer = fm::Writer::new(stdout(), &params.fm_write_params)?;
-        Box::new(writer) as Box<dyn fm::Write>
-    };
+    let mut writer =
+        fm_writer_to_file_or_stdout(&params.out_path, &params.fm_write_params)?;
 
     build_view(
         reader.as_mut(),
         &camera_initial_positions,
+        &camera_landscape_angles,
         &camera_view_elevations,
         params.min_depth_confidence,
         params.min_z,
@@ -120,6 +121,7 @@ pub fn build_view_with_params(params: &BuildViewParams) -> Result<()> {
 pub fn build_view(
     reader: &mut dyn fm::Read,
     camera_initial_positions: &HashMap<String, [f32; 3]>,
+    camera_landscape_angles: &HashMap<String, f32>,
     camera_view_elevations: &HashMap<String, f32>,
     min_depth_confidence: DepthConfidence,
     min_z: f32,
@@ -127,66 +129,38 @@ pub fn build_view(
     max_z_distance: f32,
     _writer: &mut dyn fm::Write,
 ) -> Result<()> {
-    let mut scans = HashMap::<String, fm::Scan>::new();
-    let mut scan_frames = Vec::<fm::ScanFrame>::new();
-    let mut last_time = 0;
+    let (mut scans, scan_frames) = read_scans(reader)?;
 
-    loop {
-        let rec = reader.read_record()?;
-        if rec.is_none() {
-            break;
+    let unknown_scan_err = |name| {
+        let desc = format!(
+            "unknown scan '{}' for camera initial position override",
+            name
+        );
+        return Err(Error::new(InconsistentState, desc));
+    };
+
+    for (name, eye) in camera_initial_positions {
+        if let Some(scan) = scans.get_mut(name) {
+            scan.camera_initial_position =
+                Some(vec3_to_point3(&Vec3::from(*eye)));
+        } else {
+            return unknown_scan_err(name);
         }
+    }
 
-        use fm::record::Type::*;
-        match rec.unwrap().r#type {
-            Some(Scan(s)) => {
-                if !scan_frames.is_empty() {
-                    let desc = format!("scan '{}' after scan frame ", &s.name);
-                    return Err(Error::new(InconsistentState, desc));
-                }
-                scans.insert(s.name.clone(), s);
-            }
-            Some(ScanFrame(f)) => {
-                if !scans.contains_key(&f.scan) {
-                    let desc = format!("frame for unknown scan '{}'", &f.scan);
-                    return Err(Error::new(InconsistentState, desc));
-                }
-                if f.time < last_time {
-                    let desc = format!(
-                        "non-monotonic frame time for scan '{}'",
-                        &f.scan
-                    );
-                    return Err(Error::new(InconsistentState, desc));
-                }
-                last_time = f.time;
-                scan_frames.push(f);
-            }
-            _ => (),
+    for (name, angle) in camera_landscape_angles {
+        if let Some(scan) = scans.get_mut(name) {
+            scan.camera_landscape_angle = *angle;
+        } else {
+            return unknown_scan_err(name);
         }
+    }
 
-        let unknown_scan_err = |name| {
-            let desc = format!(
-                "unknown scan '{}' for camera initial position override",
-                name
-            );
-            return Err(Error::new(InconsistentState, desc));
-        };
-
-        for (name, eye) in camera_initial_positions {
-            if let Some(scan) = scans.get_mut(name) {
-                scan.camera_initial_position =
-                    Some(vec3_to_point3(&Vec3::from(*eye)));
-            } else {
-                return unknown_scan_err(name);
-            }
-        }
-
-        for (name, elev) in camera_view_elevations {
-            if let Some(scan) = scans.get_mut(name) {
-                scan.camera_view_elevation = *elev;
-            } else {
-                return unknown_scan_err(name);
-            }
+    for (name, elev) in camera_view_elevations {
+        if let Some(scan) = scans.get_mut(name) {
+            scan.camera_view_elevation = *elev;
+        } else {
+            return unknown_scan_err(name);
         }
     }
 

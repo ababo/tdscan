@@ -10,6 +10,7 @@ use argmin::core::{
 use argmin::solver::gradientdescent::SteepestDescent;
 use argmin::solver::linesearch::MoreThuenteLineSearch;
 use glam::Vec3;
+use nalgebra::DMatrix;
 use structopt::StructOpt;
 
 use crate::misc::{
@@ -37,7 +38,7 @@ pub struct OptimizeScanGeometryParams {
         help = "Distance parameter variability",
         long,
         short = "i",
-        default_value = "0.01"
+        default_value = "0.1"
     )]
     distance_variability: f32,
 
@@ -45,7 +46,7 @@ pub struct OptimizeScanGeometryParams {
         help = "Size of cell for roughness calculation",
         long,
         short = "c",
-        default_value = "0.05"
+        default_value = "0.01"
     )]
     cell_size: f32,
 
@@ -276,81 +277,23 @@ struct Plane {
     p: f32,
 }
 
-// This is a slightly modified version of the code from here:
-// https://www.ilikebigbits.com/2017_09_25_plane_from_points_2.html.
 fn compute_best_fitting_plane(points: &[Vec3]) -> Option<Plane> {
-    let n = points.len();
-    if n < 3 {
-        return None;
-    }
+    let data = points.iter().map(|p| p.as_ref()).flatten().cloned();
+    let points = DMatrix::from_iterator(points.len(), 3, data);
 
-    let mut sum = Vec3::default();
-    for p in points {
-        sum += *p;
-    }
-    let centroid = sum * (1.0 / (n as f32));
+    let means = points.row_mean();
+    let mut points = points.transpose();
+    points.row_mut(0).add_scalar_mut(-means[0]);
+    points.row_mut(1).add_scalar_mut(-means[1]);
+    points.row_mut(2).add_scalar_mut(-means[2]);
 
-    let mut xx = 0.0;
-    let mut xy = 0.0;
-    let mut xz = 0.0;
-    let mut yy = 0.0;
-    let mut yz = 0.0;
-    let mut zz = 0.0;
-
-    for p in points {
-        let r = *p - centroid;
-        xx += r.x * r.x;
-        xy += r.x * r.y;
-        xz += r.x * r.z;
-        yy += r.y * r.y;
-        yz += r.y * r.z;
-        zz += r.z * r.z;
-    }
-
-    xx /= n as f32;
-    xy /= n as f32;
-    xz /= n as f32;
-    yy /= n as f32;
-    yz /= n as f32;
-    zz /= n as f32;
-
-    let mut weighted_dir = Vec3::default();
-
-    {
-        let det_x = yy * zz - yz * yz;
-        let axis_dir = Vec3::new(det_x, xz * yz - xy * zz, xy * yz - xz * yy);
-        let mut weight = det_x * det_x;
-        if weighted_dir.dot(axis_dir) < 0.0 {
-            weight = -weight;
-        }
-        weighted_dir += axis_dir * weight;
-    }
-
-    {
-        let det_y = xx * zz - xz * xz;
-        let axis_dir = Vec3::new(xz * yz - xy * zz, det_y, xy * xz - yz * xx);
-        let mut weight = det_y * det_y;
-        if weighted_dir.dot(axis_dir) < 0.0 {
-            weight = -weight;
-        }
-        weighted_dir += axis_dir * weight;
-    }
-
-    {
-        let det_z = xx * yy - xy * xy;
-        let axis_dir = Vec3::new(xy * yz - xz * yy, xy * xz - yz * xx, det_z);
-        let mut weight = det_z * det_z;
-        if weighted_dir.dot(axis_dir) < 0.0 {
-            weight = -weight;
-        }
-        weighted_dir += axis_dir * weight;
-    }
-
-    let normal = weighted_dir.normalize();
-    if normal.is_finite() {
-        Some(Plane {
-            n: normal,
-            p: -normal.dot(centroid),
+    if let Some(u) = points.svd(true, false).u {
+        let normal = u.column(0);
+        let normal = Vec3::new(normal[0], normal[1], normal[2]);
+        let centroid = Vec3::new(means[0], means[1], means[2]);
+        Some(Plane{
+            n: Vec3::new(normal[0], normal[1], normal[2]),
+            p : -normal.dot(centroid),
         })
     } else {
         None

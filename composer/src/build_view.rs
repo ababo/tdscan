@@ -30,15 +30,6 @@ pub struct BuildViewParams {
     camera_initial_positions: Vec<(String, CliArray<f32, 3>)>,
 
     #[structopt(
-        help = "Camera landscape angle to override with",
-        long = "camera-landscape-angle",
-            number_of_values = 1,
-            parse(try_from_str = parse_key_val),
-            short = "l"
-    )]
-    camera_landscape_angles: Vec<(String, f32)>,
-
-    #[structopt(
         help = "Camera view elevation to override with",
         long = "camera-view-elevation",
             number_of_values = 1,
@@ -46,6 +37,15 @@ pub struct BuildViewParams {
             short = "e"
     )]
     camera_view_elevations: Vec<(String, f32)>,
+
+    #[structopt(
+        help = "Camera landscape angle to override with",
+        long = "camera-landscape-angle",
+            number_of_values = 1,
+            parse(try_from_str = parse_key_val),
+            short = "l"
+    )]
+    camera_landscape_angles: Vec<(String, f32)>,
 
     #[structopt(flatten)]
     point_cloud_params: PointCloudParams,
@@ -80,8 +80,8 @@ pub fn build_view_with_params(params: &BuildViewParams) -> Result<()> {
     build_view(
         reader.as_mut(),
         &camera_initial_positions,
-        &camera_landscape_angles,
         &camera_view_elevations,
+        &camera_landscape_angles,
         &params.point_cloud_params,
         writer.as_mut(),
     )
@@ -90,8 +90,8 @@ pub fn build_view_with_params(params: &BuildViewParams) -> Result<()> {
 pub fn build_view(
     reader: &mut dyn fm::Read,
     camera_initial_positions: &HashMap<String, [f32; 3]>,
-    camera_landscape_angles: &HashMap<String, f32>,
     camera_view_elevations: &HashMap<String, f32>,
+    camera_landscape_angles: &HashMap<String, f32>,
     point_cloud_params: &PointCloudParams,
     _writer: &mut dyn fm::Write,
 ) -> Result<()> {

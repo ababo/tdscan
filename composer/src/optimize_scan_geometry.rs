@@ -253,20 +253,20 @@ impl<'a> Observe<ScanOpt<'a>> for Observer {
         state: &IterState<ScanOpt>,
         _kv: &ArgminKV,
     ) -> StdResult<(), ArgminError> {
-        eprint!("{} best={}", state.iter, state.best_cost);
+        eprint!("{} {}", state.iter, state.best_cost);
         for (i, scan) in self.0.iter().enumerate() {
             let base = i * 5;
-            eprint!(" {}{{", scan);
             eprint!(
-                "eye=({},{},{}) ",
+                " -y {}={},{},{}",
+                scan,
                 state.best_param[base + 0],
                 state.best_param[base + 1],
                 state.best_param[base + 2]
             );
-            eprint!("elev={} ", state.best_param[base + 3]);
-            eprint!("langle={}", state.best_param[base + 4]);
-            eprintln!("}}");
+            eprint!(" -e {}={}", scan, state.best_param[base + 3]);
+            eprint!(" -l {}={}", scan, state.best_param[base + 4]);
         }
+        eprintln!();
         Ok(())
     }
 }
@@ -291,9 +291,9 @@ fn compute_best_fitting_plane(points: &[Vec3]) -> Option<Plane> {
         let normal = u.column(0);
         let normal = Vec3::new(normal[0], normal[1], normal[2]);
         let centroid = Vec3::new(means[0], means[1], means[2]);
-        Some(Plane{
+        Some(Plane {
             n: Vec3::new(normal[0], normal[1], normal[2]),
-            p : -normal.dot(centroid),
+            p: -normal.dot(centroid),
         })
     } else {
         None

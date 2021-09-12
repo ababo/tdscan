@@ -6,6 +6,7 @@ authors = ["Simon Prykhodko <semion.ababo@gmail.com>"]
 edition = "2018"
 
 [dependencies]
+argmin = "0.4.7"
 base = { path = "../base" }
 glam = "0.15.2"
 rlua = "0.17.0"

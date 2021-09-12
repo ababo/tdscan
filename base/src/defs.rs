@@ -20,6 +20,7 @@ pub enum ErrorKind {
     UnsupportedFeature = 8,
     WebGlError = 9,
     JsonError = 10,
+    ArgminError = 11,
 }
 
 #[derive(Debug)]

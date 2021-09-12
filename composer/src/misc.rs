@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::io::{stdin, stdout};
 use std::path::PathBuf;
 
@@ -33,8 +33,8 @@ pub fn fm_writer_to_file_or_stdout(
 
 pub fn read_scans(
     reader: &mut dyn fm::Read,
-) -> Result<(HashMap<String, fm::Scan>, Vec<fm::ScanFrame>)> {
-    let mut scans = HashMap::<String, fm::Scan>::new();
+) -> Result<(BTreeMap<String, fm::Scan>, Vec<fm::ScanFrame>)> {
+    let mut scans = BTreeMap::<String, fm::Scan>::new();
     let mut scan_frames = Vec::<fm::ScanFrame>::new();
     let mut last_time = 0;
 

@@ -4,6 +4,8 @@ mod combine;
 mod export_to_json;
 mod import_obj;
 mod misc;
+mod optimize_scan_geometry;
+mod point_cloud;
 
 use structopt::StructOpt;
 
@@ -21,6 +23,7 @@ enum Command {
     Combine(combine::CombineParams),
     ExportToJson(export_to_json::ExportToJsonParams),
     ImportObj(import_obj::ImportObjParams),
+    OptimizeScanGeometry(optimize_scan_geometry::OptimizeScanGeometryParams),
 }
 
 fn main() {
@@ -37,6 +40,9 @@ fn main() {
         }
         Command::ImportObj(params) => {
             import_obj::import_obj_with_params(&params)
+        }
+        Command::OptimizeScanGeometry(params) => {
+            optimize_scan_geometry::optimize_scan_geometry_with_params(&params)
         }
     };
 

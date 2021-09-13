@@ -8,7 +8,7 @@ use base::fm;
 use base::fm::scan_frame::DepthConfidence;
 use base::util::glam::point3_to_vec3;
 
-#[derive(StructOpt)]
+#[derive(Clone, Copy, StructOpt)]
 pub struct PointCloudParams {
     #[structopt(
         help = "Minimum depth confidence",

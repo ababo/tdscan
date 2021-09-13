@@ -46,7 +46,7 @@ pub struct OptimizeScanGeometryParams {
         help = "Size of cell for roughness calculation",
         long,
         short = "c",
-        default_value = "0.01"
+        default_value = "0.02"
     )]
     cell_size: f32,
 
@@ -211,26 +211,45 @@ impl<'a> ArgminOp for ScanOpt<'a> {
     type Float = f32;
 
     fn apply(&self, p: &Self::Param) -> StdResult<Self::Output, ArgminError> {
-        let (scans, deviation) = self.apply_params(p);
+        let (scans, param_deviation) = self.apply_params(p);
 
-        let points = build_point_cloud(
-            &scans,
-            self.scan_frames,
-            self.point_cloud_params,
-        );
+        let mut point_cloud_params = self.point_cloud_params.clone();
+        point_cloud_params.min_z = -INFINITY;
+        point_cloud_params.max_z = INFINITY;
+
+        let points =
+            build_point_cloud(&scans, self.scan_frames, &point_cloud_params);
+
+        let (min_z, max_z) =
+            points.iter().fold((INFINITY, -INFINITY), |mut b, p| {
+                if p[2] < b.0 {
+                    b.0 = p[2];
+                } else if p[2] > b.1 {
+                    b.1 = p[2];
+                }
+                b
+            });
+
+        let z_deviation = (min_z - self.point_cloud_params.min_z).abs()
+            + (max_z - self.point_cloud_params.max_z).abs();
 
         const NAN_ROUGHNESS: f32 = 1000.0;
-        const PENALTY_FACTOR: f32 = 1000.0;
+        const PARAM_PENALTY_FACTOR: f32 = 1000.0;
+        const Z_PENALTY_FACTOR: f32 = 10.0;
+
         let roughness = compute_roughness(&points, self.cell_size);
         Ok(if roughness.is_nan() {
             NAN_ROUGHNESS
         } else {
-            roughness * (1.0 + deviation * PENALTY_FACTOR)
+            let penalty = 1.0
+                + param_deviation * PARAM_PENALTY_FACTOR
+                + z_deviation * Z_PENALTY_FACTOR;
+            roughness * penalty
         })
     }
 
     fn gradient(&self, p: &Self::Param) -> StdResult<Self::Param, ArgminError> {
-        const DELTA: f32 = 0.0001;
+        const DELTA: f32 = 0.001;
         let mut params = p.clone();
         let base = self.apply(p).unwrap();
         let mut grad = Vec::with_capacity(p.len());

@@ -5,9 +5,10 @@ mod writer;
 use std::result::Result as StdResult;
 use std::str::FromStr;
 
+use prost::Message;
 use structopt::StructOpt;
 
-use crate::defs::{Error, ErrorKind::*, Result};
+use crate::defs::{Error, ErrorKind::*, IntoResult, Result};
 pub use data::*;
 pub use reader::*;
 pub use writer::*;
@@ -77,5 +78,14 @@ impl Default for WriterParams {
             compression: Compression::from_str(DEFAULT_COMPRESSION).unwrap(),
             gzip_level: DEFAULT_GZIP_LEVEL.parse::<u32>().unwrap(),
         }
+    }
+}
+
+pub struct RawRecord<'a>(&'a [u8]);
+
+impl<'a> RawRecord<'a> {
+    pub fn decode(&self) -> Result<Record> {
+        Record::decode(self.0)
+            .into_result(|| format!("failed to decode .fm record"))
     }
 }

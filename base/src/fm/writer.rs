@@ -6,9 +6,10 @@ use flate2::write::GzEncoder;
 use prost::Message;
 
 use crate::defs::{Error, IntoResult, Result};
-use crate::fm::{Compression, Record, WriterParams, MAGIC, VERSION};
+use crate::fm::{Compression, RawRecord, Record, WriterParams, MAGIC, VERSION};
 
 pub trait Write {
+    fn write_raw_record<'a>(&mut self, record: &RawRecord<'a>) -> Result<()>;
     fn write_record(&mut self, record: &Record) -> Result<()>;
 }
 
@@ -98,15 +99,26 @@ impl<W: io::Write> Writer<W> {
 }
 
 impl<W: io::Write> Write for Writer<W> {
-    fn write_record(&mut self, record: &Record) -> Result<()> {
-        let size = record.encoded_len();
+    fn write_raw_record<'a>(&mut self, record: &RawRecord<'a>) -> Result<()> {
         self.writer
-            .write_all(&(size as u32).to_le_bytes())
+            .write_all(&(record.0.len() as u32).to_le_bytes())
             .into_result(|| format!("failed to write .fm record size"))?;
 
+        self.writer
+            .write_all(record.0)
+            .into_result(|| format!("failed to write .fm record"))
+    }
+
+    fn write_record(&mut self, record: &Record) -> Result<()> {
+        let size = record.encoded_len();
         self.buffer.resize(0, 0);
         self.buffer.reserve(size);
         record.encode(&mut self.buffer).unwrap();
+
+        // The borrow checker doesn't allow to reuse write_raw_record().
+        self.writer
+            .write_all(&(size as u32).to_le_bytes())
+            .into_result(|| format!("failed to write .fm record size"))?;
 
         self.writer
             .write_all(&self.buffer)

@@ -3,10 +3,10 @@ use std::io::stdout;
 use std::path::PathBuf;
 
 use serde::ser::Serialize;
-use serde_json::{to_value, to_writer, to_writer_pretty, Value};
+use serde_json::{to_value, to_writer, to_writer_pretty};
 use structopt::StructOpt;
 
-use crate::misc::fm_reader_from_file_or_stdin;
+use crate::misc::{fm_reader_from_file_or_stdin, truncate_json_value};
 use base::defs::{IntoResult, Result};
 use base::fm;
 use base::util::fs;
@@ -28,9 +28,9 @@ pub struct ExportToJsonParams {
         help = concat!("Maximum length for string, array ",
             "or object (the rest of elements to be truncated)"),
         long,
-        short = "m"
+        short = "t"
     )]
-    max_len: Option<usize>,
+    truncate_len: Option<usize>,
 
     #[structopt(help = "Prettify JSON output", long, short = "p")]
     pretty: bool,
@@ -45,23 +45,28 @@ pub fn export_to_json_with_params(params: &ExportToJsonParams) -> Result<()> {
         Box::new(stdout()) as Box<dyn io::Write>
     };
 
-    export_to_json(reader.as_mut(), &mut writer, params.max_len, params.pretty)
+    export_to_json(
+        reader.as_mut(),
+        &mut writer,
+        params.truncate_len,
+        params.pretty,
+    )
 }
 
 pub fn export_to_json(
     reader: &mut dyn fm::Read,
     writer: &mut dyn io::Write,
-    max_len: Option<usize>,
+    truncate_len: Option<usize>,
     pretty: bool,
 ) -> Result<()> {
     loop {
         match reader.read_record()? {
             Some(rec) => {
-                if let Some(max) = max_len {
+                if let Some(max_len) = truncate_len {
                     let mut val = to_value(rec).into_result(|| {
                         format!("failed to convert record into JSON value")
                     })?;
-                    truncate_len(&mut val, max);
+                    truncate_json_value(&mut val, max_len);
                     write_record(writer, val, pretty)?;
                 } else {
                     write_record(writer, rec, pretty)?;
@@ -72,31 +77,6 @@ pub fn export_to_json(
     }
 
     Ok(())
-}
-
-fn truncate_len(value: &mut Value, max: usize) {
-    match value {
-        Value::String(r#str) => {
-            r#str.truncate(max);
-        }
-        Value::Array(arr) => {
-            arr.truncate(max);
-            for mut e in arr {
-                truncate_len(&mut e, max);
-            }
-        }
-        Value::Object(obj) => {
-            let keys: Vec<_> = obj.keys().skip(max).cloned().collect();
-            for k in keys {
-                obj.remove(k.as_str());
-            }
-
-            for (_, mut v) in obj {
-                truncate_len(&mut v, max);
-            }
-        }
-        _ => {}
-    };
 }
 
 fn write_record<T: Serialize>(
@@ -122,7 +102,7 @@ mod tests {
     use super::*;
     use base::util::test::*;
 
-    fn export(max_len: Option<usize>, pretty: bool) -> String {
+    fn export(truncate_len: Option<usize>, pretty: bool) -> String {
         let mut reader = create_reader_with_records(&vec![
             new_element_view_rec(fm::ElementView {
                 element: format!("element"),
@@ -144,7 +124,7 @@ mod tests {
         ]);
 
         let mut json = Vec::new();
-        export_to_json(&mut reader, &mut json, max_len, pretty).unwrap();
+        export_to_json(&mut reader, &mut json, truncate_len, pretty).unwrap();
         format!("\n{}", from_utf8(json.as_slice()).unwrap())
     }
 

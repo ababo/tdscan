@@ -2,12 +2,12 @@ use std::io;
 use std::io::Read as _;
 
 use flate2::read::GzDecoder;
-use prost::Message;
 
 use crate::defs::{Error, ErrorKind::*, IntoResult, Result};
-use crate::fm::{Compression, Record, MAGIC, VERSION};
+use crate::fm::{Compression, RawRecord, Record, MAGIC, VERSION};
 
 pub trait Read {
+    fn read_raw_record<'a>(&'a mut self) -> Result<Option<RawRecord<'a>>>;
     fn read_record(&mut self) -> Result<Option<Record>>;
 }
 
@@ -83,7 +83,7 @@ impl<R: io::Read> Reader<R> {
 }
 
 impl<R: io::Read> Read for Reader<R> {
-    fn read_record(&mut self) -> Result<Option<Record>> {
+    fn read_raw_record<'a>(&'a mut self) -> Result<Option<RawRecord<'a>>> {
         let mut buf = [0; 4];
         match self.reader.read_exact(&mut buf) {
             Err(e) => {
@@ -107,9 +107,14 @@ impl<R: io::Read> Read for Reader<R> {
             .read_exact(&mut self.buffer)
             .into_result(|| format!("failed to read .fm record"))?;
 
-        let rec = Record::decode(self.buffer.as_slice())
-            .into_result(|| format!("failed to decode .fm record"))?;
+        Ok(Some(RawRecord(&self.buffer)))
+    }
 
-        Ok(Some(rec))
+    fn read_record(&mut self) -> Result<Option<Record>> {
+        Ok(if let Some(rec) = self.read_raw_record()? {
+            Some(rec.decode()?)
+        } else {
+            None
+        })
     }
 }

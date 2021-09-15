@@ -6,6 +6,7 @@ mod import_obj;
 mod misc;
 mod optimize_scan_geometry;
 mod point_cloud;
+mod select;
 
 use structopt::StructOpt;
 
@@ -24,6 +25,7 @@ enum Command {
     ExportToJson(export_to_json::ExportToJsonParams),
     ImportObj(import_obj::ImportObjParams),
     OptimizeScanGeometry(optimize_scan_geometry::OptimizeScanGeometryParams),
+    Select(select::SelectParams),
 }
 
 fn main() {
@@ -44,6 +46,7 @@ fn main() {
         Command::OptimizeScanGeometry(params) => {
             optimize_scan_geometry::optimize_scan_geometry_with_params(&params)
         }
+        Command::Select(params) => select::select_with_params(&params),
     };
 
     if let Err(err) = res {

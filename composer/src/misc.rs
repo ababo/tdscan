@@ -36,7 +36,7 @@ pub fn fm_writer_to_file_or_stdout(
 }
 
 pub fn lua_err_to_err(err: rlua::Error) -> Error {
-    Error::with_source(LuaError, format!("failed to run script"), err)
+    Error::with_source(LuaError, format!("failed to evaluate expression"), err)
 }
 
 pub fn lua_table_from_record<'a>(

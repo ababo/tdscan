@@ -120,3 +120,89 @@ pub fn select(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use base::record_variant;
+    use base::util::test::*;
+    use fm::record::Type::*;
+    use fm::Read as _;
+    use std::io;
+
+    fn new_select_reader(
+        predicate: &str,
+        no_rec_decoding: bool,
+        truncate_len: Option<usize>,
+    ) -> fm::Reader<io::Cursor<Vec<u8>>> {
+        let mut reader = create_reader_with_records(&vec![
+            new_element_view_rec(fm::ElementView {
+                element: format!("e123"),
+                ..Default::default()
+            }),
+            new_element_view_state_rec(fm::ElementViewState {
+                element: format!("e124"),
+                ..Default::default()
+            }),
+            new_element_view_state_rec(fm::ElementViewState {
+                element: format!("e134"),
+                ..Default::default()
+            }),
+        ]);
+
+        let mut writer = create_writer();
+        select(
+            &mut reader,
+            predicate,
+            no_rec_decoding,
+            truncate_len,
+            &mut writer,
+        )
+        .unwrap();
+        writer_to_reader(writer)
+    }
+
+    #[test]
+    fn test_select_no_decoding() {
+        let mut reader = new_select_reader("n > 1", true, None);
+
+        let rec = reader.read_record().unwrap().unwrap();
+        record_variant!(ElementViewState, rec);
+
+        let rec = reader.read_record().unwrap().unwrap();
+        record_variant!(ElementViewState, rec);
+
+        assert!(reader.read_record().unwrap().is_none());
+    }
+
+    #[test]
+    fn test_select_regular() {
+        let predicate = "r.type.ElementView ~= nil";
+        let mut reader = new_select_reader(predicate, false, None);
+
+        let rec = reader.read_record().unwrap().unwrap();
+        record_variant!(ElementView, rec);
+
+        assert!(reader.read_record().unwrap().is_none());
+    }
+
+    #[test]
+    fn test_select_truncate_len() {
+        let predicate = concat!(
+            "(r.type.ElementView ~= nil and ",
+            "r.type.ElementView or r.type.ElementViewState)",
+            ".element == 'e12'"
+        );
+        let mut reader = new_select_reader(predicate, false, Some(3));
+
+        let rec = reader.read_record().unwrap().unwrap();
+        let view = record_variant!(ElementView, rec);
+        assert!(view.element == "e123");
+
+        let rec = reader.read_record().unwrap().unwrap();
+        let view_state = record_variant!(ElementViewState, rec);
+        assert!(view_state.element == "e124");
+
+        assert!(reader.read_record().unwrap().is_none());
+    }
+}

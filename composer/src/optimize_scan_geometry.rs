@@ -230,8 +230,13 @@ impl<'a> ArgminOp for ScanOpt<'a> {
                 b
             });
 
-        let z_deviation = (min_z - self.point_cloud_params.min_z).abs()
-            + (max_z - self.point_cloud_params.max_z).abs();
+        let mut z_deviation = 0.0;
+        if min_z < self.point_cloud_params.min_z {
+            z_deviation += self.point_cloud_params.min_z - min_z;
+        }
+        if max_z > self.point_cloud_params.max_z {
+            z_deviation += max_z - self.point_cloud_params.max_z;
+        }
 
         const NAN_ROUGHNESS: f32 = 1000.0;
         const PARAM_PENALTY_FACTOR: f32 = 1000.0;

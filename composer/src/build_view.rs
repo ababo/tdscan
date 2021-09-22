@@ -138,7 +138,7 @@ pub fn build_view(
 
     use std::io::Write;
     let mut file =
-        std::fs::File::create("/Users/ababo/Desktop/foo.obj").unwrap();
+        std::fs::File::create("foo.obj").unwrap();
     for p in points {
         file.write_all(
             format!("v {} {} {}\n", p[0], p[1], p[2])

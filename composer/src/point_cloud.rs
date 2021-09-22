@@ -48,7 +48,6 @@ pub fn build_point_cloud(
     params: &PointCloudParams,
 ) -> Vec<Vec3> {
     let mut points = Vec::new();
-    let time_base = scan_frames.first().map(|f| f.time).unwrap_or_default();
 
     for frame in scan_frames {
         let scan = scans.get(&frame.scan).unwrap();
@@ -73,8 +72,8 @@ pub fn build_point_cloud(
         let look_rot = Quat::from_axis_angle(look_rot_axis, look_angle);
         let rot = look_rot.mul_quat(landscape_rot);
 
-        let timestamp = (frame.time - time_base) as f32 / 1E9;
-        let camera_angle = timestamp * scan.camera_angular_velocity;
+        let camera_angle =
+            frame.time as f32 / 1E9 * scan.camera_angular_velocity;
         let time_rot = Quat::from_rotation_z(camera_angle);
 
         for i in 0..scan.depth_height {

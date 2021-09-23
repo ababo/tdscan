@@ -73,6 +73,7 @@ pub fn build_point_cloud(
         let look_rot = Quat::from_axis_angle(look_rot_axis, look_angle);
         let rot = look_rot.mul_quat(landscape_rot);
 
+
         let timestamp = (frame.time - time_base) as f32 / 1E9;
         let camera_angle = timestamp * scan.camera_angular_velocity;
         let time_rot = Quat::from_rotation_z(camera_angle);
@@ -117,6 +118,6 @@ pub fn build_point_cloud(
             }
         }
     }
-
+    eprint!("Number of points {}\n", points.len());
     points
 }

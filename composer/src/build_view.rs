@@ -5,10 +5,9 @@ use glam::Vec3;
 use structopt::StructOpt;
 
 use crate::misc::{
-    fm_reader_from_file_or_stdin,
-    fm_writer_to_file_or_stdout, read_scans,
+    fm_reader_from_file_or_stdin, fm_writer_to_file_or_stdout, read_scans,
 };
-use crate::point_cloud::{PointCloudParams, build_point_cloud};
+use crate::point_cloud::{build_point_clouds, PointCloudParams};
 use base::defs::{Error, ErrorKind::*, Result};
 use base::fm;
 use base::util::cli::{parse_key_val, Array as CliArray};
@@ -130,22 +129,20 @@ pub fn build_view(
         }
     }
 
-    let points = build_point_cloud(
-        &scans,
-        &scan_frames,
-        point_cloud_params,
-    );
+    let clouds = build_point_clouds(&scans, &scan_frames, point_cloud_params);
 
     use std::io::Write;
     let mut file =
         std::fs::File::create("/Users/ababo/Desktop/foo.obj").unwrap();
-    for p in points {
-        file.write_all(
-            format!("v {} {} {}\n", p[0], p[1], p[2])
-                .into_bytes()
-                .as_slice(),
-        )
-        .unwrap();
+    for cloud in clouds {
+        for point in cloud {
+            file.write_all(
+                format!("v {} {} {}\n", point[0], point[1], point[2])
+                    .into_bytes()
+                    .as_slice(),
+            )
+            .unwrap();
+        }
     }
 
     Ok(())

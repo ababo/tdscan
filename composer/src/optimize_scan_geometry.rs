@@ -16,7 +16,7 @@ use structopt::StructOpt;
 use crate::misc::{
     fm_reader_from_file_or_stdin, fm_writer_to_file_or_stdout, read_scans,
 };
-use crate::point_cloud::{build_point_cloud, PointCloudParams};
+use crate::point_cloud::{build_point_clouds, PointCloudParams};
 use base::defs::{Error, ErrorKind, Result};
 use base::fm;
 
@@ -217,8 +217,9 @@ impl<'a> ArgminOp for ScanOpt<'a> {
         point_cloud_params.min_z = -INFINITY;
         point_cloud_params.max_z = INFINITY;
 
-        let points =
-            build_point_cloud(&scans, self.scan_frames, &point_cloud_params);
+        let clouds =
+            build_point_clouds(&scans, self.scan_frames, &point_cloud_params);
+        let points: Vec<_> = clouds.into_iter().flatten().collect();
 
         let (min_z, max_z) =
             points.iter().fold((INFINITY, -INFINITY), |mut b, p| {

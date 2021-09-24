@@ -1,15 +1,11 @@
-from json import loads as json_to_dict
-
 import numpy as np
 from numpy.linalg import norm
 from scipy.spatial.transform.rotation import Rotation
 from tqdm import tqdm
 
 # frame keys
-__data = 'data'
 __depth_confidences = 'depth_confidences'
 __depths = 'depths'
-__image = 'image'
 __scan = 'scan'
 __time = 'time'
 
@@ -22,12 +18,6 @@ __camera_view_elevation = 'camera_view_elevation'
 __depth_height = 'depth_height'
 __depth_width = 'depth_width'
 __sensor_plane_depth = 'sensor_plane_depth'
-
-# additional keys
-__Scan = 'Scan'
-__ScanFrame = 'ScanFrame'
-__type = 'type'
-__name = 'name'
 
 __eps = 1e-10
 
@@ -230,43 +220,3 @@ def __get_mask(params, frame, depth_index, points):
         confidence_mask, z_dist_mask, min_z_mask, max_z_mask
     ))
     return final_mask
-
-
-def get_scans_and_frames(scans_source, sep='\n', use_tqdm=True):
-    with open(scans_source, 'r') as src:
-        src_data = src.read()
-    scans_json = src_data.split(sep)[:-1]
-    scans = {}
-    frames = []
-    scans_json_to_iter = tqdm(scans_json) if use_tqdm else scans_json
-    for single_json_value in scans_json_to_iter:
-        __update_scans_and_frames(scans, frames, single_json_value)
-    return scans, frames
-
-
-def __update_scans_and_frames(scans, frames, json_value):
-    d = json_to_dict(json_value)
-    d = d[__type]
-    if __Scan in d.keys():
-        d = d[__Scan]
-        name = d.pop(__name)
-        scans[name] = d
-    elif __ScanFrame in d.keys():
-        d = d[__ScanFrame]
-        __transform_frame_lists_to_arrays(d)
-        frames.append(d)
-
-
-def __transform_frame_lists_to_arrays(frame):
-    frame[__image][__data] = np.array(frame[__image][__data])
-    frame[__depths] = np.array(frame[__depths])
-    frame[__depth_confidences] = np.array(frame[__depth_confidences])
-
-
-def write_points_to_obj(points, obj_path='foo.obj', use_tqdm=False):
-    with open(obj_path, 'w') as obj_file:
-        points_to_iter = tqdm(points) if use_tqdm else points
-        for point in points_to_iter:
-            obj_file.write(
-                f'v {point[0]:.10f} {point[1]:.10f} {point[2]:.10f}\n'
-            )

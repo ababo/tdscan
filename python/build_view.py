@@ -3,10 +3,8 @@ from ast import literal_eval as str_to_dict
 
 import numpy as np
 
-from points_cloud import (
-    build_points_cloud, get_scans_and_frames,
-    PointsCloudParams, write_points_to_obj
-)
+from points_cloud import build_points_cloud, PointsCloudParams
+from utils import get_scans_and_frames, write_points_to_obj
 
 parser = argparse.ArgumentParser(
     description='Build a points cloud and save it to the .obj file'

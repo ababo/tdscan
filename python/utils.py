@@ -1,8 +1,9 @@
 from json import loads as json_to_dict
 from time import time
 
-import numpy as np
 import matplotlib.pyplot as plt
+from numba import jit
+import numpy as np
 from tqdm import tqdm
 
 
@@ -153,3 +154,52 @@ def write_points_to_obj(points, obj_path='foo.obj', use_tqdm=False):
             obj_file.write(
                 f'v {point[0]:.10f} {point[1]:.10f} {point[2]:.10f}\n'
             )
+
+
+def batch_dot(matrices, vectors):
+    matrices = np.asarray(matrices).astype('float')
+    vectors = np.asarray(vectors).astype('float')
+    return __batch_dot(matrices, vectors)
+
+
+@jit(nopython=True)
+def __batch_dot(matrices, vectors):
+    N1, n1, m1 = matrices.shape
+    N2, m2 = vectors.shape
+    if N1 != N2 or m1 != m2:
+        raise ValueError('Shape mismatch!')
+    out = np.zeros((N1, n1))
+    for i in np.arange(N1):
+        out[i] = np.dot(matrices[i], vectors[i])
+    return out
+
+
+@jit(nopython=True)
+def eval_dens(points, xrange, yrange):
+    xcount = xrange.shape[0]
+    ycount = yrange.shape[0]
+    dens = np.zeros((ycount-1, xcount-1))
+    vol = 0.0
+    for i in np.arange(ycount-1):
+        for j in np.arange(xcount-1):
+            x_in_range_inds = __get_points_in_range(points[:, 0], xrange, j)
+            y_in_range_inds = __get_points_in_range(points[:, 1], yrange, i)
+            points_in_range_inds = np.logical_and(
+                x_in_range_inds, y_in_range_inds
+            ).astype(np.float_)
+            dens[i, j] = np.sum(points_in_range_inds)
+            local_vol = dens[i, j]
+            local_vol *= xrange[j+1] - xrange[j]
+            local_vol *= yrange[i+1] - yrange[i]
+            vol += local_vol
+    dens /= vol
+    return dens
+
+
+@jit(nopython=True)
+def __get_points_in_range(points, points_range, index):
+    out = np.logical_and(
+        points_range[index] <= points,
+        points < points_range[index + 1]
+    )
+    return out

@@ -12,11 +12,11 @@ from utils import (
 if __name__ == '__main__':
     x = np.array([0.0, 0.85, 0.63, 0.39, -1.5707964])
 
-    scans, frames = get_scans_and_frames('vacuum.json')
+    scans, frames = get_scans_and_frames('vacuum_reduced5.json')
     scans_keys = ('vacuum',)
     build_points_cloud_params = PointsCloudParams(max_z_distance=0.4)
     points = build_points_cloud(scans, frames, build_points_cloud_params)
-    base_points = select_partitions_mean_points(points, 3000)
+    base_points = select_partitions_mean_points(points, 5000, 10)
     args = scans, scans_keys, frames, build_points_cloud_params, base_points
 
     cost_kwargs = {'x': x, 'args': args}

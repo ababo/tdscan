@@ -21,8 +21,11 @@ __ScanFrame = 'ScanFrame'
 __type = 'type'
 __name = 'name'
 
-
 __eps = 1e-8
+
+
+def float_equals(left, right, eps=__eps):
+    return np.abs(left - right) < eps
 
 
 def select_random_points(points, count):

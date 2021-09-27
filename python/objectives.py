@@ -1,9 +1,8 @@
-import matplotlib.pyplot as plt
 import numpy as np
 from scipy.spatial.distance import cdist
 
 from points_cloud import build_points_cloud
-from utils import batch_dot, eval_dens
+from utils import batch_dot, eval_dens, float_equals
 
 # scan keys
 __camera_angle_of_view = 'camera_angle_of_view'
@@ -18,10 +17,9 @@ __x = 'x'
 __y = 'y'
 __z = 'z'
 
-__eps = 1e-10
-
 
 def local_plane_uniform_cost(x, args):
+    # Setup
     scans, scans_keys, frames, build_points_cloud_params, base_points = args
     base_points_count = base_points.shape[0]
     for i, key in enumerate(scans_keys):
@@ -46,15 +44,16 @@ def local_plane_uniform_cost(x, args):
     )
     second_nearest_points = points[second_nearest_points_inds]
 
-    all_x_are_equal = __float_equals(base_points[:, 0], nearest_points[:, 0])
+    # Find planes
+    all_x_are_equal = float_equals(base_points[:, 0], nearest_points[:, 0])
     all_x_are_equal = np.logical_and(
-        __float_equals(nearest_points[:, 0], second_nearest_points[:, 0]),
+        float_equals(nearest_points[:, 0], second_nearest_points[:, 0]),
         all_x_are_equal
     )
     all_x_are_equal = np.reshape(all_x_are_equal, (-1, 1))
-    all_y_are_equal = __float_equals(base_points[:, 1], nearest_points[:, 1])
+    all_y_are_equal = float_equals(base_points[:, 1], nearest_points[:, 1])
     all_y_are_equal = np.logical_and(
-        __float_equals(nearest_points[:, 1], second_nearest_points[:, 1]),
+        float_equals(nearest_points[:, 1], second_nearest_points[:, 1]),
         all_y_are_equal
     )
     all_y_are_equal = np.reshape(all_y_are_equal, (-1, 1))
@@ -115,30 +114,14 @@ def local_plane_uniform_cost(x, args):
         np.where(all_y_are_equal, planes_equal_y, other_planes)
     )
 
-    # TODO DELETE THIS TEST IN FUTURE
-    # base_points_on_planes = planes[:, 0] * base_points[:, 0]\
-    #                         + planes[:, 1] * base_points[:, 1]\
-    #                         + planes[:, 2] * base_points[:, 2] + planes[:, 3]
-    # base_points_on_planes = np.all(__float_equals(base_points_on_planes, 0.0, 1e-8))
-    # nearest_points_on_planes = planes[:, 0] * nearest_points[:, 0]\
-    #                            + planes[:, 1] * nearest_points[:, 1]\
-    #                            + planes[:, 2] * nearest_points[:, 2]\
-    #                            + planes[:, 3]
-    # nearest_points_on_planes = np.all(__float_equals(nearest_points_on_planes, 0.0, 1e-8))
-    # second_nearest_points_on_planes = planes[:, 0] * second_nearest_points[:, 0]\
-    #                                   + planes[:, 1] * second_nearest_points[:, 1]\
-    #                                   + planes[:, 2] * second_nearest_points[:, 2]\
-    #                                   + planes[:, 3]
-    # second_nearest_points_on_planes = np.all(__float_equals(second_nearest_points_on_planes, 0.0, 1e-8))
-    # print(f'All points on planes: {base_points_on_planes and nearest_points_on_planes and second_nearest_points_on_planes}')
-
+    # Find projections
     planes_sum_square = planes[:, 0] ** 2 + planes[:, 1] ** 2 + planes[:, 2] ** 2
     det_planes_a_neq_zero = planes[:, 0] * planes_sum_square
     det_planes_b_neq_zero = planes[:, 1] * planes_sum_square
     det_planes_c_neq_zero = planes[:, 2] * planes_sum_square
 
-    a_neq_zero = np.logical_not(__float_equals(planes[:, 0], 0.0, 1e-1))
-    b_neq_zero = np.logical_not(__float_equals(planes[:, 1], 0.0, 1e-1))
+    a_neq_zero = np.logical_not(float_equals(planes[:, 0], 0.0, 1e-1))
+    b_neq_zero = np.logical_not(float_equals(planes[:, 1], 0.0, 1e-1))
 
     det_planes = np.where(
         a_neq_zero, det_planes_a_neq_zero,
@@ -191,7 +174,7 @@ def local_plane_uniform_cost(x, args):
     projections_c_neq_zero[:, 2] += -B * C * (C*points[:, 1] - B*points[:, 2])
     projections_c_neq_zero[:, 2] /= det_planes[nearest_base_points_inds]
 
-    points_are_projections = __float_equals(
+    points_are_projections = float_equals(
         A*points[:, 0] + B*points[:, 1] + C*points[:, 2] + D, 0.0
     )
     points_are_projections = np.reshape(points_are_projections, (-1, 1))
@@ -209,36 +192,11 @@ def local_plane_uniform_cost(x, args):
         )
     )
 
-    # TODO DELETE THIS TEST LATER
-    # projections_on_planes = A*projections[:, 0] + B*projections[:, 1]\
-    #                         + C*projections[:, 2] + D
-    # print(np.min(projections_on_planes))
-    # print(np.max(projections_on_planes))
-    # projections_on_planes = np.all(
-    #     __float_equals(projections_on_planes, 0.0, 1e-2)
-    # )
-    # print(f'All projections are on planes {projections_on_planes}')
-    # vec = np.array([A, B, C]).T
-    # vec = vec / np.linalg.norm(vec, axis=1).reshape(-1, 1)
-    # dist_proj_points = np.linalg.norm(points - projections, axis=1).reshape(-1, 1)
-    # almost_points = projections + dist_proj_points * vec
-    # devi = np.linalg.norm(points - almost_points, axis=1)
-    # print(np.min(devi))
-    # print(np.max(devi))
-    # print(np.median(devi))
-    # max_devis = np.argsort(devi)[-10:]
-    # for max_devi in max_devis:
-    #     print(f'Deviation {devi[max_devi]}')
-    #     print(f'Point {points[max_devi]}')
-    #     print(f'Al point {almost_points[max_devi]}')
-    #     print(f'Projection {projections[max_devi]}')
-    #     print(f'A, B, C, D {A[max_devi], B[max_devi], C[max_devi], D[max_devi]}')
-    # print(f'All projections are on axis {projections_on_axis}')
-
+    # Find quasi-distance between points and their projections
     quasi_dist_points_projections = np.sum((points - projections) ** 2)
     scale_pp = 1 / 20
-    print(f'Quasi dist 1 {quasi_dist_points_projections * scale_pp}')
 
+    # Find transformed projections
     new_basis_x = second_nearest_points - base_points
     new_basis_x /= np.linalg.norm(new_basis_x, axis=1, keepdims=True)
     new_basis_z = planes[:, :3]
@@ -263,8 +221,8 @@ def local_plane_uniform_cost(x, args):
         inv_transition_matrices[nearest_base_points_inds],
         projections
     )
-    plt.scatter(transformed_projections[:, 0], transformed_projections[:, 1], marker='x')
 
+    # Find transformed projections 2d density
     dens_xmin, dens_xmax, dens_xcount = -0.6, 0.6, 121
     dens_xrange = np.linspace(dens_xmin, dens_xmax, dens_xcount)
     dens_ymin, dens_ymax, dens_ycount = -0.6, 0.6, 121
@@ -273,12 +231,13 @@ def local_plane_uniform_cost(x, args):
     dens_goal = np.ones((dens_ycount-1, dens_xcount-1))
     dens_goal /= (dens_xmax - dens_xmin) * (dens_ymax - dens_ymin)
     dens = eval_dens(transformed_projections[:, :2], dens_xrange, dens_yrange)
+
+    # Find quasi-distance between real density and target density
     quasi_dist_dens_goal = np.sum((dens - dens_goal) ** 2)
     scale_dg = 1 / 25000
-    print(f'Quasi dist 2 {quasi_dist_dens_goal * scale_dg}')
 
-    return quasi_dist_points_projections
+    # Find an output
+    output = scale_pp * quasi_dist_points_projections
+    output += scale_dg * quasi_dist_dens_goal
 
-
-def __float_equals(left, right, eps=__eps):
-    return np.abs(left - right) < eps
+    return output

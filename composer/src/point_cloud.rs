@@ -2,6 +2,8 @@ use std::collections::BTreeMap;
 use std::f32::consts::PI;
 
 use glam::{Quat, Vec3};
+use kdtree::distance::squared_euclidean;
+use kdtree::KdTree;
 use structopt::StructOpt;
 
 use base::fm;
@@ -40,6 +42,14 @@ pub struct PointCloudParams {
         default_value = "inf"
     )]
     pub max_z_distance: f32,
+
+    #[structopt(
+        help = "Minimal distance to consider point as an outlier",
+        long,
+        short = "u",
+        default_value = "0.01"
+    )]
+    pub outlier_distance: f32,
 }
 
 pub fn build_point_cloud(
@@ -112,7 +122,36 @@ pub fn build_point_cloud(
         }
     }
 
+    remove_outliers(&mut points, params.outlier_distance);
+
     points
+}
+
+fn remove_outliers(points: &mut Vec<Vec3>, distance: f32) {
+    if distance.is_infinite() || points.len() < 2 {
+        return;
+    }
+
+    let mut kdtree = KdTree::with_capacity(3, points.len());
+    for point in points.iter() {
+        kdtree.add(*point.as_ref(), ()).unwrap();
+    }
+
+    let distance_squared = distance * distance;
+
+    let mut j = 0;
+    for i in 0..points.len() {
+        let mut nearest = kdtree
+            .iter_nearest(points[i].as_ref(), &squared_euclidean)
+            .unwrap();
+        let _ = nearest.next(); // Skip itself.
+        if nearest.next().unwrap().0 <= distance_squared {
+            points.swap(i, j);
+            j += 1;
+        }
+    }
+
+    points.resize(j, Vec3::default());
 }
 
 pub fn build_point_clouds(
@@ -126,4 +165,24 @@ pub fn build_point_clouds(
         clouds.push(build_point_cloud(&scan, frame, params))
     }
     clouds
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_remove_outliers() {
+        let mut points = vec![
+            Vec3::new(1.0, 0.0, 0.0),
+            Vec3::new(2.0, 0.0, 0.0),
+            Vec3::new(7.0, 0.0, 0.0),
+            Vec3::new(3.0, 0.0, 0.0),
+        ];
+        remove_outliers(&mut points, 1.0);
+        assert_eq!(points.len(), 3);
+        assert_eq!(points[0], Vec3::new(1.0, 0.0, 0.0));
+        assert_eq!(points[1], Vec3::new(2.0, 0.0, 0.0));
+        assert_eq!(points[2], Vec3::new(3.0, 0.0, 0.0));
+    }
 }

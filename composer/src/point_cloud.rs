@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::f32::consts::PI;
+use std::f32::INFINITY;
 
 use glam::{Quat, Vec3};
 use kdtree::distance::squared_euclidean;
@@ -127,6 +128,39 @@ pub fn build_point_cloud(
     points
 }
 
+pub fn clouds_distance(a: &[Vec3], b: &[Vec3]) -> Option<f32> {
+    if a.len() == 0 || b.len() == 0 {
+        return None;
+    }
+
+    let mut kdtree = KdTree::with_capacity(3, a.len());
+    for p in a {
+        kdtree.add(p.as_ref(), INFINITY).unwrap();
+    }
+
+    for p in b {
+        let mut nearest = kdtree
+            .iter_nearest_mut(p.as_ref(), &squared_euclidean)
+            .unwrap();
+        let (dist, min) = nearest.next().unwrap();
+        if dist < *min {
+            *min = dist;
+        }
+    }
+
+    let mut max = -INFINITY;
+    let all = kdtree
+        .iter_nearest(&[0.0, 0.0, 0.0], &squared_euclidean)
+        .unwrap();
+    for (_, min) in all {
+        if min.is_finite() && *min > max {
+            max = *min;
+        }
+    }
+
+    Some(max.sqrt())
+}
+
 fn remove_outliers(points: &mut Vec<Vec3>, distance: f32) {
     if distance.is_infinite() || points.len() < 2 {
         return;
@@ -170,6 +204,26 @@ pub fn build_point_clouds(
 #[cfg(test)]
 mod test {
     use super::*;
+
+    use base::assert_eq_f32;
+
+    #[test]
+    fn test_clouds_distance() {
+        assert_eq!(clouds_distance(&vec![], &vec![]), None);
+
+        let a = vec![
+            Vec3::new(1.0, 0.0, 0.0),
+            Vec3::new(5.0, 0.0, 0.0),
+            Vec3::new(9.0, 0.0, 0.0),
+            Vec3::new(15.0, 0.0, 0.0),
+        ];
+        let b = vec![
+            Vec3::new(6.0, 0.0, 0.0),
+            Vec3::new(10.0, 0.0, 0.0),
+            Vec3::new(21.0, 0.0, 0.0),
+        ];
+        assert_eq_f32!(clouds_distance(&a, &b).unwrap(), 6.0);
+    }
 
     #[test]
     fn test_remove_outliers() {

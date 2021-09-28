@@ -1,4 +1,5 @@
-use std::collections::{BTreeMap, HashMap};
+use std::cell::Cell;
+use std::collections::BTreeMap;
 use std::f32::INFINITY;
 use std::path::PathBuf;
 use std::result::Result as StdResult;
@@ -9,14 +10,14 @@ use argmin::core::{
 };
 use argmin::solver::gradientdescent::SteepestDescent;
 use argmin::solver::linesearch::MoreThuenteLineSearch;
-use glam::Vec3;
-use nalgebra::DMatrix;
 use structopt::StructOpt;
 
 use crate::misc::{
     fm_reader_from_file_or_stdin, fm_writer_to_file_or_stdout, read_scans,
 };
-use crate::point_cloud::{build_point_clouds, PointCloudParams};
+use crate::point_cloud::{
+    build_point_clouds, clouds_distance, PointCloudParams,
+};
 use base::defs::{Error, ErrorKind, Result};
 use base::fm;
 
@@ -25,30 +26,6 @@ use base::fm;
 pub struct OptimizeScanGeometryParams {
     #[structopt(help = "Input scan .fm file (STDIN if omitted)")]
     in_path: Option<PathBuf>,
-
-    #[structopt(
-        help = "Angle parameter variability",
-        long,
-        short = "a",
-        default_value = "0.174533" // 10 degrees.
-    )]
-    angle_variability: f32,
-
-    #[structopt(
-        help = "Distance parameter variability",
-        long,
-        short = "i",
-        default_value = "0.1"
-    )]
-    distance_variability: f32,
-
-    #[structopt(
-        help = "Size of cell for roughness calculation",
-        long,
-        short = "c",
-        default_value = "0.02"
-    )]
-    cell_size: f32,
 
     #[structopt(
         help = "Number of iterations",
@@ -82,9 +59,6 @@ pub fn optimize_scan_geometry_with_params(
 
     optimize_scan_geometry(
         reader.as_mut(),
-        params.angle_variability,
-        params.distance_variability,
-        params.cell_size,
         params.num_iters,
         &params.point_cloud_params,
         writer.as_mut(),
@@ -93,9 +67,6 @@ pub fn optimize_scan_geometry_with_params(
 
 pub fn optimize_scan_geometry(
     reader: &mut dyn fm::Read,
-    angle_variability: f32,
-    distance_variability: f32,
-    cell_size: f32,
     num_iters: usize,
     point_cloud_params: &PointCloudParams,
     writer: &mut dyn fm::Write,
@@ -103,12 +74,10 @@ pub fn optimize_scan_geometry(
     let (scans, scan_frames) = read_scans(reader)?;
 
     let opt = ScanOpt {
-        angle_variability,
-        distance_variability,
-        cell_size,
         point_cloud_params,
         scans: &scans,
         scan_frames: &scan_frames,
+        num_points: Cell::new(None),
     };
 
     let mut init_params: Vec<f32> = Vec::new();
@@ -132,7 +101,7 @@ pub fn optimize_scan_geometry(
     match res {
         Ok(ares) => {
             let opt = ares.operator;
-            let (scans, _) = opt.apply_params(&ares.state.best_param);
+            let scans = opt.apply_params(&ares.state.best_param);
 
             use fm::record::Type;
             for (_, scan) in scans {
@@ -157,49 +126,29 @@ pub fn optimize_scan_geometry(
 }
 
 struct ScanOpt<'a> {
-    angle_variability: f32,
-    distance_variability: f32,
-    cell_size: f32,
     point_cloud_params: &'a PointCloudParams,
     scans: &'a BTreeMap<String, fm::Scan>,
     scan_frames: &'a Vec<fm::ScanFrame>,
+    num_points: Cell<Option<usize>>,
 }
 
 impl<'a> ScanOpt<'a> {
-    fn apply_param(src: f32, dst: &mut f32, variability: f32) -> f32 {
-        let diff = (*dst - src).abs();
-        *dst = src;
-        if diff > variability {
-            diff - variability
-        } else {
-            0.0
-        }
-    }
-
-    fn apply_params(
-        &self,
-        params: &Vec<f32>,
-    ) -> (BTreeMap<String, fm::Scan>, f32) {
-        let (avar, dvar) = (self.angle_variability, self.distance_variability);
+    fn apply_params(&self, params: &Vec<f32>) -> BTreeMap<String, fm::Scan> {
         let mut scans = self.scans.clone();
-        let mut deviation = 0.0;
 
         for (i, scan) in scans.values_mut().enumerate() {
             let base = i * 5;
 
             let pos = scan.camera_initial_position.as_mut().unwrap();
-            deviation += Self::apply_param(params[base + 0], &mut pos.x, dvar);
-            deviation += Self::apply_param(params[base + 1], &mut pos.y, dvar);
-            deviation += Self::apply_param(params[base + 2], &mut pos.z, dvar);
+            pos.x = params[base + 0];
+            pos.y = params[base + 1];
+            pos.z = params[base + 2];
 
-            let elev = &mut scan.camera_view_elevation;
-            deviation += Self::apply_param(params[base + 3], elev, dvar);
-
-            let lang = &mut scan.camera_landscape_angle;
-            deviation += Self::apply_param(params[base + 4], lang, avar);
+            scan.camera_view_elevation = params[base + 3];
+            scan.camera_landscape_angle = params[base + 4];
         }
 
-        (scans, deviation)
+        scans
     }
 }
 
@@ -211,47 +160,32 @@ impl<'a> ArgminOp for ScanOpt<'a> {
     type Float = f32;
 
     fn apply(&self, p: &Self::Param) -> StdResult<Self::Output, ArgminError> {
-        let (scans, param_deviation) = self.apply_params(p);
+        let scans = self.apply_params(p);
 
-        let mut point_cloud_params = self.point_cloud_params.clone();
-        point_cloud_params.min_z = -INFINITY;
-        point_cloud_params.max_z = INFINITY;
+        let clouds = build_point_clouds(
+            &scans,
+            self.scan_frames,
+            &self.point_cloud_params,
+        );
 
-        let clouds =
-            build_point_clouds(&scans, self.scan_frames, &point_cloud_params);
-        let points: Vec<_> = clouds.into_iter().flatten().collect();
-
-        let (min_z, max_z) =
-            points.iter().fold((INFINITY, -INFINITY), |mut b, p| {
-                if p[2] < b.0 {
-                    b.0 = p[2];
-                } else if p[2] > b.1 {
-                    b.1 = p[2];
-                }
-                b
-            });
-
-        let mut z_deviation = 0.0;
-        if min_z < self.point_cloud_params.min_z {
-            z_deviation += self.point_cloud_params.min_z - min_z;
-        }
-        if max_z > self.point_cloud_params.max_z {
-            z_deviation += max_z - self.point_cloud_params.max_z;
-        }
-
-        const NAN_ROUGHNESS: f32 = 1000.0;
-        const PARAM_PENALTY_FACTOR: f32 = 1000.0;
-        const Z_PENALTY_FACTOR: f32 = 10.0;
-
-        let roughness = compute_roughness(&points, self.cell_size);
-        Ok(if roughness.is_nan() {
-            NAN_ROUGHNESS
+        let num_points = clouds.iter().fold(0, |b, c| b + c.len());
+        if let Some(num) = self.num_points.get() {
+            if num > num_points { // Fine for point loss.
+                return Ok(1.0);
+            }
         } else {
-            let penalty = 1.0
-                + param_deviation * PARAM_PENALTY_FACTOR
-                + z_deviation * Z_PENALTY_FACTOR;
-            roughness * penalty
-        })
+            self.num_points.set(Some(num_points));
+        }
+
+        let mut max = -INFINITY;
+        for i in 0..clouds.len() - 1 {
+            let dist = clouds_distance(&clouds[i], &clouds[i + 1]).unwrap();
+            if dist > max {
+                max = dist;
+            }
+        }
+
+        Ok(max)
     }
 
     fn gradient(&self, p: &Self::Param) -> StdResult<Self::Param, ArgminError> {
@@ -294,74 +228,4 @@ impl<'a> Observe<ScanOpt<'a>> for Observer {
         eprintln!();
         Ok(())
     }
-}
-
-// Plane defined in Hessian normal form.
-struct Plane {
-    n: Vec3,
-    p: f32,
-}
-
-fn compute_best_fitting_plane(points: &[Vec3]) -> Option<Plane> {
-    let data = points.iter().map(|p| p.as_ref()).flatten().cloned();
-    let points = DMatrix::from_iterator(points.len(), 3, data);
-
-    let means = points.row_mean();
-    let mut points = points.transpose();
-    points.row_mut(0).add_scalar_mut(-means[0]);
-    points.row_mut(1).add_scalar_mut(-means[1]);
-    points.row_mut(2).add_scalar_mut(-means[2]);
-
-    if let Some(u) = points.svd(true, false).u {
-        let normal = u.column(0);
-        let normal = Vec3::new(normal[0], normal[1], normal[2]);
-        let centroid = Vec3::new(means[0], means[1], means[2]);
-        Some(Plane {
-            n: Vec3::new(normal[0], normal[1], normal[2]),
-            p: -normal.dot(centroid),
-        })
-    } else {
-        None
-    }
-}
-
-fn compute_roughness(points: &[Vec3], cell_size: f32) -> f32 {
-    let init = Vec3::new(INFINITY, INFINITY, INFINITY);
-    let base = points.iter().fold(init, |mut b, p| {
-        if p.x < b.x {
-            b.x = p.x;
-        }
-        if p.y < b.y {
-            b.y = p.y;
-        }
-        if p.z < b.z {
-            b.z = p.z;
-        }
-        b
-    });
-
-    let mut cells = HashMap::new();
-    for p in points {
-        let key = (
-            ((p.x - base.x) / cell_size) as usize,
-            ((p.y - base.y) / cell_size) as usize,
-            ((p.z - base.z) / cell_size) as usize,
-        );
-        let cell = cells.entry(key).or_insert_with(|| Vec::new());
-        cell.push(*p);
-    }
-
-    let mut sum = 0.0;
-    let mut total = 0;
-    for cell in cells.values() {
-        if let Some(plane) = compute_best_fitting_plane(cell) {
-            for p in cell {
-                let distance = plane.n.dot(*p) + plane.p;
-                sum += distance.abs();
-                total += 1;
-            }
-        }
-    }
-
-    sum / total as f32
 }

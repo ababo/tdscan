@@ -30,6 +30,8 @@ def local_plane_uniform_cost(x, args):
         scans[key][__camera_landscape_angle] = x[5*i + 4]
     points = build_points_cloud(scans, frames, build_points_cloud_params)
     points_count = points.shape[0]
+    if points_count == 0 or base_points_count == 0:
+        return 1e+8
     distances = cdist(base_points, points)
     nearest_base_points_inds = np.argmin(distances, axis=0)
     nearest_points_inds = np.argmin(distances, axis=1)
@@ -239,5 +241,6 @@ def local_plane_uniform_cost(x, args):
     # Find an output
     output = scale_pp * quasi_dist_points_projections
     output += scale_dg * quasi_dist_dens_goal
+    print(output)
 
     return output

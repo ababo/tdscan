@@ -10,7 +10,7 @@ from utils import (
 
 
 if __name__ == '__main__':
-    x = np.array([0.0, 0.85, 0.63, 0.39, -1.5707964])
+    x = np.array([0.0, 0.9, 0.63, 0.39, -1.5707964])
 
     scans, frames = get_scans_and_frames('vacuum_reduced5.json')
     scans_keys = ('vacuum',)
@@ -22,7 +22,7 @@ if __name__ == '__main__':
     cost_kwargs = {'x': x, 'args': args}
     times_metrics = find_function_time_metrics(
         local_plane_uniform_cost, cost_kwargs,
-        simulations_number=10, use_tqdm=True
+        simulations_number=1, use_tqdm=True
     )
     print(f'Average time {times_metrics["mean"]}')
     print(f'Times standard deviation {times_metrics["std"]}')

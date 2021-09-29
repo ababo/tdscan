@@ -4,6 +4,7 @@ from time import time
 import matplotlib.pyplot as plt
 from numba import jit
 import numpy as np
+from scipy.spatial.distance import cdist
 from tqdm import tqdm
 
 
@@ -69,6 +70,56 @@ def select_partitions_mean_points(points, count, min_points_count=100):
     return np.array(parition_mean_points)
 
 
+def select_partition_mean_points_without_leaps(
+        points, count, min_point_counts=100, allowed_max_leap=0.2,
+        nearest_neighbors_count=5
+):
+    partition_mean_points = select_partitions_mean_points(
+        points, count, min_point_counts
+    )
+    points_count = partition_mean_points.shape[0]
+    dist_xy = cdist(partition_mean_points[:, :2], partition_mean_points[:, :2])
+    rows_inds = __get_rows_inds_for_points_without_leaps(
+        points_count, nearest_neighbors_count
+    )
+    cols_inds = __get_cols_inds_for_points_without_leaps(
+        dist_xy, nearest_neighbors_count
+    )
+    dist_z_to_nearest_neighbors = __get_dist_z_to_nearest_neighbors(
+        partition_mean_points, rows_inds, cols_inds
+    )
+    points_inds_to_delete = __get_points_inds_to_delete(
+        dist_z_to_nearest_neighbors, allowed_max_leap, points_count
+    )
+    output = np.delete(partition_mean_points, points_inds_to_delete, axis=0)
+    return output
+
+def __get_rows_inds_for_points_without_leaps(points_count, neighbors_count):
+    rows_inds = np.arange(points_count)
+    rows_inds = rows_inds.reshape(-1, 1)
+    rows_inds = np.repeat(rows_inds, neighbors_count, axis=1)
+    return rows_inds
+
+
+def __get_cols_inds_for_points_without_leaps(dist, neighbors_count):
+    cols_inds = np.argsort(dist, axis=1)
+    cols_inds = cols_inds[:, :neighbors_count]
+    return cols_inds
+
+
+def __get_dist_z_to_nearest_neighbors(points, rows_inds, cols_inds):
+    partition_mean_points_z = points[:, 2].reshape(-1, 1)
+    dist_z = cdist(partition_mean_points_z, partition_mean_points_z)
+    dist_z_to_nearest_neighbors = dist_z[rows_inds, cols_inds]
+    return dist_z_to_nearest_neighbors
+
+
+def __get_points_inds_to_delete(dist, allowed_max_leap, points_count):
+    inds = np.any(dist > allowed_max_leap, axis=1)
+    inds = np.arange(points_count)[inds]
+    return inds
+
+
 def plot_view_matplotlib(
         points, count=1000, figszie=(15.0, 7.5),
         color='k', marker='o', immediately_show=False
@@ -79,6 +130,7 @@ def plot_view_matplotlib(
     __scatter_points(ax, points_to_scatter, color, marker)
     if immediately_show:
         plt.show()
+    return ax
 
 
 def __create_ax(figsize):

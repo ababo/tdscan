@@ -12,7 +12,8 @@ if __name__ == '__main__':
     points = build_points_cloud(scans, frames, params, use_tqdm=True)
     partitions_mean_points = select_partitions_mean_points(points, 5000, 10)
     partitions_mean_points_count = partitions_mean_points.shape[0]
-    print(partitions_mean_points_count)
+    for i in range(3):
+        print(i, points[:, i].min(), points[:, i].max())
 
     # write_points_to_obj(points, use_tqdm=True)
     plot_view_matplotlib(

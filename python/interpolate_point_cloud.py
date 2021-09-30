@@ -1,12 +1,10 @@
-import alphashape
 import numpy as np
 import scipy.interpolate as interp
 import matplotlib.pyplot as plt
 
 from points_cloud import PointsCloudParams, build_points_cloud
 from utils import (
-    get_scans_and_frames, plot_view_matplotlib, select_partitions_mean_points,
-    select_partition_mean_points_without_leaps
+    get_scans_and_frames, plot_view_matplotlib, select_partitions_mean_points
 )
 
 
@@ -32,17 +30,23 @@ if __name__ == '__main__':
     z = interpolation(np.array([xravel, yravel]).T).reshape(51, 51)
     # z = interpolation(np.array([xravel, yravel]).T)
 
-    ax = plot_view_matplotlib(
-        base_points,
-        count=base_points.shape[0],
-        immediately_show=False
-    )
+    # ax = plot_view_matplotlib(
+    #     base_points,
+    #     count=base_points.shape[0],
+    #     immediately_show=False
+    # )
 
-    # fig = plt.figure(figsize=(15.0, 7.5))
-    # ax = fig.add_subplot(projection='3d')
-    # ax.set_xlabel('x')
-    # ax.set_ylabel('y')
-    # ax.set_zlabel('z')
+    # ax = plot_view_matplotlib(
+    #     points,
+    #     count=2000,
+    #     immediately_show=False
+    # )
+
+    fig = plt.figure(figsize=(15.0, 7.5))
+    ax = fig.add_subplot(projection='3d')
+    ax.set_xlabel('x')
+    ax.set_ylabel('y')
+    ax.set_zlabel('z')
 
     # ax.scatter(x, y, z, c='b', marker='x')
     ax.plot_wireframe(x, y, z)

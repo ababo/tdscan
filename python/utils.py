@@ -258,3 +258,165 @@ def __get_points_in_range(points, points_range, index):
         points < points_range[index + 1]
     )
     return out
+
+
+def project_points_to_planes(points, planes):
+    planes_neq_zero = __planes_neq_zero(planes)
+    det_planes = __find_det_planes(planes, planes_neq_zero)
+    projections = __find_projections(
+        points, planes, planes_neq_zero, det_planes
+    )
+    return projections
+
+
+def __planes_neq_zero(planes, eps=1e-2):
+    planes_eq_zero = float_equals(planes, 0.0, eps)
+    planes_neq_zero = np.logical_not(planes_eq_zero)
+    return planes_neq_zero
+
+
+def __find_det_planes(planes, planes_neq_zero):
+    planes_sum_square = np.sum(planes[:, :3] ** 2, axis=1)
+    det_planes_a_neq_zero = planes[:, 0] * planes_sum_square
+    det_planes_b_neq_zero = planes[:, 1] * planes_sum_square
+    det_planes_c_neq_zero = planes[:, 2] * planes_sum_square
+    a_neq_zero, b_neq_zero, _, _ = __get_neq_zero_coords(planes_neq_zero)
+    det_planes = np.where(
+        a_neq_zero, det_planes_a_neq_zero,
+        np.where(b_neq_zero, det_planes_b_neq_zero, det_planes_c_neq_zero)
+    )
+    return det_planes
+
+
+def __get_neq_zero_coords(planes_neq_zero):
+    a_neq_zero = planes_neq_zero[:, 0]
+    b_neq_zero = planes_neq_zero[:, 1]
+    c_neq_zero = planes_neq_zero[:, 2]
+    d_neq_zero = planes_neq_zero[:, 3]
+    return a_neq_zero, b_neq_zero, c_neq_zero, d_neq_zero
+
+
+def __find_projections(points, planes, planes_neq_zero, det_planes):
+    points_count = points.shape[0]
+    a, b, c, d = __get_planes_coords(planes)
+    x, y, z = __get_points_coords(points)
+    a_neq_zero, b_neq_zero, _, _ = __get_neq_zero_coords(planes_neq_zero)
+    a_neq_zero = np.reshape(a_neq_zero, (-1, 1))
+    b_neq_zero = np.reshape(b_neq_zero, (-1, 1))
+    projections_a_neq_zero = __find_projections_a_neq_zero(
+        (x, y, z), points_count, (a, b, c, d), det_planes
+    )
+    projections_b_neq_zero = __find_projections_b_neq_zero(
+        (x, y, z), points_count, (a, b, c, d), det_planes
+    )
+    projections_c_neq_zero = __find_projections_c_neq_zero(
+        (x, y, z), points_count, (a, b, c, d), det_planes
+    )
+    points_are_projections = __find_points_are_projections(
+        (x, y, z), (a, b, c, d)
+    )
+    projections_different_from_points = np.where(
+        a_neq_zero, projections_a_neq_zero,
+        np.where(b_neq_zero, projections_b_neq_zero, projections_c_neq_zero)
+    )
+    projections = np.where(
+        points_are_projections, points, projections_different_from_points
+    )
+    return projections
+
+
+def __get_planes_coords(planes):
+    a = planes[:, 0]
+    b = planes[:, 1]
+    c = planes[:, 2]
+    d = planes[:, 3]
+    return a, b, c, d
+
+
+def __get_points_coords(points):
+    x = points[:, 0]
+    y = points[:, 1]
+    z = points[:, 2]
+    return x, y, z
+
+
+def __find_projections_a_neq_zero(points, points_count, planes, det_planes):
+    x, y, z = points
+    a, b, c, d = planes
+    cx_minus_az = c*x - a*z
+    bx_minus_ay = b*x - a*y
+    projections = np.zeros((points_count, 3))
+    projections[:, 0] = -a * a * d
+    projections[:, 0] += a * c * cx_minus_az
+    projections[:, 0] += a * b * bx_minus_ay
+    projections[:, 0] /= det_planes
+    projections[:, 1] = b * c * cx_minus_az
+    projections[:, 1] += -(a*a + c*c) * bx_minus_ay
+    projections[:, 1] += -a * b * d
+    projections[:, 1] /= det_planes
+    projections[:, 2] = b * c * bx_minus_ay
+    projections[:, 2] += -(a*a + b*b) * cx_minus_az
+    projections[:, 2] += -a * c * d
+    projections[:, 2] /= det_planes
+    return projections
+
+
+def __find_projections_b_neq_zero(points, points_count, planes, det_planes):
+    x, y, z = points
+    a, b, c, d = planes
+    bx_minus_ay = b*x - a*y
+    cy_minus_bz = c*y - b*z
+    projections = np.zeros((points_count, 3))
+    projections[:, 0] = (b*b + c*c) * bx_minus_ay
+    projections[:, 0] += a * c * cy_minus_bz
+    projections[:, 0] += a * b * d
+    projections[:, 0] /= det_planes
+    projections[:, 1] = b * c * cy_minus_bz
+    projections[:, 1] += -a * b * bx_minus_ay
+    projections[:, 1] += -b * b * d
+    projections[:, 1] /= det_planes
+    projections[:, 2] = -b * c * d
+    projections[:, 2] += -(a*a + b*b) * cy_minus_bz
+    projections[:, 2] += -a * c * bx_minus_ay
+    projections[:, 2] /= det_planes
+    return projections
+
+
+def __find_projections_c_neq_zero(points, points_count, planes, det_planes):
+    x, y, z = points
+    a, b, c, d = planes
+    cx_minus_az = c*x - a*z
+    cy_minus_bz = c*y - b*z
+    projections = np.zeros((points_count, 3))
+    projections[:, 0] = (b*b + c*c) * cx_minus_az
+    projections[:, 0] += -a * b * cy_minus_bz
+    projections[:, 0] += -a * c * d
+    projections[:, 0] /= det_planes
+    projections[:, 1] = (a*a + c*c) * cy_minus_bz
+    projections[:, 1] += -a * b * cx_minus_az
+    projections[:, 1] += -b * c * d
+    projections[:, 1] /= det_planes
+    projections[:, 2] = -c * c * d
+    projections[:, 2] += -a * c * cx_minus_az
+    projections[:, 2] += -b * c * cy_minus_bz
+    projections[:, 2] /= det_planes
+    return projections
+
+
+def __find_points_are_projections(points, planes):
+    x, y, z = points
+    a, b, c, d = planes
+    plane_eq = a*x + b*y + c*z + d
+    points_are_projections = float_equals(plane_eq, 0.0)
+    points_are_projections = np.reshape(points_are_projections, (-1, 1))
+    return points_are_projections
+
+
+@jit(nopython=True)
+def pairwise_dist_square_sum(points):
+    sum = 0.0
+    points_count = points.shape[0]
+    for i in np.arange(1, points_count):
+        for j in np.arange(i+1, points_count):
+            sum += np.sum((points[i] - points[j]) ** 2)
+    return sum

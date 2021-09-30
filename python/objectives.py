@@ -2,7 +2,10 @@ import numpy as np
 from scipy.spatial.distance import cdist
 
 from points_cloud import build_points_cloud
-from utils import batch_dot, eval_dens, float_equals
+from utils import (
+    batch_dot, eval_dens, float_equals,
+    pairwise_dist_square_sum, project_points_to_planes
+)
 
 # scan keys
 __camera_angle_of_view = 'camera_angle_of_view'
@@ -244,3 +247,132 @@ def local_plane_uniform_cost(x, args):
     print(output)
 
     return output
+
+
+def multiple_projections_cost(x, args):
+    scans, scans_keys, frames, build_points_cloud_params, dist_count = args
+    for i, key in enumerate(scans_keys):
+        scans[key][__camera_initial_position][__x] = x[5*i]
+        scans[key][__camera_initial_position][__y] = x[5*i + 1]
+        scans[key][__camera_initial_position][__z] = x[5*i + 2]
+        scans[key][__camera_view_elevation] = x[5*i + 3]
+        scans[key][__camera_landscape_angle] = x[5*i + 4]
+    points = build_points_cloud(scans, frames, build_points_cloud_params)
+    points_count = points.shape[0]
+
+    sep_planes = np.array([
+        [1.0, 0.0, 0.0, 0.0],
+        [-1.0, 1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0, 0.0],
+        [1.0, 1.0, 0.0, 0.0]
+    ])
+    projection_planes = np.repeat(sep_planes, 2, axis=0)
+    projection_planes[::2, 3] -= 2
+    projection_planes[1::2, 3] += 2
+    projection_planes = np.reshape(projection_planes, (4, 2, 4))
+
+    points_additional_col = np.ones((points_count, 1))
+    extended_points = np.hstack((points, points_additional_col))
+    sep_planes_equations_on_points = np.dot(extended_points, sep_planes.T)
+    points_sep_groups = sep_planes_equations_on_points > 0
+    points_sep_groups = np.expand_dims(points_sep_groups, 2)
+
+    projection_planes_mapped = np.where(
+        points_sep_groups,
+        np.expand_dims(projection_planes[:, 0], 0),
+        np.expand_dims(projection_planes[:, 1], 0)
+    )
+
+    # # TODO DELETE THIS LATER
+    # dummy_projs = np.zeros((points_count, 4, 4))
+    # for i in tqdm(range(points_count)):
+    #     point = points[i]
+    #     plane_eq_0 = np.dot(point, sep_planes[0, :3]) + sep_planes[0, 3]
+    #     plane_eq_1 = np.dot(point, sep_planes[1, :3]) + sep_planes[1, 3]
+    #     plane_eq_2 = np.dot(point, sep_planes[2, :3]) + sep_planes[2, 3]
+    #     plane_eq_3 = np.dot(point, sep_planes[3, :3]) + sep_planes[3, 3]
+    #     if plane_eq_0 > 0:
+    #         dummy_projs[i, 0] = projection_planes[0, 0]
+    #     else:
+    #         dummy_projs[i, 0] = projection_planes[0, 1]
+    #     if plane_eq_1 > 0:
+    #         dummy_projs[i, 1] = projection_planes[1, 0]
+    #     else:
+    #         dummy_projs[i, 1] = projection_planes[1, 1]
+    #     if plane_eq_2 > 0:
+    #         dummy_projs[i, 2] = projection_planes[2, 0]
+    #     else:
+    #         dummy_projs[i, 2] = projection_planes[2, 1]
+    #     if plane_eq_3 > 0:
+    #         dummy_projs[i, 3] = projection_planes[3, 0]
+    #     else:
+    #         dummy_projs[i, 3] = projection_planes[3, 1]
+    # print(f'Diff {np.linalg.norm(projection_planes_mapped - dummy_projs)}')
+
+    repeated_points = np.repeat(points, 4, axis=0)
+    flatten_projection_planes = np.reshape(
+        projection_planes_mapped, (4 * points_count, 4)
+    )
+    projections = project_points_to_planes(
+        repeated_points, flatten_projection_planes
+    )
+    projections = np.reshape(projections, (points_count, 4, 3))
+    # # TODO DELETE THIS LATER
+    # dummy_planes_eqs = np.zeros((points_count, 4))
+    # for i in tqdm(range(points_count)):
+    #     point = points[i]
+    #     plane_eq_0 = np.dot(point, sep_planes[0, :3]) + sep_planes[0, 3]
+    #     plane_eq_1 = np.dot(point, sep_planes[1, :3]) + sep_planes[1, 3]
+    #     plane_eq_2 = np.dot(point, sep_planes[2, :3]) + sep_planes[2, 3]
+    #     plane_eq_3 = np.dot(point, sep_planes[3, :3]) + sep_planes[3, 3]
+    #     if plane_eq_0 > 0:
+    #         dummy_planes_eqs[i, 0] = np.dot(
+    #             projections[i, 0], projection_planes[0, 0, :3]
+    #         ) + projection_planes[0, 0, 3]
+    #     else:
+    #         dummy_planes_eqs[i, 0] = np.dot(
+    #             projections[i, 0], projection_planes[0, 1, :3]
+    #         ) + projection_planes[0, 1, 3]
+    #     if plane_eq_1 > 0:
+    #         dummy_planes_eqs[i, 1] = np.dot(
+    #             projections[i, 1], projection_planes[1, 0, :3]
+    #         ) + projection_planes[1, 0, 3]
+    #     else:
+    #         dummy_planes_eqs[i, 1] = np.dot(
+    #             projections[i, 1], projection_planes[1, 1, :3]
+    #         ) + projection_planes[1, 1, 3]
+    #     if plane_eq_2 > 0:
+    #         dummy_planes_eqs[i, 2] = np.dot(
+    #             projections[i, 2], projection_planes[2, 0, :3]
+    #         ) + projection_planes[2, 0, 3]
+    #     else:
+    #         dummy_planes_eqs[i, 2] = np.dot(
+    #             projections[i, 2], projection_planes[2, 1, :3]
+    #         ) + projection_planes[2, 1, 3]
+    #     if plane_eq_3 > 0:
+    #         dummy_planes_eqs[i, 3] = np.dot(
+    #             projections[i, 3], projection_planes[3, 0, :3]
+    #         ) + projection_planes[3, 0, 3]
+    #     else:
+    #         dummy_planes_eqs[i, 3] = np.dot(
+    #             projections[i, 3], projection_planes[3, 1, :3]
+    #         ) + projection_planes[3, 1, 3]
+    # dummy_planes_eqs = np.ravel(dummy_planes_eqs)
+    # print(f'Min {dummy_planes_eqs.min()}')
+    # print(f'Max {dummy_planes_eqs.max()}')
+    # print(f'Mean {dummy_planes_eqs.mean()}')
+
+    projections = np.transpose(projections, axes=[1, 0, 2])
+
+    dist = np.zeros(4)
+    inds_for_dist = np.arange(points_count)
+    np.random.shuffle(inds_for_dist)
+    inds_for_dist = inds_for_dist[:dist_count]
+    dist[0] = pairwise_dist_square_sum(projections[0, inds_for_dist])
+    dist[1] = pairwise_dist_square_sum(projections[1, inds_for_dist])
+    dist[2] = pairwise_dist_square_sum(projections[2, inds_for_dist])
+    dist[3] = pairwise_dist_square_sum(projections[3, inds_for_dist])
+
+    cost = np.sum(dist)
+
+    return cost

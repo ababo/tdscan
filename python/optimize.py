@@ -1,10 +1,15 @@
 import numpy as np
+import scipy.interpolate as interp
 from scipy.optimize import (
     minimize, basinhopping, differential_evolution, dual_annealing, shgo
 )
 
 from genetic_algorithm import minimize_genetic
-from objectives import local_plane_uniform_cost, multiple_projections_cost
+from objectives import (
+    local_plane_uniform_cost,
+    multiple_projections_cost,
+    multiple_projections_interp_cost
+)
 from points_cloud import build_points_cloud, PointsCloudParams
 from utils import get_scans_and_frames, select_partitions_mean_points
 
@@ -45,10 +50,19 @@ if __name__ == '__main__':
     # args = (args,)
     # cost_to_optimize = local_plane_uniform_cost
 
+    # dist_count = 1000
+    # args = scans, scans_keys, frames, build_points_cloud_params, dist_count
+    # args = (args,)
+    # cost_to_optimize = multiple_projections_cost
+
     dist_count = 1000
-    args = scans, scans_keys, frames, build_points_cloud_params, dist_count
+    base_points = select_partitions_mean_points(points, 5000, 10)
+    ip = interp.RBFInterpolator(
+        base_points[:, :2], base_points[:, 2], smoothing=0.0125
+    )
+    args = scans, scans_keys, frames, build_points_cloud_params, dist_count, ip
     args = (args,)
-    cost_to_optimize = multiple_projections_cost
+    cost_to_optimize = multiple_projections_interp_cost
 
     methods = [
         'Nelder-Mead',
@@ -127,6 +141,18 @@ if __name__ == '__main__':
             cost_to_optimize, bounds, args,
             workers=1, x0=x0, disp=True
         )
+        print(f'Optimize result {opt}')
+        print(f'So that optimal x with this method is {opt.x}')
+    except Exception as e:
+        e_msg = ''.join([
+            f'Method differential evolution did not work ',
+            f'due to the following exception:\n{e}\n'
+        ])
+        print(e_msg)
+
+    print('Using method shgo.')
+    try:
+        opt = shgo(cost_to_optimize, bounds, args)
         print(f'Optimize result {opt}')
         print(f'So that optimal x with this method is {opt.x}')
     except Exception as e:

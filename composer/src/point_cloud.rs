@@ -5,6 +5,7 @@ use std::f32::INFINITY;
 use glam::{Quat, Vec3};
 use kdtree::distance::squared_euclidean;
 use kdtree::KdTree;
+use nalgebra::DMatrix;
 use structopt::StructOpt;
 
 use base::fm;
@@ -128,37 +129,91 @@ pub fn build_point_cloud(
     points
 }
 
-pub fn clouds_distance(a: &[Vec3], b: &[Vec3]) -> Option<f32> {
-    if a.len() == 0 || b.len() == 0 {
+pub fn clouds_distance(
+    a: &[Vec3],
+    b: &[Vec3],
+    num_neighbours: usize,
+) -> Option<f32> {
+    if num_neighbours < 3 {
         return None;
     }
 
-    let mut kdtree = KdTree::with_capacity(3, a.len());
-    for p in a {
-        kdtree.add(p.as_ref(), INFINITY).unwrap();
+    let mut a_tree = KdTree::with_capacity(3, a.len());
+    for (i, p) in a.iter().enumerate() {
+        a_tree.add(p.as_ref(), i).unwrap();
     }
 
-    for p in b {
-        let mut nearest = kdtree
-            .iter_nearest_mut(p.as_ref(), &squared_euclidean)
-            .unwrap();
-        let (dist, min) = nearest.next().unwrap();
-        if dist < *min {
-            *min = dist;
-        }
+    let mut b_tree = KdTree::with_capacity(3, b.len());
+    for (i, p) in b.iter().enumerate() {
+        b_tree.add(p.as_ref(), i).unwrap();
     }
 
+    let mut neighbours = Vec::with_capacity(num_neighbours);
     let mut max = -INFINITY;
-    let all = kdtree
-        .iter_nearest(&[0.0, 0.0, 0.0], &squared_euclidean)
-        .unwrap();
-    for (_, min) in all {
-        if min.is_finite() && *min > max {
-            max = *min;
+
+    for a_point in a {
+        let mut b_nearest = b_tree
+            .iter_nearest(a_point.as_ref(), &squared_euclidean)
+            .unwrap();
+        let b_point = if let Some(p) = b_nearest.next() {
+            b[*p.1]
+        } else {
+            return None;
+        };
+
+        neighbours.clear();
+        let mut a_nearest = a_tree
+            .iter_nearest(a_point.as_ref(), &squared_euclidean)
+            .unwrap();
+        let _ = a_nearest.next(); // Skip itself.
+        neighbours.extend(a_nearest.map(|p| a[*p.1]).take(num_neighbours));
+        let a_plane = if let Some(plane) =
+            compute_best_fitting_plane(neighbours.as_slice())
+        {
+            plane
+        } else {
+            continue;
+        };
+
+        let dist = (*a_point - b_point).dot(a_plane.n).abs();
+        if dist > max {
+            max = dist;
         }
     }
 
-    Some(max.sqrt())
+    if max.is_finite() {
+        Some(max)
+    } else {
+        None
+    }
+}
+
+// Plane defined in Hessian normal form.
+struct Plane {
+    n: Vec3,
+    #[allow(dead_code)]
+    p: f32,
+}
+
+fn compute_best_fitting_plane(points: &[Vec3]) -> Option<Plane> {
+    let data = points.iter().map(|p| p.as_ref()).flatten().cloned();
+    let points = DMatrix::from_iterator(points.len(), 3, data);
+    let means = points.row_mean();
+    let mut points = points.transpose();
+    points.row_mut(0).add_scalar_mut(-means[0]);
+    points.row_mut(1).add_scalar_mut(-means[1]);
+    points.row_mut(2).add_scalar_mut(-means[2]);
+    if let Some(u) = points.svd(true, false).u {
+        let normal = u.column(0);
+        let normal = Vec3::new(normal[0], normal[1], normal[2]);
+        let centroid = Vec3::new(means[0], means[1], means[2]);
+        Some(Plane {
+            n: normal,
+            p: -normal.dot(centroid),
+        })
+    } else {
+        None
+    }
 }
 
 fn remove_outliers(points: &mut Vec<Vec3>, distance: f32) {
@@ -204,26 +259,6 @@ pub fn build_point_clouds(
 #[cfg(test)]
 mod test {
     use super::*;
-
-    use base::assert_eq_f32;
-
-    #[test]
-    fn test_clouds_distance() {
-        assert_eq!(clouds_distance(&vec![], &vec![]), None);
-
-        let a = vec![
-            Vec3::new(1.0, 0.0, 0.0),
-            Vec3::new(5.0, 0.0, 0.0),
-            Vec3::new(9.0, 0.0, 0.0),
-            Vec3::new(15.0, 0.0, 0.0),
-        ];
-        let b = vec![
-            Vec3::new(6.0, 0.0, 0.0),
-            Vec3::new(10.0, 0.0, 0.0),
-            Vec3::new(21.0, 0.0, 0.0),
-        ];
-        assert_eq_f32!(clouds_distance(&a, &b).unwrap(), 6.0);
-    }
 
     #[test]
     fn test_remove_outliers() {

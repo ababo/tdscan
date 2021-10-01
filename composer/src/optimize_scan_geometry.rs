@@ -1,6 +1,5 @@
 use std::cell::Cell;
 use std::collections::BTreeMap;
-use std::f32::INFINITY;
 use std::path::PathBuf;
 use std::result::Result as StdResult;
 
@@ -10,7 +9,9 @@ use argmin::core::{
 };
 use argmin::solver::gradientdescent::SteepestDescent;
 use argmin::solver::linesearch::MoreThuenteLineSearch;
+use glam::Vec3;
 use structopt::StructOpt;
+use rand::Rng;
 
 use crate::misc::{
     fm_reader_from_file_or_stdin, fm_writer_to_file_or_stdout, read_scans,
@@ -150,6 +151,20 @@ impl<'a> ScanOpt<'a> {
 
         scans
     }
+
+    fn select_random_points(points: &mut Vec<Vec3>, num: usize) {
+        if num >= points.len() {
+            return;
+        }
+
+        let mut rng = rand::thread_rng();
+        for i in 0..num {
+            let j = rng.gen_range(i..points.len());
+            points.swap(i, j);
+        }
+
+        points.resize(num, Vec3::default());
+    }
 }
 
 impl<'a> ArgminOp for ScanOpt<'a> {
@@ -162,30 +177,38 @@ impl<'a> ArgminOp for ScanOpt<'a> {
     fn apply(&self, p: &Self::Param) -> StdResult<Self::Output, ArgminError> {
         let scans = self.apply_params(p);
 
-        let clouds = build_point_clouds(
+        let mut clouds = build_point_clouds(
             &scans,
             self.scan_frames,
             &self.point_cloud_params,
         );
 
+        for cloud in clouds.iter_mut() {
+            ScanOpt::select_random_points(cloud, 500);
+        }
+
         let num_points = clouds.iter().fold(0, |b, c| b + c.len());
         if let Some(num) = self.num_points.get() {
-            if num > num_points { // Fine for point loss.
+            if num > num_points {
+                // Fine for point loss.
                 return Ok(1.0);
             }
         } else {
             self.num_points.set(Some(num_points));
         }
 
-        let mut max = -INFINITY;
+        let mut sum = 0.0;
+        let mut num = 0;
         for i in 0..clouds.len() - 1 {
-            let dist = clouds_distance(&clouds[i], &clouds[i + 1]).unwrap();
-            if dist > max {
-                max = dist;
+            if let Some(dist) = clouds_distance(&clouds[i], &clouds[i + 1], 5) {
+                sum += dist;
+                num += 1;
+            } else {
+                return Ok(1.0);
             }
         }
 
-        Ok(max)
+        Ok(sum / num as f32)
     }
 
     fn gradient(&self, p: &Self::Param) -> StdResult<Self::Param, ArgminError> {

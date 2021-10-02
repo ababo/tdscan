@@ -320,7 +320,7 @@ def __find_projections_on_different_views(points, points_count):
 
 
 def points_in_neighborhood_cost(x, args):
-    scans, scans_keys, frames, build_points_cloud_params, dist_count = args
+    scans, scans_keys, frames, build_points_cloud_params, dist_count, ip = args
     for i, key in enumerate(scans_keys):
         scans[key][__camera_initial_position][__x] = x[5*i]
         scans[key][__camera_initial_position][__y] = x[5*i + 1]
@@ -353,7 +353,59 @@ def points_in_neighborhood_cost(x, args):
     )[:, 1]
     transformed_projections[3, :, 1] = projections[3, :, 2]
 
-    # TODO DELETE THIS DUMMY TEST LATER
+    # # TODO DELETE THIS DUMMY TEST LATER
+    # sep_planes = np.array([
+    #     [1.0, 0.0, 0.0, 0.0],
+    #     [-1.0, 1.0, 0.0, 0.0],
+    #     [0.0, 1.0, 0.0, 0.0],
+    #     [1.0, 1.0, 0.0, 0.0]
+    # ])
+    # projection_planes = np.repeat(sep_planes, 2, axis=0)
+    # projection_planes[::2, 3] -= 2
+    # projection_planes[1::2, 3] += 2
+    # for i in range(4):
+    #     plt.figure(figsize=(15.0, 7.5))
+    #     plt.title(f'Plane {projection_planes[2*i]}')
+    #     points_to_plot = transformed_projections[i, points_sep_groups[:, i, 0]]
+    #     plt.plot(points_to_plot[:, 0], points_to_plot[:, 1], 'kx')
+    #     # ideal_points_x, ideal_points_y = get_ideal_points_on_projection_planes(
+    #     #     i, 0
+    #     # )
+    #     # plt.plot(ideal_points_x, ideal_points_y, 'b-')
+    #     x = np.linspace(-0.4, 0.4, 801)
+    #     y = ip[i][0](x)
+    #     plt.plot(x, y, 'b-')
+    #     xgrid = np.linspace(-0.5, 0.5, 101)
+    #     ygrid = np.linspace(-0.05, 0.65, 71)
+    #     xx, yy = np.meshgrid(xgrid, ygrid)
+    #     contour_x = np.logical_and(-0.4 <= xx, xx <= 0.4)
+    #     contour_y = np.logical_and(0.0 <= yy, yy <= ip[i][0](xx))
+    #     contour = np.logical_and(contour_x, contour_y)
+    #     print(contour.shape)
+    #     plt.contourf(xx, yy, contour.astype('float'))
+    #
+    #     plt.figure(figsize=(15.0, 7.5))
+    #     plt.title(f'Plane {projection_planes[2*i + 1]}')
+    #     points_to_plot = transformed_projections[
+    #         i, np.logical_not(points_sep_groups[:, i, 0])
+    #     ]
+    #     plt.plot(points_to_plot[:, 0], points_to_plot[:, 1], 'kx')
+    #     # ideal_points_x, ideal_points_y = get_ideal_points_on_projection_planes(
+    #     #     i, 1
+    #     # )
+    #     # plt.plot(ideal_points_x, ideal_points_y, 'b-')
+    #     x = np.linspace(-0.4, 0.4, 801)
+    #     y = ip[i][1](x)
+    #     plt.plot(x, y, 'b-')
+    #     xgrid = np.linspace(-0.5, 0.5, 101)
+    #     ygrid = np.linspace(-0.05, 0.65, 71)
+    #     xx, yy = np.meshgrid(xgrid, ygrid)
+    #     contour_x = np.logical_and(-0.4 <= xx, xx <= 0.4)
+    #     contour_y = np.logical_and(0.0 <= yy, yy <= ip[i][1](xx))
+    #     contour = np.logical_and(contour_x, contour_y)
+    #     plt.contourf(xx, yy, contour.astype('float'))
+    # plt.show()
+
     sep_planes = np.array([
         [1.0, 0.0, 0.0, 0.0],
         [-1.0, 1.0, 0.0, 0.0],
@@ -363,79 +415,31 @@ def points_in_neighborhood_cost(x, args):
     projection_planes = np.repeat(sep_planes, 2, axis=0)
     projection_planes[::2, 3] -= 2
     projection_planes[1::2, 3] += 2
-    for i in range(4):
-        plt.figure(figsize=(15.0, 7.5))
-        plt.title(f'Plane {projection_planes[2*i]}')
-        points_to_plot = transformed_projections[i, points_sep_groups[:, i, 0]]
-        plt.plot(points_to_plot[:, 0], points_to_plot[:, 1], 'kx')
-        if i == 0:
-            ideal_points_x = np.array([
-                -0.41, -0.39, -0.16, -0.14, 0.14, 0.16, 0.39, 0.41
-            ])
-            ideal_points_y = np.array([
-                0.0, 0.15, 0.15, 0.6, 0.6, 0.15, 0.15, 0.0
-            ])
-        elif i == 1:
-            ideal_points_x = np.array([
-                -0.41, -0.39, -0.21, -0.19, 0.115, 0.135, 0.39, 0.41
-            ])
-            ideal_points_y = np.array([
-                0.0, 0.15, 0.15, 0.6, 0.6, 0.15, 0.15, 0.0
-            ])
-        elif i == 2:
-            ideal_points_x = np.array([
-                -0.41, -0.39, -0.185, -0.165, 0.14, 0.16, 0.39, 0.41
-            ])
-            ideal_points_y = np.array([
-                0.0, 0.15, 0.15, 0.6, 0.6, 0.15, 0.15, 0.0
-            ])
-        else:
-            ideal_points_x = np.array([
-                -0.41, -0.39, -0.185, -0.165, 0.115, 0.135, 0.39, 0.41
-            ])
-            ideal_points_y = np.array([
-                0.0, 0.15, 0.15, 0.6, 0.6, 0.15, 0.15, 0.0
-            ])
-        plt.plot(ideal_points_x, ideal_points_y, 'b-')
 
-        plt.figure(figsize=(15.0, 7.5))
-        plt.title(f'Plane {projection_planes[2*i + 1]}')
-        points_to_plot = transformed_projections[
-            i, np.logical_not(points_sep_groups[:, i, 0])
-        ]
-        plt.plot(points_to_plot[:, 0], points_to_plot[:, 1], 'kx')
-        if i == 0:
-            ideal_points_x = np.array([
-                -0.41, -0.39, -0.11, -0.09, 0.09, 0.11, 0.39, 0.41
-            ])
-            ideal_points_y = np.array([
-                0.0, 0.15, 0.15, 0.6, 0.6, 0.15, 0.15, 0.0
-            ])
-        elif i == 1:
-            ideal_points_x = np.array([
-                -0.41, -0.39, -0.16, -0.14, 0.14, 0.16, 0.39, 0.41
-            ])
-            ideal_points_y = np.array([
-                0.0, 0.15, 0.15, 0.6, 0.6, 0.15, 0.15, 0.0
-            ])
-        elif i == 2:
-            ideal_points_x = np.array([
-                -0.41, -0.39, -0.185, -0.165, 0.165, 0.185, 0.39, 0.41
-            ])
-            ideal_points_y = np.array([
-                0.0, 0.15, 0.15, 0.6, 0.6, 0.15, 0.15, 0.0
-            ])
-        else:
-            ideal_points_x = np.array([
-                -0.4, -0.4, -0.34, -0.32, -0.29, -0.21, -0.195, -0.175, -0.132, -0.09, 0.08, 0.1, 0.13,
-                0.155, 0.165, 0.165, 0.26, 0.35, 0.4, 0.4
-            ])
-            ideal_points_y = np.array([
-                0.0, 0.08, 0.13, 0.135, 0.15, 0.15, 0.5, 0.55, 0.6, 0.63, 0.63, 0.61, 0.53,
-                0.41, 0.3, 0.14, 0.14, 0.12, 0.06, 0.0
-            ])
-        plt.plot(ideal_points_x, ideal_points_y, 'b-')
-    plt.show()
+    xmin, xmax, xcount = -0.5, 0.5, 101
+    xstep = (xmax - xmin) / (xcount - 1)
+    xgrid = np.linspace(xmin, xmax, xcount)
+    ymin, ymax, ycount = -0.05, 0.65, 71
+    ystep = (ymax - ymin) / (ycount - 1)
+    ygrid = np.linspace(ymin, ymax, ycount)
+    xx, yy = np.meshgrid(xgrid, ygrid)
+    contour_x = np.logical_and(-0.4 <= xx, xx <= 0.4)
+    cost = 0.0
+    for i in range(4):
+        for j in range(2):
+            if j == 0:
+                projs_inds = points_sep_groups[:, i, 0]
+            else:
+                projs_inds = np.logical_not(points_sep_groups[:, i, 0])
+            projs = transformed_projections[i, projs_inds]
+            contour_y = np.logical_and(0.0 <= yy, yy <= ip[i][j](xx))
+            contour = np.logical_and(contour_x, contour_y)
+            goal_dens = np.where(contour[:-1, :-1], 1.0, 0.0)
+            vol = np.sum(goal_dens * xstep * ystep)
+            goal_dens /= vol
+            real_dens = eval_dens(projs, xgrid, ygrid)
+            cost += np.sum((goal_dens - real_dens) ** 2)
+    return cost / points_count
 
 
 def multiple_projections_interp_cost(x, args):
@@ -464,3 +468,100 @@ def multiple_projections_interp_cost(x, args):
     cost = mult_proj_scale * mult_proj_cost + interp_scale * interp_cost
 
     return cost
+
+
+def get_ideal_points_on_projection_planes(plane_index, plane_subindex):
+    if plane_index == 0:
+        if plane_subindex == 0:
+            ideal_points_x = np.array([
+                -0.5, -0.4, -0.4, -0.385, -0.34, -0.2, -0.16, -0.156, -0.153,
+                -0.135, -0.09, -0.075, 0.047, 0.056, 0.09, 0.11, 0.134, 0.147,
+                0.147, 0.34, 0.4, 0.4, 0.5
+            ])
+            ideal_points_y = np.array([
+                0.0, 0.0, 0.06, 0.067, 0.13, 0.15, 0.15, 0.467, 0.51, 0.55,
+                0.592, 0.628, 0.622, 0.57, 0.56, 0.53, 0.46, 0.334, 0.132,
+                0.131, 0.06, 0.0, 0.0
+            ])
+        else:
+            ideal_points_x = np.array([
+                -0.5, -0.4, -0.4, -0.35, -0.34, -0.185, -0.145, -0.143, -0.139,
+                -0.117, -0.114, -0.094, -0.07, -0.061, 0.058, 0.063, 0.1,
+                0.133, 0.148, 0.148, 0.21, 0.27, 0.34, 0.4, 0.4, 0.5
+            ])
+            ideal_points_y = np.array([
+                0.0, 0.0, 0.09, 0.11, 0.13, 0.13, 0.135, 0.34, 0.485, 0.55,
+                0.556, 0.56, 0.59, 0.628, 0.628, 0.59, 0.55, 0.473, 0.345,
+                0.15, 0.15, 0.135, 0.13, 0.06, 0.0, 0.0
+            ])
+    elif plane_index == 1:
+        if plane_subindex == 0:
+            ideal_points_x = np.array([
+                -0.5, -0.4, -0.4, -0.375, -0.35, -0.34, -0.33, -0.2, -0.182,
+                -0.168, -0.15, -0.11, -0.076, 0.04, 0.057, 0.07, 0.1, 0.12,
+                0.134, 0.151, 0.151, 0.34, 0.4, 0.4, 0.5
+            ])
+            ideal_points_y = np.array([
+                0.0, 0.0, 0.06, 0.06, 0.11, 0.125, 0.13, 0.13, 0.463, 0.51,
+                0.54, 0.58, 0.625, 0.625, 0.6, 0.571, 0.56, 0.53, 0.48, 0.366,
+                0.13, 0.13, 0.06, 0.0, 0.0
+            ])
+        else:
+            ideal_points_x = np.array([
+                -0.5, -0.4, -0.4, -0.386, -0.337, -0.32, -0.17, -0.166, -0.15,
+                -0.128, -0.085, -0.05, 0.09, 0.146, 0.16, 0.17, 0.17, 0.34,
+                0.38, 0.4, 0.4, 0.5
+            ])
+            ideal_points_y = np.array([
+                0.0, 0.0, 0.06, 0.07, 0.127, 0.13, 0.13, 0.43, 0.53, 0.555,
+                0.6, 0.63, 0.61, 0.46, 0.41, 0.35, 0.134, 0.13, 0.06, 0.06,
+                0.0, 0.0
+            ])
+    elif plane_index == 2:
+        if plane_subindex == 0:
+            ideal_points_x = np.array([
+                -0.5, -0.4, -0.4, -0.38, -0.34, -0.3, -0.26, -0.18, -0.17,
+                -0.163, -0.154, -0.113, -0.08, 0.06, 0.1, 0.125, 0.14, 0.155,
+                0.162, 0.167, 0.17, 0.332, 0.39, 0.4, 0.4, 0.5
+            ])
+            ideal_points_y = np.array([
+                0.0, 0.0, 0.06, 0.06, 0.125, 0.137, 0.14, 0.13, 0.44, 0.5, 0.55,
+                0.61, 0.62, 0.62, 0.61, 0.58, 0.54, 0.49, 0.45, 0.416, 0.132,
+                0.131, 0.06, 0.06, 0.0, 0.0
+            ])
+        else:
+            ideal_points_x = np.array([
+                -0.5, -0.4, -0.4, -0.34, -0.33, -0.22, -0.196, -0.185, -0.181,
+                -0.168, -0.155, -0.114, -0.09, 0.02, 0.1, 0.133, 0.147, 0.16,
+                0.167, 0.17, 0.23, 0.34, 0.383, 0.4, 0.4, 0.5
+            ])
+            ideal_points_y = np.array([
+                0.0, 0.0, 0.06, 0.12, 0.126, 0.135, 0.155, 0.354, 0.48, 0.532,
+                0.56, 0.614, 0.628, 0.626, 0.61, 0.588, 0.558, 0.5, 0.423,
+                0.149, 0.13, 0.13, 0.065, 0.06, 0.0, 0.0
+            ])
+    else:
+        if plane_subindex == 0:
+            ideal_points_x = np.array([
+                -0.5, -0.4, -0.4, -0.34, -0.26, -0.193, -0.186, -0.18, -0.17,
+                -0.11, -0.05, 0.04, 0.07, 0.08, 0.085, 0.11, 0.125, 0.145,
+                0.16, 0.162, 0.24, 0.29, 0.31, 0.34, 0.355, 0.37, 0.39, 0.4,
+                0.4, 0.5
+            ])
+            ideal_points_y = np.array([
+                0.0, 0.0, 0.06, 0.127, 0.135, 0.131, 0.45, 0.5, 0.55, 0.6,
+                0.625, 0.625, 0.617, 0.6, 0.569, 0.563, 0.53, 0.458, 0.34,
+                0.14, 0.15, 0.145, 0.13, 0.127, 0.113, 0.11, 0.1, 0.06, 0.0,
+                0.0
+            ])
+        else:
+            ideal_points_x = np.array([
+                -0.5, -0.4, -0.4, -0.34, -0.32, -0.29, -0.21, -0.195, -0.175,
+                -0.132, -0.09, 0.08, 0.1, 0.13, 0.155, 0.165, 0.165, 0.26,
+                0.35, 0.4, 0.4, 0.5
+            ])
+            ideal_points_y = np.array([
+                0.0, 0.0, 0.08, 0.13, 0.135, 0.15, 0.15, 0.5, 0.55, 0.6, 0.63,
+                0.63, 0.61, 0.53, 0.41, 0.3, 0.14, 0.14, 0.12, 0.06, 0.0, 0.0
+            ])
+    return ideal_points_x, ideal_points_y

@@ -1,7 +1,10 @@
 import numpy as np
+import scipy.interpolate as interp
 
 from points_cloud import PointsCloudParams
-from objectives import points_in_neighborhood_cost
+from objectives import (
+    points_in_neighborhood_cost, get_ideal_points_on_projection_planes
+)
 from utils import get_scans_and_frames, find_function_time_metrics
 
 
@@ -13,8 +16,14 @@ if __name__ == '__main__':
     scans, frames = get_scans_and_frames('vacuum_reduced5.json')
     scans_keys = ('vacuum',)
     build_points_cloud_params = PointsCloudParams(max_z_distance=0.4)
+    ip = [[0, 0] for _ in range(4)]
+    for i in range(4):
+        for j in range(2):
+            ideal_x, ideal_y = get_ideal_points_on_projection_planes(i, j)
+            ip[i][j] = interp.interp1d(ideal_x, ideal_y)
     dist_count = 1000
-    args = scans, scans_keys, frames, build_points_cloud_params, dist_count
+
+    args = scans, scans_keys, frames, build_points_cloud_params, dist_count, ip
 
     cost_kwargs = {'x': x, 'args': args}
     times_metrics = find_function_time_metrics(

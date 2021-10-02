@@ -1,11 +1,11 @@
 use std::collections::BTreeMap;
 use std::f32::consts::PI;
-use std::f32::INFINITY;
 
 use glam::{Quat, Vec3};
 use kdtree::distance::squared_euclidean;
 use kdtree::KdTree;
 use nalgebra::DMatrix;
+use rand::Rng;
 use structopt::StructOpt;
 
 use base::fm;
@@ -49,9 +49,16 @@ pub struct PointCloudParams {
         help = "Minimal distance to consider point as an outlier",
         long,
         short = "u",
-        default_value = "0.01"
+        default_value = "inf"
     )]
     pub outlier_distance: f32,
+
+    #[structopt(
+        help = "Number of points per frame cloud limit",
+        long,
+        short = "p"
+    )]
+    pub max_num_points: Option<usize>,
 }
 
 pub fn build_point_cloud(
@@ -124,17 +131,34 @@ pub fn build_point_cloud(
         }
     }
 
+    if let Some(max_num_points) = params.max_num_points {
+        select_random_points(&mut points, max_num_points);
+    }
+
     remove_outliers(&mut points, params.outlier_distance);
 
     points
 }
 
-pub fn clouds_distance(
+pub fn build_frame_clouds(
+    scans: &BTreeMap<String, fm::Scan>,
+    scan_frames: &Vec<fm::ScanFrame>,
+    params: &PointCloudParams,
+) -> Vec<Vec<Vec3>> {
+    let mut clouds = Vec::new();
+    for frame in scan_frames {
+        let scan = scans.get(&frame.scan).unwrap();
+        clouds.push(build_point_cloud(&scan, frame, params))
+    }
+    clouds
+}
+
+pub fn distance_between_point_clouds(
     a: &[Vec3],
     b: &[Vec3],
-    num_neighbours: usize,
+    num_normal_neighbours: usize,
 ) -> Option<f32> {
-    if num_neighbours < 3 {
+    if num_normal_neighbours < 3 {
         return None;
     }
 
@@ -148,8 +172,9 @@ pub fn clouds_distance(
         b_tree.add(p.as_ref(), i).unwrap();
     }
 
-    let mut neighbours = Vec::with_capacity(num_neighbours);
-    let mut max = -INFINITY;
+    let mut neighbours = Vec::with_capacity(num_normal_neighbours);
+    let mut sum = 0.0;
+    let mut num = 0;
 
     for a_point in a {
         let mut b_nearest = b_tree
@@ -166,7 +191,8 @@ pub fn clouds_distance(
             .iter_nearest(a_point.as_ref(), &squared_euclidean)
             .unwrap();
         let _ = a_nearest.next(); // Skip itself.
-        neighbours.extend(a_nearest.map(|p| a[*p.1]).take(num_neighbours));
+        neighbours
+            .extend(a_nearest.map(|p| a[*p.1]).take(num_normal_neighbours));
         let a_plane = if let Some(plane) =
             compute_best_fitting_plane(neighbours.as_slice())
         {
@@ -176,13 +202,12 @@ pub fn clouds_distance(
         };
 
         let dist = (*a_point - b_point).dot(a_plane.n).abs();
-        if dist > max {
-            max = dist;
-        }
+        sum += dist;
+        num += 1;
     }
 
-    if max.is_finite() {
-        Some(max)
+    if num > 0 {
+        Some(sum / num as f32)
     } else {
         None
     }
@@ -243,17 +268,18 @@ fn remove_outliers(points: &mut Vec<Vec3>, distance: f32) {
     points.resize(j, Vec3::default());
 }
 
-pub fn build_point_clouds(
-    scans: &BTreeMap<String, fm::Scan>,
-    scan_frames: &Vec<fm::ScanFrame>,
-    params: &PointCloudParams,
-) -> Vec<Vec<Vec3>> {
-    let mut clouds = Vec::new();
-    for frame in scan_frames {
-        let scan = scans.get(&frame.scan).unwrap();
-        clouds.push(build_point_cloud(&scan, frame, params))
+fn select_random_points(points: &mut Vec<Vec3>, num: usize) {
+    if num >= points.len() {
+        return;
     }
-    clouds
+
+    let mut rng = rand::thread_rng();
+    for i in 0..num {
+        let j = rng.gen_range(i..points.len());
+        points.swap(i, j);
+    }
+
+    points.resize(num, Vec3::default());
 }
 
 #[cfg(test)]

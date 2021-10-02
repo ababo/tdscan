@@ -7,7 +7,7 @@ use structopt::StructOpt;
 use crate::misc::{
     fm_reader_from_file_or_stdin, fm_writer_to_file_or_stdout, read_scans,
 };
-use crate::point_cloud::{build_point_clouds, PointCloudParams};
+use crate::point_cloud::{build_frame_clouds, PointCloudParams};
 use base::defs::{Error, ErrorKind::*, Result};
 use base::fm;
 use base::util::cli::{parse_key_val, Array as CliArray};
@@ -129,7 +129,7 @@ pub fn build_view(
         }
     }
 
-    let clouds = build_point_clouds(&scans, &scan_frames, point_cloud_params);
+    let clouds = build_frame_clouds(&scans, &scan_frames, point_cloud_params);
 
     use std::io::Write;
     let mut file =

@@ -1,5 +1,5 @@
-use std::cell::Cell;
 use std::collections::BTreeMap;
+use std::f32::consts::PI;
 use std::path::PathBuf;
 use std::result::Result as StdResult;
 
@@ -9,15 +9,13 @@ use argmin::core::{
 };
 use argmin::solver::gradientdescent::SteepestDescent;
 use argmin::solver::linesearch::MoreThuenteLineSearch;
-use glam::Vec3;
 use structopt::StructOpt;
-use rand::Rng;
 
 use crate::misc::{
     fm_reader_from_file_or_stdin, fm_writer_to_file_or_stdout, read_scans,
 };
 use crate::point_cloud::{
-    build_point_clouds, clouds_distance, PointCloudParams,
+    build_frame_clouds, distance_between_point_clouds, PointCloudParams,
 };
 use base::defs::{Error, ErrorKind, Result};
 use base::fm;
@@ -38,6 +36,13 @@ pub struct OptimizeScanGeometryParams {
 
     #[structopt(flatten)]
     point_cloud_params: PointCloudParams,
+
+    #[structopt(
+        help = "Number of neighbour vertices to use for computing normals",
+        long,
+        default_value = "5"
+    )]
+    num_normal_neighbours: usize,
 
     #[structopt(
         help = "Output scan view .fm file (STDOUT if omitted)",
@@ -62,6 +67,7 @@ pub fn optimize_scan_geometry_with_params(
         reader.as_mut(),
         params.num_iters,
         &params.point_cloud_params,
+        params.num_normal_neighbours,
         writer.as_mut(),
     )
 }
@@ -70,15 +76,16 @@ pub fn optimize_scan_geometry(
     reader: &mut dyn fm::Read,
     num_iters: usize,
     point_cloud_params: &PointCloudParams,
+    num_normal_neighbours: usize,
     writer: &mut dyn fm::Write,
 ) -> Result<()> {
     let (scans, scan_frames) = read_scans(reader)?;
 
     let opt = ScanOpt {
         point_cloud_params,
+        num_normal_neighbours,
         scans: &scans,
         scan_frames: &scan_frames,
-        num_points: Cell::new(None),
     };
 
     let mut init_params: Vec<f32> = Vec::new();
@@ -102,7 +109,7 @@ pub fn optimize_scan_geometry(
     match res {
         Ok(ares) => {
             let opt = ares.operator;
-            let scans = opt.apply_params(&ares.state.best_param);
+            let (scans, _) = opt.apply_params(&ares.state.best_param);
 
             use fm::record::Type;
             for (_, scan) in scans {
@@ -128,19 +135,34 @@ pub fn optimize_scan_geometry(
 
 struct ScanOpt<'a> {
     point_cloud_params: &'a PointCloudParams,
+    num_normal_neighbours: usize,
     scans: &'a BTreeMap<String, fm::Scan>,
     scan_frames: &'a Vec<fm::ScanFrame>,
-    num_points: Cell<Option<usize>>,
 }
 
 impl<'a> ScanOpt<'a> {
-    fn apply_params(&self, params: &Vec<f32>) -> BTreeMap<String, fm::Scan> {
+    fn apply_params(
+        &self,
+        params: &Vec<f32>,
+    ) -> (BTreeMap<String, fm::Scan>, bool) {
         let mut scans = self.scans.clone();
+        let mut ok = true;
+
+        let check_distance = |init: f32, val: f32| (val - init).abs() < 0.1;
+        let check_angle =
+            |init: f32, val: f32| (val - init).abs() < 10.0 * PI / 180.0;
 
         for (i, scan) in scans.values_mut().enumerate() {
             let base = i * 5;
 
             let pos = scan.camera_initial_position.as_mut().unwrap();
+
+            ok &= check_distance(pos.x, params[base + 0])
+                & check_distance(pos.y, params[base + 1])
+                & check_distance(pos.z, params[base + 2])
+                & check_distance(scan.camera_view_elevation, params[base + 3])
+                & check_angle(scan.camera_landscape_angle, params[base + 4]);
+
             pos.x = params[base + 0];
             pos.y = params[base + 1];
             pos.z = params[base + 2];
@@ -149,23 +171,11 @@ impl<'a> ScanOpt<'a> {
             scan.camera_landscape_angle = params[base + 4];
         }
 
-        scans
-    }
-
-    fn select_random_points(points: &mut Vec<Vec3>, num: usize) {
-        if num >= points.len() {
-            return;
-        }
-
-        let mut rng = rand::thread_rng();
-        for i in 0..num {
-            let j = rng.gen_range(i..points.len());
-            points.swap(i, j);
-        }
-
-        points.resize(num, Vec3::default());
+        (scans, ok)
     }
 }
+
+const PENALTY: f32 = 1.0;
 
 impl<'a> ArgminOp for ScanOpt<'a> {
     type Param = Vec<f32>;
@@ -175,36 +185,29 @@ impl<'a> ArgminOp for ScanOpt<'a> {
     type Float = f32;
 
     fn apply(&self, p: &Self::Param) -> StdResult<Self::Output, ArgminError> {
-        let scans = self.apply_params(p);
+        let (scans, ok) = self.apply_params(p);
+        if !ok {
+            return Ok(PENALTY);
+        }
 
-        let mut clouds = build_point_clouds(
+        let clouds = build_frame_clouds(
             &scans,
             self.scan_frames,
             &self.point_cloud_params,
         );
 
-        for cloud in clouds.iter_mut() {
-            ScanOpt::select_random_points(cloud, 500);
-        }
-
-        let num_points = clouds.iter().fold(0, |b, c| b + c.len());
-        if let Some(num) = self.num_points.get() {
-            if num > num_points {
-                // Fine for point loss.
-                return Ok(1.0);
-            }
-        } else {
-            self.num_points.set(Some(num_points));
-        }
-
         let mut sum = 0.0;
         let mut num = 0;
         for i in 0..clouds.len() - 1 {
-            if let Some(dist) = clouds_distance(&clouds[i], &clouds[i + 1], 5) {
+            if let Some(dist) = distance_between_point_clouds(
+                &clouds[i],
+                &clouds[i + 1],
+                self.num_normal_neighbours,
+            ) {
                 sum += dist;
                 num += 1;
             } else {
-                return Ok(1.0);
+                return Ok(PENALTY);
             }
         }
 

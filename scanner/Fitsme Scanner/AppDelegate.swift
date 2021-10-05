@@ -6,12 +6,12 @@ import UIKit
 class AppDelegate: UIResponder, UIApplicationDelegate {
   class Scan {
     public let eye: FmPoint3
+    public let ctr: FmPoint3
     public let vel: Float
     public let fps: Double
     public let name: String
     public let nof: Int
     public let at: TimeInterval
-    public let elev: Float
 
     public var inFrameIndex = 0
     public var outFrameIndex = 0
@@ -20,16 +20,16 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     public var lastOutUptime: TimeInterval = 0
 
     public init(
-      eye: FmPoint3, vel: Float, fps: Double, name: String, nof: Int,
-      at: TimeInterval, elev: Float
+      eye: FmPoint3, ctr: FmPoint3, vel: Float, fps: Double, name: String,
+      nof: Int, at: TimeInterval
     ) {
       self.eye = eye
+      self.ctr = ctr
       self.vel = vel
       self.fps = fps
       self.name = name
       self.nof = nof
       self.at = at
-      self.elev = elev
     }
 
     public func nextOutFrameReady() -> Bool { inFrameIndex > outFrameIndex }
@@ -162,18 +162,20 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     let eye = request.query?["eye"]?.split(separator: ",")
       .map(Float.init).compactMap { $0 }
+    let ctr =
+      request.query?["ctr"]?.split(separator: ",")
+      .map(Float.init).compactMap { $0 } ?? [0.0, 0.0, 0.0]
     let vel = Float(request.query?["vel"] ?? "")
     let fmt = UInt(request.query?["fmt"] ?? "0")
     let fps = Double(request.query?["fps"] ?? "0")
     let name = request.query?["name"] ?? "\(UIDevice.current.name)-\(uts)"
     let nof = UInt(request.query?["nof"] ?? "1")
     let at = TimeInterval(request.query?["at"] ?? String(uts))
-    let elev = Float(request.query?["elev"] ?? "0")
 
     let numFormats = ARWorldTrackingConfiguration.supportedVideoFormats.count
-    if eye == nil || eye!.count != 3 || vel == nil || fmt == nil
-      || fmt! >= numFormats || fps == nil || fps! < 0 || nof == nil
-      || at == nil || at! < uts || elev == nil
+    if eye == nil || eye!.count != 3 || ctr.count != 3 || vel == nil
+      || fmt == nil || fmt! >= numFormats || fps == nil || fps! < 0
+      || nof == nil || at == nil || at! < uts
     {
       print("Bad '/scan' request arguments")
       return GCDWebServerResponse(
@@ -183,8 +185,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     let scan = Scan(
       eye: FmPoint3(x: eye![0], y: eye![1], z: eye![2]),
+      ctr: FmPoint3(x: ctr[0], y: ctr[1], z: ctr[2]),
       vel: vel!, fps: fps!, name: name, nof: Int(nof!),
-      at: at! - uts + uptime, elev: elev!)
+      at: at! - uts + uptime)
 
     if !setScanIfNone(scan: scan) {
       print("Refused '/scan' request, busy handling previous request")
@@ -305,9 +308,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         name: namePtr.baseAddress,
         camera_angle_of_view: angle_of_view,
         camera_landscape_angle: landscape_angle,
-        camera_view_elevation: scan.elev,
         camera_angular_velocity: scan.vel,
         camera_initial_position: scan.eye,
+        camera_initial_direction: scan.ctr,
         image_width: Int32(frame.image.width),
         image_height: Int32(frame.image.height),
         depth_width: Int32(frame.depthWidth),

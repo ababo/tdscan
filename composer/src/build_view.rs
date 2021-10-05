@@ -29,13 +29,13 @@ pub struct BuildViewParams {
     camera_initial_positions: Vec<(String, CliArray<f32, 3>)>,
 
     #[structopt(
-        help = "Camera view elevation to override with",
-        long = "camera-view-elevation",
+        help = "Camera initial direction to override with",
+        long = "camera-initial-direction",
             number_of_values = 1,
             parse(try_from_str = parse_key_val),
-            short = "e"
+            short = "c"
     )]
-    camera_view_elevations: Vec<(String, f32)>,
+    camera_initial_directions: Vec<(String, CliArray<f32, 3>)>,
 
     #[structopt(
         help = "Camera landscape angle to override with",
@@ -68,10 +68,13 @@ pub fn build_view_with_params(params: &BuildViewParams) -> Result<()> {
         .iter()
         .map(|d| (d.0.clone(), d.1 .0))
         .collect();
+    let camera_initial_directions = params
+        .camera_initial_directions
+        .iter()
+        .map(|d| (d.0.clone(), d.1 .0))
+        .collect();
     let camera_landscape_angles =
         params.camera_landscape_angles.iter().cloned().collect();
-    let camera_view_elevations =
-        params.camera_view_elevations.iter().cloned().collect();
 
     let mut writer =
         fm_writer_to_file_or_stdout(&params.out_path, &params.fm_write_params)?;
@@ -79,7 +82,7 @@ pub fn build_view_with_params(params: &BuildViewParams) -> Result<()> {
     build_view(
         reader.as_mut(),
         &camera_initial_positions,
-        &camera_view_elevations,
+        &camera_initial_directions,
         &camera_landscape_angles,
         &params.point_cloud_params,
         writer.as_mut(),
@@ -89,7 +92,7 @@ pub fn build_view_with_params(params: &BuildViewParams) -> Result<()> {
 pub fn build_view(
     reader: &mut dyn fm::Read,
     camera_initial_positions: &HashMap<String, [f32; 3]>,
-    camera_view_elevations: &HashMap<String, f32>,
+    camera_initial_directions: &HashMap<String, [f32; 3]>,
     camera_landscape_angles: &HashMap<String, f32>,
     point_cloud_params: &PointCloudParams,
     _writer: &mut dyn fm::Write,
@@ -113,17 +116,18 @@ pub fn build_view(
         }
     }
 
-    for (name, angle) in camera_landscape_angles {
+    for (name, eye) in camera_initial_directions {
         if let Some(scan) = scans.get_mut(name) {
-            scan.camera_landscape_angle = *angle;
+            scan.camera_initial_direction =
+                Some(vec3_to_point3(&Vec3::from(*eye)));
         } else {
             return unknown_scan_err(name);
         }
     }
 
-    for (name, elev) in camera_view_elevations {
+    for (name, angle) in camera_landscape_angles {
         if let Some(scan) = scans.get_mut(name) {
-            scan.camera_view_elevation = *elev;
+            scan.camera_landscape_angle = *angle;
         } else {
             return unknown_scan_err(name);
         }

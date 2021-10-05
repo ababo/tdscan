@@ -71,9 +71,9 @@ pub fn build_point_cloud(
     let tan = (scan.camera_angle_of_view / 2.0).tan();
 
     let landscape_rot = Quat::from_rotation_z(scan.camera_landscape_angle);
-    let eye = scan.camera_initial_position.unwrap_or_default();
-    let elev = Vec3::new(0.0, 0.0, scan.camera_view_elevation);
-    let look = point3_to_vec3(&eye) - elev;
+    let eye = point3_to_vec3(&scan.camera_initial_position.unwrap_or_default());
+    let look = eye
+        - point3_to_vec3(&scan.camera_initial_direction.unwrap_or_default());
     let look_rot_axis = if look[1] != 0.0 {
         let slope = -look[0] / look[1];
         let x = 1.0 / (1.0 + slope * slope).sqrt();
@@ -116,7 +116,7 @@ pub fn build_point_cloud(
             let (x, y) = (w * xy_factor, h * xy_factor);
             let z = depth * depth_width / denom;
 
-            let point = rot.mul_vec3(Vec3::new(x, y, z)) + look + elev;
+            let point = rot.mul_vec3(Vec3::new(x, y, z)) + eye;
             let point = time_rot.mul_vec3(point);
 
             let z_dist = (point[0] * point[0] + point[1] * point[1]).sqrt();

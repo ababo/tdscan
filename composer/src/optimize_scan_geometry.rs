@@ -94,7 +94,12 @@ pub fn optimize_scan_geometry(
         init_params.push(pos.x);
         init_params.push(pos.y);
         init_params.push(pos.z);
-        init_params.push(scan.camera_view_elevation);
+
+        let dir = scan.camera_initial_direction.unwrap();
+        init_params.push(dir.x);
+        init_params.push(dir.y);
+        init_params.push(dir.z);
+
         init_params.push(scan.camera_landscape_angle);
     }
 
@@ -153,22 +158,28 @@ impl<'a> ScanOpt<'a> {
             |init: f32, val: f32| (val - init).abs() < 10.0 * PI / 180.0;
 
         for (i, scan) in scans.values_mut().enumerate() {
-            let base = i * 5;
+            let base = i * 7;
 
             let pos = scan.camera_initial_position.as_mut().unwrap();
+            let dir = scan.camera_initial_direction.as_mut().unwrap();
 
             ok &= check_distance(pos.x, params[base + 0])
                 & check_distance(pos.y, params[base + 1])
                 & check_distance(pos.z, params[base + 2])
-                & check_distance(scan.camera_view_elevation, params[base + 3])
-                & check_angle(scan.camera_landscape_angle, params[base + 4]);
+                & check_distance(dir.x, params[base + 3])
+                & check_distance(dir.y, params[base + 4])
+                & check_distance(dir.z, params[base + 5])
+                & check_angle(scan.camera_landscape_angle, params[base + 6]);
 
             pos.x = params[base + 0];
             pos.y = params[base + 1];
             pos.z = params[base + 2];
 
-            scan.camera_view_elevation = params[base + 3];
-            scan.camera_landscape_angle = params[base + 4];
+            dir.x = params[base + 3];
+            dir.y = params[base + 4];
+            dir.z = params[base + 5];
+
+            scan.camera_landscape_angle = params[base + 6];
         }
 
         (scans, ok)
@@ -240,7 +251,7 @@ impl<'a> Observe<ScanOpt<'a>> for Observer {
     ) -> StdResult<(), ArgminError> {
         eprint!("{} {}", state.iter, state.best_cost);
         for (i, scan) in self.0.iter().enumerate() {
-            let base = i * 5;
+            let base = i * 7;
             eprint!(
                 " -y {}={},{},{}",
                 scan,
@@ -248,8 +259,14 @@ impl<'a> Observe<ScanOpt<'a>> for Observer {
                 state.best_param[base + 1],
                 state.best_param[base + 2]
             );
-            eprint!(" -e {}={}", scan, state.best_param[base + 3]);
-            eprint!(" -l {}={}", scan, state.best_param[base + 4]);
+            eprint!(
+                " -c {}={},{},{}",
+                scan,
+                state.best_param[base + 3],
+                state.best_param[base + 4],
+                state.best_param[base + 5]
+            );
+            eprint!(" -l {}={}", scan, state.best_param[base + 6]);
         }
         eprintln!();
         Ok(())

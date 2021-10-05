@@ -54,9 +54,9 @@ message Scan {
   string name = 1;
   float camera_angle_of_view = 2;
   float camera_landscape_angle = 3;
-  float camera_view_elevation = 4;
-  float camera_angular_velocity = 5;
-  Point3 camera_initial_position = 6;
+  float camera_angular_velocity = 4;
+  Point3 camera_initial_position = 5;
+  Point3 camera_initial_direction = 6;
   uint32 image_width = 7;
   uint32 image_height = 8;
   uint32 depth_width = 9;

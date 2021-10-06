@@ -5,7 +5,8 @@ use glam::{Quat, Vec3};
 use kdtree::distance::squared_euclidean;
 use kdtree::KdTree;
 use nalgebra::DMatrix;
-use rand::Rng;
+use rand::rngs::StdRng;
+use rand::{SeedableRng, Rng};
 use structopt::StructOpt;
 
 use base::fm;
@@ -273,7 +274,9 @@ fn select_random_points(points: &mut Vec<Vec3>, num: usize) {
         return;
     }
 
-    let mut rng = rand::thread_rng();
+    // Use reproducible generator to maintain consistency while optimizing.
+    let mut rng = StdRng::seed_from_u64(0);
+
     for i in 0..num {
         let j = rng.gen_range(i..points.len());
         points.swap(i, j);

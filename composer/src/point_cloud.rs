@@ -70,7 +70,7 @@ pub fn build_point_cloud(
 
     let tan = (scan.camera_angle_of_view / 2.0).tan();
 
-    let landscape_rot = Quat::from_rotation_z(scan.camera_landscape_angle);
+    let landscape_rot = Quat::from_rotation_z(scan.camera_up_angle);
     let eye = point3_to_vec3(&scan.camera_initial_position.unwrap_or_default());
     let look = eye
         - point3_to_vec3(&scan.camera_initial_direction.unwrap_or_default());

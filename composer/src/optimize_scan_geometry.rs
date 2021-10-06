@@ -100,7 +100,7 @@ pub fn optimize_scan_geometry(
         init_params.push(dir.y);
         init_params.push(dir.z);
 
-        init_params.push(scan.camera_landscape_angle);
+        init_params.push(scan.camera_up_angle);
     }
 
     let linesearch = MoreThuenteLineSearch::new();
@@ -169,7 +169,7 @@ impl<'a> ScanOpt<'a> {
                 & check_distance(dir.x, params[base + 3])
                 & check_distance(dir.y, params[base + 4])
                 & check_distance(dir.z, params[base + 5])
-                & check_angle(scan.camera_landscape_angle, params[base + 6]);
+                & check_angle(scan.camera_up_angle, params[base + 6]);
 
             pos.x = params[base + 0];
             pos.y = params[base + 1];
@@ -179,7 +179,7 @@ impl<'a> ScanOpt<'a> {
             dir.y = params[base + 4];
             dir.z = params[base + 5];
 
-            scan.camera_landscape_angle = params[base + 6];
+            scan.camera_up_angle = params[base + 6];
         }
 
         (scans, ok)

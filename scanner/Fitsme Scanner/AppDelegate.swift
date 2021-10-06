@@ -307,7 +307,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
       var fmScan = FmScan(
         name: namePtr.baseAddress,
         camera_angle_of_view: angle_of_view,
-        camera_landscape_angle: landscape_angle,
+        camera_up_angle: landscape_angle,
         camera_angular_velocity: scan.vel,
         camera_initial_position: scan.eye,
         camera_initial_direction: scan.ctr,

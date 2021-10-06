@@ -42,7 +42,7 @@ struct FmImage {
 struct FmScan {
   const char *name;
   float camera_angle_of_view;
-  float camera_landscape_angle;
+  float camera_up_angle;
   float camera_angular_velocity;
   struct FmPoint3 camera_initial_position;
   struct FmPoint3 camera_initial_direction;

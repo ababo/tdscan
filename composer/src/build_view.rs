@@ -44,7 +44,7 @@ pub struct BuildViewParams {
             parse(try_from_str = parse_key_val),
             short = "l"
     )]
-    camera_landscape_angles: Vec<(String, f32)>,
+    camera_up_angles: Vec<(String, f32)>,
 
     #[structopt(flatten)]
     point_cloud_params: PointCloudParams,
@@ -73,8 +73,8 @@ pub fn build_view_with_params(params: &BuildViewParams) -> Result<()> {
         .iter()
         .map(|d| (d.0.clone(), d.1 .0))
         .collect();
-    let camera_landscape_angles =
-        params.camera_landscape_angles.iter().cloned().collect();
+    let camera_up_angle =
+        params.camera_up_angles.iter().cloned().collect();
 
     let mut writer =
         fm_writer_to_file_or_stdout(&params.out_path, &params.fm_write_params)?;
@@ -83,7 +83,7 @@ pub fn build_view_with_params(params: &BuildViewParams) -> Result<()> {
         reader.as_mut(),
         &camera_initial_positions,
         &camera_initial_directions,
-        &camera_landscape_angles,
+        &camera_up_angle,
         &params.point_cloud_params,
         writer.as_mut(),
     )
@@ -93,7 +93,7 @@ pub fn build_view(
     reader: &mut dyn fm::Read,
     camera_initial_positions: &HashMap<String, [f32; 3]>,
     camera_initial_directions: &HashMap<String, [f32; 3]>,
-    camera_landscape_angles: &HashMap<String, f32>,
+    camera_up_angles: &HashMap<String, f32>,
     point_cloud_params: &PointCloudParams,
     _writer: &mut dyn fm::Write,
 ) -> Result<()> {
@@ -125,9 +125,9 @@ pub fn build_view(
         }
     }
 
-    for (name, angle) in camera_landscape_angles {
+    for (name, angle) in camera_up_angles {
         if let Some(scan) = scans.get_mut(name) {
-            scan.camera_landscape_angle = *angle;
+            scan.camera_up_angle = *angle;
         } else {
             return unknown_scan_err(name);
         }

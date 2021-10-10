@@ -222,7 +222,7 @@ impl<'a> ArgminOp for ScanOpt<'a> {
             }
         }
 
-        Ok(sum / num as f32)
+        Ok(sum as f32 / num as f32)
     }
 
     fn gradient(&self, p: &Self::Param) -> StdResult<Self::Param, ArgminError> {

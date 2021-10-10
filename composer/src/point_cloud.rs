@@ -1,17 +1,14 @@
 use std::collections::BTreeMap;
-use std::f32::consts::PI;
 
-use glam::{Quat, Vec3};
 use kdtree::distance::squared_euclidean;
 use kdtree::KdTree;
 use nalgebra::DMatrix;
 use rand::rngs::StdRng;
-use rand::{SeedableRng, Rng};
+use rand::{Rng, SeedableRng};
 use structopt::StructOpt;
 
 use base::fm;
 use base::fm::scan_frame::DepthConfidence;
-use base::util::glam::point3_to_vec3;
 
 #[derive(Clone, Copy, StructOpt)]
 pub struct PointCloudParams {
@@ -62,35 +59,40 @@ pub struct PointCloudParams {
     pub max_num_points: Option<usize>,
 }
 
+type Point3 = nalgebra::Point3<f64>;
+type Vector3 = nalgebra::Vector3<f64>;
+type Quaternion = nalgebra::UnitQuaternion<f64>;
+type Matrix4 = nalgebra::Matrix4<f64>;
+
+fn fm_point3_to_point3(p: &fm::Point3) -> Point3 {
+    Point3::new(p.x as f64, p.y as f64, p.z as f64)
+}
+
 pub fn build_point_cloud(
     scan: &fm::Scan,
     frame: &fm::ScanFrame,
     params: &PointCloudParams,
-) -> Vec<Vec3> {
+) -> Vec<Point3> {
     let mut points = Vec::new();
 
-    let tan = (scan.camera_angle_of_view / 2.0).tan();
+    let tan = (scan.camera_angle_of_view as f64 / 2.0).tan();
 
-    let landscape_rot = Quat::from_rotation_z(scan.camera_up_angle);
-    let eye = point3_to_vec3(&scan.camera_initial_position.unwrap_or_default());
-    let look = eye
-        - point3_to_vec3(&scan.camera_initial_direction.unwrap_or_default());
-    let look_rot_axis = if look[1] != 0.0 {
-        let slope = -look[0] / look[1];
-        let x = 1.0 / (1.0 + slope * slope).sqrt();
-        let y = slope * x;
-        Vec3::new(x, y, 0.0)
-    } else {
-        Vec3::new(0.0, 1.0, 0.0)
-    };
-    let look_angle = (look[2] / (look[0] * look[0] + look[1] * look[1]).sqrt())
-        .atan()
-        + PI / 2.0;
-    let look_rot = Quat::from_axis_angle(look_rot_axis, look_angle);
-    let rot = look_rot.mul_quat(landscape_rot);
+    let eye =
+        fm_point3_to_point3(&scan.camera_initial_position.unwrap_or_default());
+    let dir =
+        fm_point3_to_point3(&scan.camera_initial_direction.unwrap_or_default());
+    let up_rot = Quaternion::from_axis_angle(
+        &Vector3::z_axis(),
+        scan.camera_up_angle as f64,
+    );
+    let look_rot =
+        Matrix4::look_at_lh(&eye, &dir, &Vector3::new(0.0, 0.0, 1.0));
+    let view_rot = look_rot.try_inverse().unwrap() * Matrix4::from(up_rot);
 
-    let camera_angle = frame.time as f32 / 1E9 * scan.camera_angular_velocity;
-    let time_rot = Quat::from_rotation_z(camera_angle);
+    let camera_angle =
+        frame.time as f64 / 1E9 * scan.camera_angular_velocity as f64;
+    let time_rot =
+        Quaternion::from_axis_angle(&Vector3::z_axis(), camera_angle);
 
     for i in 0..scan.depth_height {
         for j in 0..scan.depth_width {
@@ -100,35 +102,34 @@ pub fn build_point_cloud(
                 continue;
             }
 
-            let mut depth = frame.depths[depth_index];
-            let depth_width = scan.depth_width as f32;
-            let w = j as f32 - depth_width / 2.0;
-            let h = i as f32 - scan.depth_height as f32 / 2.0;
-            let proj_square = w * w + h * h;
-            if scan.sensor_plane_depth {
-                let fl = depth_width / tan / 2.0;
-                depth /= (proj_square.sqrt() / fl).atan().cos();
+            let mut depth = frame.depths[depth_index] as f64;
+            let depth_width = scan.depth_width as f64;
+            let w = j as f64 - depth_width / 2.0;
+            let h = i as f64 - scan.depth_height as f64 / 2.0;
+
+            let u = w / (depth_width / 2.0) * tan;
+            let v = h / (depth_width / 2.0) * tan;
+
+            // If depth sensor measures distance rather than depth.
+            if !scan.sensor_plane_depth {
+                depth /= (1.0 + u * u + v * v).sqrt();
             }
 
-            let denom = (depth_width * depth_width
-                + 4.0 * proj_square * tan * tan)
-                .sqrt();
-            let xy_factor = (2.0 * depth * tan) / denom;
-            let (x, y) = (w * xy_factor, h * xy_factor);
-            let z = depth * depth_width / denom;
+            let focus_to_object =
+                depth * nalgebra::Vector4::new(u, v, 1.0, 0.0);
 
-            let point = rot.mul_vec3(Vec3::new(x, y, z)) + eye;
-            let point = time_rot.mul_vec3(point);
+            let point = (view_rot * focus_to_object).xyz() + eye.coords;
+            let point = time_rot * point;
 
             let z_dist = (point[0] * point[0] + point[1] * point[1]).sqrt();
-            if point[2] < params.min_z
-                || point[2] > params.max_z
-                || z_dist > params.max_z_distance
+            if point[2] < params.min_z as f64
+                || point[2] > params.max_z as f64
+                || z_dist > params.max_z_distance as f64
             {
                 continue;
             }
 
-            points.push(point);
+            points.push(Point3::from(point));
         }
     }
 
@@ -136,7 +137,7 @@ pub fn build_point_cloud(
         select_random_points(&mut points, max_num_points);
     }
 
-    remove_outliers(&mut points, params.outlier_distance);
+    remove_outliers(&mut points, params.outlier_distance as f64);
 
     points
 }
@@ -145,7 +146,7 @@ pub fn build_frame_clouds(
     scans: &BTreeMap<String, fm::Scan>,
     scan_frames: &Vec<fm::ScanFrame>,
     params: &PointCloudParams,
-) -> Vec<Vec<Vec3>> {
+) -> Vec<Vec<Point3>> {
     let mut clouds = Vec::new();
     for frame in scan_frames {
         let scan = scans.get(&frame.scan).unwrap();
@@ -155,22 +156,22 @@ pub fn build_frame_clouds(
 }
 
 pub fn distance_between_point_clouds(
-    a: &[Vec3],
-    b: &[Vec3],
+    a: &[Point3],
+    b: &[Point3],
     num_normal_neighbours: usize,
-) -> Option<f32> {
+) -> Option<f64> {
     if num_normal_neighbours < 3 {
         return None;
     }
 
     let mut a_tree = KdTree::with_capacity(3, a.len());
     for (i, p) in a.iter().enumerate() {
-        a_tree.add(p.as_ref(), i).unwrap();
+        a_tree.add(p.coords.as_ref(), i).unwrap();
     }
 
     let mut b_tree = KdTree::with_capacity(3, b.len());
     for (i, p) in b.iter().enumerate() {
-        b_tree.add(p.as_ref(), i).unwrap();
+        b_tree.add(p.coords.as_ref(), i).unwrap();
     }
 
     let mut neighbours = Vec::with_capacity(num_normal_neighbours);
@@ -179,7 +180,7 @@ pub fn distance_between_point_clouds(
 
     for a_point in a {
         let mut b_nearest = b_tree
-            .iter_nearest(a_point.as_ref(), &squared_euclidean)
+            .iter_nearest(a_point.coords.as_ref(), &squared_euclidean)
             .unwrap();
         let b_point = if let Some(p) = b_nearest.next() {
             b[*p.1]
@@ -189,7 +190,7 @@ pub fn distance_between_point_clouds(
 
         neighbours.clear();
         let mut a_nearest = a_tree
-            .iter_nearest(a_point.as_ref(), &squared_euclidean)
+            .iter_nearest(a_point.coords.as_ref(), &squared_euclidean)
             .unwrap();
         let _ = a_nearest.next(); // Skip itself.
         neighbours
@@ -202,13 +203,13 @@ pub fn distance_between_point_clouds(
             continue;
         };
 
-        let dist = (*a_point - b_point).dot(a_plane.n).abs();
+        let dist = (*a_point - b_point).dot(&a_plane.n).abs();
         sum += dist;
         num += 1;
     }
 
     if num > 0 {
-        Some(sum / num as f32)
+        Some(sum / num as f64)
     } else {
         None
     }
@@ -216,13 +217,13 @@ pub fn distance_between_point_clouds(
 
 // Plane defined in Hessian normal form.
 struct Plane {
-    n: Vec3,
+    n: Vector3,
     #[allow(dead_code)]
-    p: f32,
+    p: f64,
 }
 
-fn compute_best_fitting_plane(points: &[Vec3]) -> Option<Plane> {
-    let data = points.iter().map(|p| p.as_ref()).flatten().cloned();
+fn compute_best_fitting_plane(points: &[Point3]) -> Option<Plane> {
+    let data = points.iter().map(|p| p.coords.as_ref()).flatten().cloned();
     let points = DMatrix::from_iterator(points.len(), 3, data);
     let means = points.row_mean();
     let mut points = points.transpose();
@@ -231,25 +232,25 @@ fn compute_best_fitting_plane(points: &[Vec3]) -> Option<Plane> {
     points.row_mut(2).add_scalar_mut(-means[2]);
     if let Some(u) = points.svd(true, false).u {
         let normal = u.column(0);
-        let normal = Vec3::new(normal[0], normal[1], normal[2]);
-        let centroid = Vec3::new(means[0], means[1], means[2]);
+        let normal = Point3::new(normal[0], normal[1], normal[2]);
+        let centroid = Point3::new(means[0], means[1], means[2]);
         Some(Plane {
-            n: normal,
-            p: -normal.dot(centroid),
+            n: normal.coords,
+            p: -normal.coords.dot(&centroid.coords),
         })
     } else {
         None
     }
 }
 
-fn remove_outliers(points: &mut Vec<Vec3>, distance: f32) {
+fn remove_outliers(points: &mut Vec<Point3>, distance: f64) {
     if distance.is_infinite() || points.len() < 2 {
         return;
     }
 
     let mut kdtree = KdTree::with_capacity(3, points.len());
     for point in points.iter() {
-        kdtree.add(*point.as_ref(), ()).unwrap();
+        kdtree.add(*point.coords.as_ref(), ()).unwrap();
     }
 
     let distance_squared = distance * distance;
@@ -257,7 +258,7 @@ fn remove_outliers(points: &mut Vec<Vec3>, distance: f32) {
     let mut j = 0;
     for i in 0..points.len() {
         let mut nearest = kdtree
-            .iter_nearest(points[i].as_ref(), &squared_euclidean)
+            .iter_nearest(points[i].coords.as_ref(), &squared_euclidean)
             .unwrap();
         let _ = nearest.next(); // Skip itself.
         if nearest.next().unwrap().0 <= distance_squared {
@@ -266,15 +267,15 @@ fn remove_outliers(points: &mut Vec<Vec3>, distance: f32) {
         }
     }
 
-    points.resize(j, Vec3::default());
+    points.resize(j, Point3::origin());
 }
 
-fn select_random_points(points: &mut Vec<Vec3>, num: usize) {
+fn select_random_points(points: &mut Vec<Point3>, num: usize) {
     if num >= points.len() {
         return;
     }
 
-    // Use reproducible generator to maintain consistency while optimizing.
+    // Use deterministic generator to maintain consistency while optimizing.
     let mut rng = StdRng::seed_from_u64(0);
 
     for i in 0..num {
@@ -282,7 +283,7 @@ fn select_random_points(points: &mut Vec<Vec3>, num: usize) {
         points.swap(i, j);
     }
 
-    points.resize(num, Vec3::default());
+    points.resize(num, Point3::origin());
 }
 
 #[cfg(test)]
@@ -292,15 +293,15 @@ mod test {
     #[test]
     fn test_remove_outliers() {
         let mut points = vec![
-            Vec3::new(1.0, 0.0, 0.0),
-            Vec3::new(2.0, 0.0, 0.0),
-            Vec3::new(7.0, 0.0, 0.0),
-            Vec3::new(3.0, 0.0, 0.0),
+            Point3::new(1.0, 0.0, 0.0),
+            Point3::new(2.0, 0.0, 0.0),
+            Point3::new(7.0, 0.0, 0.0),
+            Point3::new(3.0, 0.0, 0.0),
         ];
         remove_outliers(&mut points, 1.0);
         assert_eq!(points.len(), 3);
-        assert_eq!(points[0], Vec3::new(1.0, 0.0, 0.0));
-        assert_eq!(points[1], Vec3::new(2.0, 0.0, 0.0));
-        assert_eq!(points[2], Vec3::new(3.0, 0.0, 0.0));
+        assert_eq!(points[0], Point3::new(1.0, 0.0, 0.0));
+        assert_eq!(points[1], Point3::new(2.0, 0.0, 0.0));
+        assert_eq!(points[2], Point3::new(3.0, 0.0, 0.0));
     }
 }

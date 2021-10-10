@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use glam::Vec3;
 use structopt::StructOpt;
 
 use crate::misc::{
@@ -11,7 +10,6 @@ use crate::point_cloud::{build_frame_clouds, PointCloudParams};
 use base::defs::{Error, ErrorKind::*, Result};
 use base::fm;
 use base::util::cli::{parse_key_val, Array as CliArray};
-use base::util::glam::vec3_to_point3;
 
 #[derive(StructOpt)]
 #[structopt(about = "Build element view from scan .fm file")]
@@ -110,16 +108,16 @@ pub fn build_view(
     for (name, eye) in camera_initial_positions {
         if let Some(scan) = scans.get_mut(name) {
             scan.camera_initial_position =
-                Some(vec3_to_point3(&Vec3::from(*eye)));
+                Some(fm::Point3{x: eye[0], y: eye[1],z: eye[2]});
         } else {
             return unknown_scan_err(name);
         }
     }
 
-    for (name, eye) in camera_initial_directions {
+    for (name, dir) in camera_initial_directions {
         if let Some(scan) = scans.get_mut(name) {
             scan.camera_initial_direction =
-                Some(vec3_to_point3(&Vec3::from(*eye)));
+                Some(fm::Point3{x: dir[0], y: dir[1],z: dir[2]});
         } else {
             return unknown_scan_err(name);
         }

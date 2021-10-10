@@ -6,7 +6,7 @@ use std::ops::Bound::*;
 use std::rc::Rc;
 
 use arrayvec::ArrayVec;
-use base::util::glam::{point3_to_vec3, vec3_to_point3};
+use crate::util::glam::{point3_to_vec3, vec3_to_point3};
 use glam::{EulerRot, Quat, Vec3};
 
 use crate::util::sync::LevelLock;

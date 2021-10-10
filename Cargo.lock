@@ -224,7 +224,6 @@ version = "0.1.0"
 dependencies = [
  "arrayvec",
  "flate2",
- "glam",
  "prost",
  "prost-build",
  "serde",
@@ -352,7 +351,6 @@ version = "0.1.0"
 dependencies = [
  "argmin",
  "base",
- "glam",
  "kdtree",
  "nalgebra",
  "rand",

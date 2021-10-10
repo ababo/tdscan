@@ -4,7 +4,6 @@ use std::io::stdin;
 use std::path::PathBuf;
 use std::result::Result as StdResult;
 
-use glam::{EulerRot, Quat};
 use structopt::StructOpt;
 
 use crate::misc::fm_writer_to_file_or_stdout;
@@ -12,7 +11,6 @@ use base::defs::Result;
 use base::fm;
 use base::util::cli::{parse_key_val, Array as CliArray};
 use base::util::fs;
-use base::util::glam::{point3_to_vec3, vec3_to_point3};
 
 #[derive(StructOpt)]
 #[structopt(about = "Combine multiple .fm files")]
@@ -97,6 +95,18 @@ pub fn combine_with_params(params: &CombineParams) -> Result<()> {
     )
 }
 
+fn point3_to_fm_point3(p: &Point3) -> fm::Point3 {
+    fm::Point3 {
+        x: p[0],
+        y: p[1],
+        z: p[2],
+    }
+}
+
+type Point3 = nalgebra::Point3<f32>;
+type Quaternion = nalgebra::UnitQuaternion<f32>;
+type Vector3 = nalgebra::Vector3<f32>;
+
 pub fn combine(
     readers: &mut [&mut dyn fm::Read],
     displacements: &HashMap<String, [f32; 3]>,
@@ -134,19 +144,24 @@ pub fn combine(
             }
 
             if let Some(rot) = rotations.get(&state.element) {
-                let quat =
-                    Quat::from_euler(EulerRot::XYZ, rot[0], rot[1], rot[2]);
+                let x_quat =
+                    Quaternion::from_axis_angle(&Vector3::x_axis(), rot[0]);
+                let y_quat =
+                    Quaternion::from_axis_angle(&Vector3::y_axis(), rot[1]);
+                let z_quat =
+                    Quaternion::from_axis_angle(&Vector3::z_axis(), rot[2]);
+                let quat = x_quat * y_quat * z_quat;
 
                 for i in 0..state.vertices.len() {
-                    state.vertices[i] = vec3_to_point3(
-                        &quat.mul_vec3(point3_to_vec3(&state.vertices[i])),
-                    );
+                    let p = state.vertices[i];
+                    let p = quat * Point3::new(p.x, p.y, p.z);
+                    state.vertices[i] = point3_to_fm_point3(&p);
                 }
 
                 for i in 0..state.normals.len() {
-                    state.normals[i] = vec3_to_point3(
-                        &quat.mul_vec3(point3_to_vec3(&state.normals[i])),
-                    );
+                    let p = state.normals[i];
+                    let p = quat * Point3::new(p.x, p.y, p.z);
+                    state.normals[i] = point3_to_fm_point3(&p);
                 }
             }
 

@@ -8,7 +8,6 @@ edition = "2018"
 [dependencies]
 argmin = "0.4.7"
 base = { path = "../base" }
-glam = "0.15.2"
 kdtree = "0.6.0"
 nalgebra = "0.29.0"
 rand = "0.8.0"

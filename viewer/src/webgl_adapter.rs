@@ -17,7 +17,7 @@ use crate::util::web;
 use crate::util::webgl;
 use base::defs::Result;
 use base::fm;
-use base::util::glam::point3_to_vec3;
+use crate::util::glam::point3_to_vec3;
 
 pub struct WebGlAdapter {
     canvas: HtmlCanvasElement,

@@ -160,39 +160,39 @@ pub fn distance_between_point_clouds(
     b: &[Point3],
 ) -> Option<f64> {
     let mut kdtree = KdTree::with_capacity(3, a.len());
-    for p in a {
-        kdtree.add(p.coords.as_ref(), INFINITY).unwrap();
+    for (i, p) in a.iter().enumerate() {
+        kdtree.add(p.coords.as_ref(), i).unwrap();
     }
 
+    let mut dists = vec![INFINITY; a.len()];
     for p in b {
-        let mut nearest = kdtree
-            .iter_nearest_mut(p.coords.as_ref(), &squared_euclidean)
-            .unwrap();
-        let (dist, min) = nearest.next().unwrap();
-        if dist < *min {
-            *min = dist;
+        let (dist, i) = kdtree
+            .nearest(p.coords.as_ref(), 1, &squared_euclidean)
+            .unwrap()[0];
+        if dist < dists[*i] {
+            dists[*i] = dist;
         }
     }
 
-    let mut dists = Vec::with_capacity(a.len());
-
-    let all = kdtree
-        .iter_nearest(&[0.0, 0.0, 0.0], &squared_euclidean)
-        .unwrap();
-    for (_, min) in all {
-        if min.is_finite() {
-            dists.push(min.sqrt());
+    // Filter out infinities.
+    let mut j = 0;
+    for i in 0..dists.len() {
+        if dists[i].is_finite() {
+            dists.swap(i, j);
+            j += 1;
         }
     }
+    dists.truncate(j);
 
     // Discard 5% of biggest contributors (probable outliers).
     dists.sort_by(|a, b| a.partial_cmp(b).unwrap());
-    dists.resize(dists.len() * 95 / 100, 0.0);
+    dists.truncate(dists.len() * 95 / 100);
 
     if dists.is_empty() {
         None
     } else {
-        Some(dists.iter().sum::<f64>() / dists.len() as f64)
+        let sum = dists.iter().map(|d|d.sqrt()).sum::<f64>();
+        Some(sum / dists.len() as f64)
     }
 }
 
@@ -206,21 +206,20 @@ fn remove_outliers(points: &mut Vec<Point3>, distance: f64) {
         kdtree.add(*point.coords.as_ref(), ()).unwrap();
     }
 
-    let distance_squared = distance * distance;
+    let squared_distance = distance * distance;
 
     let mut j = 0;
     for i in 0..points.len() {
-        let mut nearest = kdtree
-            .iter_nearest(points[i].coords.as_ref(), &squared_euclidean)
-            .unwrap();
-        let _ = nearest.next(); // Skip itself.
-        if nearest.next().unwrap().0 <= distance_squared {
+        let (dist, _) = kdtree
+            .nearest(points[i].coords.as_ref(), 2, &squared_euclidean)
+            .unwrap()[1];
+        if dist <= squared_distance {
             points.swap(i, j);
             j += 1;
         }
     }
 
-    points.resize(j, Point3::origin());
+    points.truncate(j);
 }
 
 fn select_random_points(points: &mut Vec<Point3>, num: usize) {
@@ -242,6 +241,26 @@ fn select_random_points(points: &mut Vec<Point3>, num: usize) {
 #[cfg(test)]
 mod test {
     use super::*;
+
+    use base::assert_eq_f32;
+
+    #[test]
+    fn test_distance_between_point_clouds() {
+        assert_eq!(distance_between_point_clouds(&vec![], &vec![]), None);
+
+        let a = vec![
+            Point3::new(1.0, 0.0, 0.0),
+            Point3::new(5.0, 0.0, 0.0),
+            Point3::new(9.0, 0.0, 0.0),
+            Point3::new(15.0, 0.0, 0.0),
+        ];
+        let b = vec![
+            Point3::new(6.0, 0.0, 0.0),
+            Point3::new(10.0, 0.0, 0.0),
+            Point3::new(21.0, 0.0, 0.0),
+        ];
+        assert_eq_f32!(distance_between_point_clouds(&a, &b).unwrap(), 1.0);
+    }
 
     #[test]
     fn test_remove_outliers() {

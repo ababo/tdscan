@@ -1,3 +1,4 @@
+use base::util::cli::{parse_key_val, Array as CliArray};
 use std::collections::BTreeMap;
 use std::io::{stdin, stdout};
 use std::path::PathBuf;
@@ -5,6 +6,7 @@ use std::path::PathBuf;
 use rlua;
 use rlua::Value as LuaValue;
 use serde_json::Value as JsonValue;
+use structopt::StructOpt;
 
 use base::defs::{Error, ErrorKind::*, Result};
 use base::fm;
@@ -88,8 +90,39 @@ fn lua_table_from_json_val<'a>(
     }
 }
 
+#[derive(StructOpt)]
+pub struct ScanGeometryOverride {
+    #[structopt(
+        help = "Camera initial position to override with",
+        long = "camera-initial-position",
+            number_of_values = 1,
+            parse(try_from_str = parse_key_val),
+            short = "y"
+    )]
+    pub camera_initial_positions: Vec<(String, CliArray<f32, 3>)>,
+
+    #[structopt(
+        help = "Camera initial direction to override with",
+        long = "camera-initial-direction",
+            number_of_values = 1,
+            parse(try_from_str = parse_key_val),
+            short = "c"
+    )]
+    pub camera_initial_directions: Vec<(String, CliArray<f32, 3>)>,
+
+    #[structopt(
+        help = "Camera landscape angle to override with",
+        long = "camera-landscape-angle",
+            number_of_values = 1,
+            parse(try_from_str = parse_key_val),
+            short = "l"
+    )]
+    pub camera_up_angles: Vec<(String, f32)>,
+}
+
 pub fn read_scans(
     reader: &mut dyn fm::Read,
+    geometry_override: &ScanGeometryOverride,
 ) -> Result<(BTreeMap<String, fm::Scan>, Vec<fm::ScanFrame>)> {
     let mut scans = BTreeMap::<String, fm::Scan>::new();
     let mut scan_frames = Vec::<fm::ScanFrame>::new();
@@ -126,6 +159,46 @@ pub fn read_scans(
                 scan_frames.push(f);
             }
             _ => (),
+        }
+    }
+
+    let unknown_scan_err = |name| {
+        let desc = format!(
+            "unknown scan '{}' for camera initial position override",
+            name
+        );
+        return Err(Error::new(InconsistentState, desc));
+    };
+
+    for (name, eye) in geometry_override.camera_initial_positions.iter() {
+        if let Some(scan) = scans.get_mut(name) {
+            scan.camera_initial_position = Some(fm::Point3 {
+                x: eye.0[0],
+                y: eye.0[1],
+                z: eye.0[2],
+            });
+        } else {
+            return unknown_scan_err(name);
+        }
+    }
+
+    for (name, dir) in geometry_override.camera_initial_directions.iter() {
+        if let Some(scan) = scans.get_mut(name) {
+            scan.camera_initial_direction = Some(fm::Point3 {
+                x: dir.0[0],
+                y: dir.0[1],
+                z: dir.0[2],
+            });
+        } else {
+            return unknown_scan_err(name);
+        }
+    }
+
+    for (name, angle) in geometry_override.camera_up_angles.iter() {
+        if let Some(scan) = scans.get_mut(name) {
+            scan.camera_up_angle = *angle;
+        } else {
+            return unknown_scan_err(name);
         }
     }
 

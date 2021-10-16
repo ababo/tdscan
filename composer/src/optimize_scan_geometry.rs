@@ -13,6 +13,7 @@ use structopt::StructOpt;
 
 use crate::misc::{
     fm_reader_from_file_or_stdin, fm_writer_to_file_or_stdout, read_scans,
+    ScanGeometryOverride,
 };
 use crate::point_cloud::{
     build_frame_clouds, distance_between_point_clouds, PointCloudParams,
@@ -33,6 +34,9 @@ pub struct OptimizeScanGeometryParams {
         default_value = "100"
     )]
     num_iters: usize,
+
+    #[structopt(flatten)]
+    geometry_override: ScanGeometryOverride,
 
     #[structopt(flatten)]
     point_cloud_params: PointCloudParams,
@@ -59,6 +63,7 @@ pub fn optimize_scan_geometry_with_params(
     optimize_scan_geometry(
         reader.as_mut(),
         params.num_iters,
+        &params.geometry_override,
         &params.point_cloud_params,
         writer.as_mut(),
     )
@@ -67,10 +72,11 @@ pub fn optimize_scan_geometry_with_params(
 pub fn optimize_scan_geometry(
     reader: &mut dyn fm::Read,
     num_iters: usize,
+    geometry_override: &ScanGeometryOverride,
     point_cloud_params: &PointCloudParams,
     writer: &mut dyn fm::Write,
 ) -> Result<()> {
-    let (scans, scan_frames) = read_scans(reader)?;
+    let (scans, scan_frames) = read_scans(reader, geometry_override)?;
 
     let opt = ScanOpt {
         point_cloud_params,
@@ -201,7 +207,7 @@ impl<'a> ArgminOp for ScanOpt<'a> {
         for i in 0..clouds.len() {
             if let Some(dist) = distance_between_point_clouds(
                 &clouds[i],
-                &clouds[(i + 1) % clouds.len()]
+                &clouds[(i + 1) % clouds.len()],
             ) {
                 sum += dist;
                 num += 1;

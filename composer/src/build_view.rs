@@ -1,15 +1,14 @@
-use std::collections::HashMap;
 use std::path::PathBuf;
 
 use structopt::StructOpt;
 
 use crate::misc::{
     fm_reader_from_file_or_stdin, fm_writer_to_file_or_stdout, read_scans,
+    ScanGeometryOverride,
 };
 use crate::point_cloud::{build_frame_clouds, PointCloudParams};
-use base::defs::{Error, ErrorKind::*, Result};
+use base::defs::Result;
 use base::fm;
-use base::util::cli::{parse_key_val, Array as CliArray};
 
 #[derive(StructOpt)]
 #[structopt(about = "Build element view from scan .fm file")]
@@ -17,32 +16,8 @@ pub struct BuildViewParams {
     #[structopt(help = "Input scan .fm file (STDIN if omitted)")]
     in_path: Option<PathBuf>,
 
-    #[structopt(
-        help = "Camera initial position to override with",
-        long = "camera-initial-position",
-            number_of_values = 1,
-            parse(try_from_str = parse_key_val),
-            short = "y"
-    )]
-    camera_initial_positions: Vec<(String, CliArray<f32, 3>)>,
-
-    #[structopt(
-        help = "Camera initial direction to override with",
-        long = "camera-initial-direction",
-            number_of_values = 1,
-            parse(try_from_str = parse_key_val),
-            short = "c"
-    )]
-    camera_initial_directions: Vec<(String, CliArray<f32, 3>)>,
-
-    #[structopt(
-        help = "Camera landscape angle to override with",
-        long = "camera-landscape-angle",
-            number_of_values = 1,
-            parse(try_from_str = parse_key_val),
-            short = "l"
-    )]
-    camera_up_angles: Vec<(String, f32)>,
+    #[structopt(flatten)]
+    geometry_override: ScanGeometryOverride,
 
     #[structopt(flatten)]
     point_cloud_params: PointCloudParams,
@@ -61,27 +36,12 @@ pub struct BuildViewParams {
 pub fn build_view_with_params(params: &BuildViewParams) -> Result<()> {
     let mut reader = fm_reader_from_file_or_stdin(&params.in_path)?;
 
-    let camera_initial_positions = params
-        .camera_initial_positions
-        .iter()
-        .map(|d| (d.0.clone(), d.1 .0))
-        .collect();
-    let camera_initial_directions = params
-        .camera_initial_directions
-        .iter()
-        .map(|d| (d.0.clone(), d.1 .0))
-        .collect();
-    let camera_up_angle =
-        params.camera_up_angles.iter().cloned().collect();
-
     let mut writer =
         fm_writer_to_file_or_stdout(&params.out_path, &params.fm_write_params)?;
 
     build_view(
         reader.as_mut(),
-        &camera_initial_positions,
-        &camera_initial_directions,
-        &camera_up_angle,
+        &params.geometry_override,
         &params.point_cloud_params,
         writer.as_mut(),
     )
@@ -89,47 +49,11 @@ pub fn build_view_with_params(params: &BuildViewParams) -> Result<()> {
 
 pub fn build_view(
     reader: &mut dyn fm::Read,
-    camera_initial_positions: &HashMap<String, [f32; 3]>,
-    camera_initial_directions: &HashMap<String, [f32; 3]>,
-    camera_up_angles: &HashMap<String, f32>,
+    geometry_override: &ScanGeometryOverride,
     point_cloud_params: &PointCloudParams,
     _writer: &mut dyn fm::Write,
 ) -> Result<()> {
-    let (mut scans, scan_frames) = read_scans(reader)?;
-
-    let unknown_scan_err = |name| {
-        let desc = format!(
-            "unknown scan '{}' for camera initial position override",
-            name
-        );
-        return Err(Error::new(InconsistentState, desc));
-    };
-
-    for (name, eye) in camera_initial_positions {
-        if let Some(scan) = scans.get_mut(name) {
-            scan.camera_initial_position =
-                Some(fm::Point3{x: eye[0], y: eye[1],z: eye[2]});
-        } else {
-            return unknown_scan_err(name);
-        }
-    }
-
-    for (name, dir) in camera_initial_directions {
-        if let Some(scan) = scans.get_mut(name) {
-            scan.camera_initial_direction =
-                Some(fm::Point3{x: dir[0], y: dir[1],z: dir[2]});
-        } else {
-            return unknown_scan_err(name);
-        }
-    }
-
-    for (name, angle) in camera_up_angles {
-        if let Some(scan) = scans.get_mut(name) {
-            scan.camera_up_angle = *angle;
-        } else {
-            return unknown_scan_err(name);
-        }
-    }
+    let (scans, scan_frames) = read_scans(reader, &geometry_override)?;
 
     let clouds = build_frame_clouds(&scans, &scan_frames, point_cloud_params);
 

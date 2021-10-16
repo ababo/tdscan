@@ -175,8 +175,7 @@ pub fn distance_between_point_clouds(
     }
 
     let mut neighbours = Vec::with_capacity(num_normal_neighbours);
-    let mut sum = 0.0;
-    let mut num = 0;
+    let mut dists = Vec::with_capacity(a.len());
 
     for a_point in a {
         let mut b_nearest = b_tree
@@ -204,14 +203,17 @@ pub fn distance_between_point_clouds(
         };
 
         let dist = (*a_point - b_point).dot(&a_plane.n).abs();
-        sum += dist;
-        num += 1;
+        dists.push(dist);
     }
 
-    if num > 0 {
-        Some(sum / num as f64)
-    } else {
+    // Discard 5% of biggest contributors (probable outliers).
+    dists.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    dists.resize(dists.len() * 95 / 100, 0.0);
+
+    if dists.is_empty() {
         None
+    } else {
+        Some(dists.iter().sum::<f64>() / dists.len() as f64)
     }
 }
 

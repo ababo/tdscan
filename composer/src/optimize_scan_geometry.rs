@@ -209,10 +209,10 @@ impl<'a> ArgminOp for ScanOpt<'a> {
 
         let mut sum = 0.0;
         let mut num = 0;
-        for i in 0..clouds.len() - 1 {
+        for i in 0..clouds.len() {
             if let Some(dist) = distance_between_point_clouds(
                 &clouds[i],
-                &clouds[i + 1],
+                &clouds[(i + 1) % clouds.len()],
                 self.num_normal_neighbours,
             ) {
                 sum += dist;

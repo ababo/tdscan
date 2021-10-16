@@ -38,13 +38,6 @@ pub struct OptimizeScanGeometryParams {
     point_cloud_params: PointCloudParams,
 
     #[structopt(
-        help = "Number of neighbour vertices to use for computing normals",
-        long,
-        default_value = "5"
-    )]
-    num_normal_neighbours: usize,
-
-    #[structopt(
         help = "Output scan view .fm file (STDOUT if omitted)",
         long,
         short = "o"
@@ -67,7 +60,6 @@ pub fn optimize_scan_geometry_with_params(
         reader.as_mut(),
         params.num_iters,
         &params.point_cloud_params,
-        params.num_normal_neighbours,
         writer.as_mut(),
     )
 }
@@ -76,14 +68,12 @@ pub fn optimize_scan_geometry(
     reader: &mut dyn fm::Read,
     num_iters: usize,
     point_cloud_params: &PointCloudParams,
-    num_normal_neighbours: usize,
     writer: &mut dyn fm::Write,
 ) -> Result<()> {
     let (scans, scan_frames) = read_scans(reader)?;
 
     let opt = ScanOpt {
         point_cloud_params,
-        num_normal_neighbours,
         scans: &scans,
         scan_frames: &scan_frames,
     };
@@ -140,7 +130,6 @@ pub fn optimize_scan_geometry(
 
 struct ScanOpt<'a> {
     point_cloud_params: &'a PointCloudParams,
-    num_normal_neighbours: usize,
     scans: &'a BTreeMap<String, fm::Scan>,
     scan_frames: &'a Vec<fm::ScanFrame>,
 }
@@ -212,8 +201,7 @@ impl<'a> ArgminOp for ScanOpt<'a> {
         for i in 0..clouds.len() {
             if let Some(dist) = distance_between_point_clouds(
                 &clouds[i],
-                &clouds[(i + 1) % clouds.len()],
-                self.num_normal_neighbours,
+                &clouds[(i + 1) % clouds.len()]
             ) {
                 sum += dist;
                 num += 1;

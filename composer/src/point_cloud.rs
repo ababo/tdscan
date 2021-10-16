@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
+use std::f64::INFINITY;
 
 use kdtree::distance::squared_euclidean;
 use kdtree::KdTree;
-use nalgebra::DMatrix;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use structopt::StructOpt;
@@ -158,52 +158,31 @@ pub fn build_frame_clouds(
 pub fn distance_between_point_clouds(
     a: &[Point3],
     b: &[Point3],
-    num_normal_neighbours: usize,
 ) -> Option<f64> {
-    if num_normal_neighbours < 3 {
-        return None;
+    let mut kdtree = KdTree::with_capacity(3, a.len());
+    for p in a {
+        kdtree.add(p.coords.as_ref(), INFINITY).unwrap();
     }
 
-    let mut a_tree = KdTree::with_capacity(3, a.len());
-    for (i, p) in a.iter().enumerate() {
-        a_tree.add(p.coords.as_ref(), i).unwrap();
+    for p in b {
+        let mut nearest = kdtree
+            .iter_nearest_mut(p.coords.as_ref(), &squared_euclidean)
+            .unwrap();
+        let (dist, min) = nearest.next().unwrap();
+        if dist < *min {
+            *min = dist;
+        }
     }
 
-    let mut b_tree = KdTree::with_capacity(3, b.len());
-    for (i, p) in b.iter().enumerate() {
-        b_tree.add(p.coords.as_ref(), i).unwrap();
-    }
-
-    let mut neighbours = Vec::with_capacity(num_normal_neighbours);
     let mut dists = Vec::with_capacity(a.len());
 
-    for a_point in a {
-        let mut b_nearest = b_tree
-            .iter_nearest(a_point.coords.as_ref(), &squared_euclidean)
-            .unwrap();
-        let b_point = if let Some(p) = b_nearest.next() {
-            b[*p.1]
-        } else {
-            return None;
-        };
-
-        neighbours.clear();
-        let mut a_nearest = a_tree
-            .iter_nearest(a_point.coords.as_ref(), &squared_euclidean)
-            .unwrap();
-        let _ = a_nearest.next(); // Skip itself.
-        neighbours
-            .extend(a_nearest.map(|p| a[*p.1]).take(num_normal_neighbours));
-        let a_plane = if let Some(plane) =
-            compute_best_fitting_plane(neighbours.as_slice())
-        {
-            plane
-        } else {
-            continue;
-        };
-
-        let dist = (*a_point - b_point).dot(&a_plane.n).abs();
-        dists.push(dist);
+    let all = kdtree
+        .iter_nearest(&[0.0, 0.0, 0.0], &squared_euclidean)
+        .unwrap();
+    for (_, min) in all {
+        if min.is_finite() {
+            dists.push(min.sqrt());
+        }
     }
 
     // Discard 5% of biggest contributors (probable outliers).
@@ -214,34 +193,6 @@ pub fn distance_between_point_clouds(
         None
     } else {
         Some(dists.iter().sum::<f64>() / dists.len() as f64)
-    }
-}
-
-// Plane defined in Hessian normal form.
-struct Plane {
-    n: Vector3,
-    #[allow(dead_code)]
-    p: f64,
-}
-
-fn compute_best_fitting_plane(points: &[Point3]) -> Option<Plane> {
-    let data = points.iter().map(|p| p.coords.as_ref()).flatten().cloned();
-    let points = DMatrix::from_iterator(points.len(), 3, data);
-    let means = points.row_mean();
-    let mut points = points.transpose();
-    points.row_mut(0).add_scalar_mut(-means[0]);
-    points.row_mut(1).add_scalar_mut(-means[1]);
-    points.row_mut(2).add_scalar_mut(-means[2]);
-    if let Some(u) = points.svd(true, false).u {
-        let normal = u.column(0);
-        let normal = Point3::new(normal[0], normal[1], normal[2]);
-        let centroid = Point3::new(means[0], means[1], means[2]);
-        Some(Plane {
-            n: normal.coords,
-            p: -normal.coords.dot(&centroid.coords),
-        })
-    } else {
-        None
     }
 }
 

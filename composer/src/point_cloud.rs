@@ -86,7 +86,7 @@ pub fn build_point_cloud(
         scan.camera_up_angle as f64,
     );
     let look_rot =
-        Matrix4::look_at_lh(&eye, &dir, &Vector3::new(0.0, 0.0, 1.0));
+        Matrix4::look_at_rh(&eye, &dir, &Vector3::new(0.0, 0.0, 1.0));
     let view_rot = look_rot.try_inverse().unwrap() * Matrix4::from(up_rot);
 
     let camera_angle =
@@ -116,7 +116,7 @@ pub fn build_point_cloud(
             }
 
             let focus_to_object =
-                depth * nalgebra::Vector4::new(u, v, 1.0, 0.0);
+                depth * nalgebra::Vector4::new(u, -v, -1.0, 0.0);
 
             let point = (view_rot * focus_to_object).xyz() + eye.coords;
             let point = time_rot * point;

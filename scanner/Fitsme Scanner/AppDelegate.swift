@@ -160,15 +160,15 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
       }
     }
 
-    let eye = request.query?["eye"]?.split(separator: ",")
+    let eye = request.query?["y"]?.split(separator: ",")
       .map(Float.init).compactMap { $0 }
     let ctr =
-      request.query?["ctr"]?.split(separator: ",")
+      request.query?["c"]?.split(separator: ",")
       .map(Float.init).compactMap { $0 } ?? [0.0, 0.0, 0.0]
     let vel = Float(request.query?["vel"] ?? "")
     let fmt = UInt(request.query?["fmt"] ?? "0")
     let fps = Double(request.query?["fps"] ?? "0")
-    let name = request.query?["name"] ?? "\(UIDevice.current.name)-\(uts)"
+    let name = request.query?["name"] ?? UUID().uuidString
     let nof = UInt(request.query?["nof"] ?? "1")
     let at = TimeInterval(request.query?["at"] ?? String(uts))
 
@@ -289,25 +289,36 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var err = fm_create_writer(onWriterCallback, scanPtr, &writer)
     assert(err == kFmOk)
 
-    var angle_of_view: Float
+    var angleOfView: Float
     switch session.arSession.configuration!.videoFormat.captureDeviceType {
     case AVCaptureDevice.DeviceType.builtInWideAngleCamera:
       // See https://photo.stackexchange.com/questions/106509.
-      angle_of_view = 1.17460658659
+      angleOfView = 1.17460658659
     case AVCaptureDevice.DeviceType.builtInUltraWideCamera:
-      angle_of_view = 2.09439510239
+      angleOfView = 2.09439510239
     default:
       fatalError("Unknown angle of view")
     }
 
-    let landscape_angle: Float =
-      UIDevice.current.orientation.isLandscape ? 0 : -1.57079632679
+    let upAngle: Float
+    switch UIDevice.current.orientation {
+    case .portrait:
+      upAngle = -1.57079632679
+    case .portraitUpsideDown:
+      upAngle = 1.57079632679
+    case .landscapeLeft:
+      upAngle = 0
+    case .landscapeRight:
+      upAngle = 3.1415926536
+    default:
+      upAngle = Float.nan
+    }
 
     scan.name.cString(using: .utf8)!.withUnsafeBufferPointer { namePtr in
       var fmScan = FmScan(
         name: namePtr.baseAddress,
-        camera_angle_of_view: angle_of_view,
-        camera_up_angle: landscape_angle,
+        camera_angle_of_view: angleOfView,
+        camera_up_angle: upAngle,
         camera_angular_velocity: scan.vel,
         camera_initial_position: scan.eye,
         camera_initial_direction: scan.ctr,

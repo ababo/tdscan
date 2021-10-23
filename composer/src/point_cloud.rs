@@ -44,7 +44,7 @@ pub struct PointCloudParams {
     pub max_z_distance: f32,
 
     #[structopt(
-        help = "Minimal distance to consider point as an outlier",
+        help = "Minimum distance to consider point as an outlier",
         long,
         short = "u",
         default_value = "inf"
@@ -52,11 +52,11 @@ pub struct PointCloudParams {
     pub outlier_distance: f32,
 
     #[structopt(
-        help = "Number of points per frame cloud limit",
+        help = "Maximum number of points per frame",
         long,
         short = "p"
     )]
-    pub max_num_points: Option<usize>,
+    pub max_num_frame_points: Option<usize>,
 }
 
 type Point3 = nalgebra::Point3<f64>;
@@ -133,10 +133,6 @@ pub fn build_point_cloud(
         }
     }
 
-    if let Some(max_num_points) = params.max_num_points {
-        select_random_points(&mut points, max_num_points);
-    }
-
     remove_outliers(&mut points, params.outlier_distance as f64);
 
     points
@@ -152,6 +148,11 @@ pub fn build_frame_clouds(
         let scan = scans.get(&frame.scan).unwrap();
         clouds.push(build_point_cloud(&scan, frame, params))
     }
+
+    if let Some(max_num_frame_points) = params.max_num_frame_points {
+        select_random_points(&mut clouds, max_num_frame_points);
+    }
+
     clouds
 }
 
@@ -191,7 +192,7 @@ pub fn distance_between_point_clouds(
     if dists.is_empty() {
         None
     } else {
-        let sum = dists.iter().map(|d|d.sqrt()).sum::<f64>();
+        let sum = dists.iter().map(|d| d.sqrt()).sum::<f64>();
         Some(sum / dists.len() as f64)
     }
 }
@@ -222,20 +223,25 @@ fn remove_outliers(points: &mut Vec<Point3>, distance: f64) {
     points.truncate(j);
 }
 
-fn select_random_points(points: &mut Vec<Point3>, num: usize) {
-    if num >= points.len() {
+fn select_random_points(
+    clouds: &mut [Vec<Point3>],
+    max_num_frame_points: usize,
+) {
+    if max_num_frame_points >= clouds.len() {
         return;
     }
 
     // Use deterministic generator to maintain consistency while optimizing.
     let mut rng = StdRng::seed_from_u64(0);
 
-    for i in 0..num {
-        let j = rng.gen_range(i..points.len());
-        points.swap(i, j);
-    }
+    for points in clouds.iter_mut() {
+        for i in 0..max_num_frame_points {
+            let j = rng.gen_range(i..points.len());
+            points.swap(i, j);
+        }
 
-    points.resize(num, Point3::origin());
+        points.resize(max_num_frame_points, Point3::origin());
+    }
 }
 
 #[cfg(test)]

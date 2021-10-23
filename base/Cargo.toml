@@ -3,7 +3,7 @@ name = "base"
 description = "Fitsme shared code base"
 version = "0.1.0"
 authors = ["Simon Prykhodko <semion.ababo@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 [lib]
 # TODO: Specify "staticlib" for aarch64-apple-ios only when it's supported.

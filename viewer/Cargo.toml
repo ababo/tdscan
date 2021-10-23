@@ -3,7 +3,7 @@ name = "viewer"
 description = "Fitsme web viewer"
 version = "0.1.0"
 authors = ["Simon Prykhodko <semion.ababo@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 arrayvec = "0.7.0"

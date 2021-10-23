@@ -227,20 +227,17 @@ fn select_random_points(
     clouds: &mut [Vec<Point3>],
     max_num_frame_points: usize,
 ) {
-    if max_num_frame_points >= clouds.len() {
-        return;
-    }
-
     // Use deterministic generator to maintain consistency while optimizing.
     let mut rng = StdRng::seed_from_u64(0);
 
     for points in clouds.iter_mut() {
-        for i in 0..max_num_frame_points {
-            let j = rng.gen_range(i..points.len());
-            points.swap(i, j);
+        if points.len() > max_num_frame_points {
+            for i in 0..max_num_frame_points {
+                let j = rng.gen_range(i..points.len());
+                points.swap(i, j);
+            }
+            points.resize(max_num_frame_points, Point3::origin());
         }
-
-        points.resize(max_num_frame_points, Point3::origin());
     }
 }
 

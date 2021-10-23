@@ -133,8 +133,6 @@ pub fn build_point_cloud(
         }
     }
 
-    remove_outliers(&mut points, params.outlier_distance as f64);
-
     points
 }
 
@@ -152,6 +150,8 @@ pub fn build_frame_clouds(
     if let Some(max_num_frame_points) = params.max_num_frame_points {
         select_random_points(&mut clouds, max_num_frame_points);
     }
+
+    remove_outliers(&mut clouds, params.outlier_distance as f64);
 
     clouds
 }
@@ -197,30 +197,32 @@ pub fn distance_between_point_clouds(
     }
 }
 
-fn remove_outliers(points: &mut Vec<Point3>, distance: f64) {
-    if distance.is_infinite() || points.len() < 2 {
+fn remove_outliers(clouds: &mut [Vec<Point3>], distance: f64) {
+    let count = clouds.iter().flatten().count();
+    if distance.is_infinite() || count < 2 {
         return;
     }
 
-    let mut kdtree = KdTree::with_capacity(3, points.len());
-    for point in points.iter() {
+    let mut kdtree = KdTree::with_capacity(3, count);
+    for point in clouds.iter().flatten() {
         kdtree.add(*point.coords.as_ref(), ()).unwrap();
     }
 
     let squared_distance = distance * distance;
 
-    let mut j = 0;
-    for i in 0..points.len() {
-        let (dist, _) = kdtree
-            .nearest(points[i].coords.as_ref(), 2, &squared_euclidean)
-            .unwrap()[1];
-        if dist <= squared_distance {
-            points.swap(i, j);
-            j += 1;
+    for points in clouds.iter_mut() {
+        let mut j = 0;
+        for i in 0..points.len() {
+            let (dist, _) = kdtree
+                .nearest(points[i].coords.as_ref(), 2, &squared_euclidean)
+                .unwrap()[1];
+            if dist <= squared_distance {
+                points.swap(i, j);
+                j += 1;
+            }
         }
+        points.truncate(j);
     }
-
-    points.truncate(j);
 }
 
 fn select_random_points(
@@ -267,16 +269,14 @@ mod test {
 
     #[test]
     fn test_remove_outliers() {
-        let mut points = vec![
-            Point3::new(1.0, 0.0, 0.0),
-            Point3::new(2.0, 0.0, 0.0),
-            Point3::new(7.0, 0.0, 0.0),
-            Point3::new(3.0, 0.0, 0.0),
+        let mut clouds = vec![
+            vec![Point3::new(1.0, 0.0, 0.0), Point3::new(2.0, 0.0, 0.0)],
+            vec![Point3::new(7.0, 0.0, 0.0), Point3::new(3.0, 0.0, 0.0)],
         ];
-        remove_outliers(&mut points, 1.0);
-        assert_eq!(points.len(), 3);
-        assert_eq!(points[0], Point3::new(1.0, 0.0, 0.0));
-        assert_eq!(points[1], Point3::new(2.0, 0.0, 0.0));
-        assert_eq!(points[2], Point3::new(3.0, 0.0, 0.0));
+        remove_outliers(&mut clouds, 1.0);
+        assert_eq!(clouds[0].len(), 2);
+        assert_eq!(clouds[0][0], Point3::new(1.0, 0.0, 0.0));
+        assert_eq!(clouds[0][1], Point3::new(2.0, 0.0, 0.0));
+        assert_eq!(clouds[1][0], Point3::new(3.0, 0.0, 0.0));
     }
 }

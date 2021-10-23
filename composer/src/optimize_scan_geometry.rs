@@ -13,7 +13,7 @@ use structopt::StructOpt;
 
 use crate::misc::{
     fm_reader_from_file_or_stdin, fm_writer_to_file_or_stdout, read_scans,
-    ScanGeometryOverride,
+    ScanParams,
 };
 use crate::point_cloud::{
     build_frame_clouds, distance_between_point_clouds, PointCloudParams,
@@ -36,7 +36,7 @@ pub struct OptimizeScanGeometryParams {
     num_iters: usize,
 
     #[structopt(flatten)]
-    geometry_override: ScanGeometryOverride,
+    scan_params: ScanParams,
 
     #[structopt(flatten)]
     point_cloud_params: PointCloudParams,
@@ -63,7 +63,7 @@ pub fn optimize_scan_geometry_with_params(
     optimize_scan_geometry(
         reader.as_mut(),
         params.num_iters,
-        &params.geometry_override,
+        &params.scan_params,
         &params.point_cloud_params,
         writer.as_mut(),
     )
@@ -72,11 +72,11 @@ pub fn optimize_scan_geometry_with_params(
 pub fn optimize_scan_geometry(
     reader: &mut dyn fm::Read,
     num_iters: usize,
-    geometry_override: &ScanGeometryOverride,
+    scan_params: &ScanParams,
     point_cloud_params: &PointCloudParams,
     writer: &mut dyn fm::Write,
 ) -> Result<()> {
-    let (scans, scan_frames) = read_scans(reader, geometry_override)?;
+    let (scans, scan_frames) = read_scans(reader, scan_params)?;
 
     let opt = ScanOpt {
         point_cloud_params,

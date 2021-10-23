@@ -91,7 +91,7 @@ fn lua_table_from_json_val<'a>(
 }
 
 #[derive(StructOpt)]
-pub struct ScanGeometryOverride {
+pub struct ScanParams {
     #[structopt(
         help = "Camera initial position to override with",
         long = "camera-initial-position",
@@ -118,11 +118,18 @@ pub struct ScanGeometryOverride {
             short = "l"
     )]
     pub camera_up_angles: Vec<(String, f32)>,
+    #[structopt(
+        help = "Scan name to override with",
+        long = "name",
+            number_of_values = 1,
+            parse(try_from_str = parse_key_val),
+    )]
+    pub names: Vec<(String, String)>,
 }
 
 pub fn read_scans(
     reader: &mut dyn fm::Read,
-    geometry_override: &ScanGeometryOverride,
+    scan_params: &ScanParams,
 ) -> Result<(BTreeMap<String, fm::Scan>, Vec<fm::ScanFrame>)> {
     let mut scans = BTreeMap::<String, fm::Scan>::new();
     let mut scan_frames = Vec::<fm::ScanFrame>::new();
@@ -170,7 +177,7 @@ pub fn read_scans(
         return Err(Error::new(InconsistentState, desc));
     };
 
-    for (name, eye) in geometry_override.camera_initial_positions.iter() {
+    for (name, eye) in scan_params.camera_initial_positions.iter() {
         if let Some(scan) = scans.get_mut(name) {
             scan.camera_initial_position = Some(fm::Point3 {
                 x: eye.0[0],
@@ -182,7 +189,7 @@ pub fn read_scans(
         }
     }
 
-    for (name, dir) in geometry_override.camera_initial_directions.iter() {
+    for (name, dir) in scan_params.camera_initial_directions.iter() {
         if let Some(scan) = scans.get_mut(name) {
             scan.camera_initial_direction = Some(fm::Point3 {
                 x: dir.0[0],
@@ -194,11 +201,28 @@ pub fn read_scans(
         }
     }
 
-    for (name, angle) in geometry_override.camera_up_angles.iter() {
+    for (name, angle) in scan_params.camera_up_angles.iter() {
         if let Some(scan) = scans.get_mut(name) {
             scan.camera_up_angle = *angle;
         } else {
             return unknown_scan_err(name);
+        }
+    }
+
+    for (name, new_name) in scan_params.names.iter() {
+        if let Some(scan) = scans.get_mut(name) {
+            scan.name = new_name.clone();
+        } else {
+            return unknown_scan_err(name);
+        }
+    }
+    for frame in scan_frames.iter_mut() {
+        if let Some((_, new_name)) = scan_params
+            .names
+            .iter()
+            .find(|(name, _)| name == &frame.scan)
+        {
+            frame.scan = new_name.clone();
         }
     }
 

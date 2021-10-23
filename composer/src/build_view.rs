@@ -4,7 +4,7 @@ use structopt::StructOpt;
 
 use crate::misc::{
     fm_reader_from_file_or_stdin, fm_writer_to_file_or_stdout, read_scans,
-    ScanGeometryOverride,
+    ScanParams,
 };
 use crate::point_cloud::{build_frame_clouds, PointCloudParams};
 use base::defs::Result;
@@ -17,7 +17,7 @@ pub struct BuildViewParams {
     in_path: Option<PathBuf>,
 
     #[structopt(flatten)]
-    geometry_override: ScanGeometryOverride,
+    scan_params: ScanParams,
 
     #[structopt(flatten)]
     point_cloud_params: PointCloudParams,
@@ -41,7 +41,7 @@ pub fn build_view_with_params(params: &BuildViewParams) -> Result<()> {
 
     build_view(
         reader.as_mut(),
-        &params.geometry_override,
+        &params.scan_params,
         &params.point_cloud_params,
         writer.as_mut(),
     )
@@ -49,11 +49,11 @@ pub fn build_view_with_params(params: &BuildViewParams) -> Result<()> {
 
 pub fn build_view(
     reader: &mut dyn fm::Read,
-    geometry_override: &ScanGeometryOverride,
+    scan_params: &ScanParams,
     point_cloud_params: &PointCloudParams,
     _writer: &mut dyn fm::Write,
 ) -> Result<()> {
-    let (scans, scan_frames) = read_scans(reader, &geometry_override)?;
+    let (scans, scan_frames) = read_scans(reader, &scan_params)?;
 
     let clouds = build_frame_clouds(&scans, &scan_frames, point_cloud_params);
 

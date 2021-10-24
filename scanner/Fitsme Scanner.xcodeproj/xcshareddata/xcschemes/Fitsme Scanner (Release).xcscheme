@@ -10,7 +10,7 @@
             ActionType = "Xcode.IDEStandardExecutionActionsCore.ExecutionActionType.ShellScriptAction">
             <ActionContent
                title = "Run Script"
-               scriptText = "&quot;${PROJECT_DIR}/../build-base-ios.sh&quot; &amp;&gt; /Users/ababo/Desktop/build.txt&#10;"
+               scriptText = "&quot;${PROJECT_DIR}/../build-base-ios.sh&quot; &amp;&gt; build-base-ios.log&#10;"
                shellToInvoke = "/bin/sh">
                <EnvironmentBuildable>
                   <BuildableReference

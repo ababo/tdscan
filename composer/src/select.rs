@@ -88,32 +88,26 @@ pub fn select(
     let lua = rlua::Lua::new();
     let mut num = 1;
 
-    loop {
-        match reader.read_raw_record()? {
-            Some(raw) => {
-                let rec = if no_rec_decoding {
-                    None
-                } else {
-                    Some(raw.decode()?)
-                };
+    while let Some(raw) = reader.read_raw_record()? {
+        let rec = if no_rec_decoding {
+            None
+        } else {
+            Some(raw.decode()?)
+        };
 
-                let res = lua
-                    .context(|ctx| {
-                        ctx.globals().set("n", num)?;
-                        if let Some(rec) = rec {
-                            let tbl =
-                                lua_table_from_record(ctx, &rec, truncate_len)?;
-                            ctx.globals().set("r", tbl)?;
-                        }
-                        ctx.load(predicate).eval()
-                    })
-                    .map_err(lua_err_to_err)?;
-
-                if res {
-                    writer.write_raw_record(&raw)?;
+        let res = lua
+            .context(|ctx| {
+                ctx.globals().set("n", num)?;
+                if let Some(rec) = rec {
+                    let tbl = lua_table_from_record(ctx, &rec, truncate_len)?;
+                    ctx.globals().set("r", tbl)?;
                 }
-            }
-            None => break,
+                ctx.load(predicate).eval()
+            })
+            .map_err(lua_err_to_err)?;
+
+        if res {
+            writer.write_raw_record(&raw)?;
         }
         num += 1;
     }

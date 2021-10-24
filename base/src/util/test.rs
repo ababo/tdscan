@@ -38,6 +38,7 @@ macro_rules! assert_eq_point3 {
     }};
 }
 
+#[derive(Default)]
 pub struct MethodMock<Args, Ret> {
     pub args: Vec<Args>,
     pub rets: Vec<Ret>,
@@ -64,7 +65,7 @@ impl<Args, Ret> MethodMock<Args, Ret> {
 }
 
 pub fn create_reader_with_records(
-    records: &Vec<fm::Record>,
+    records: &[fm::Record],
 ) -> fm::Reader<io::Cursor<Vec<u8>>> {
     let mut writer = create_writer();
 
@@ -94,6 +95,7 @@ pub fn new_element_view_state_rec(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn new_ev_face(
     vertex1: u32,
     vertex2: u32,

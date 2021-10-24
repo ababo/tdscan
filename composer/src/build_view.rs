@@ -53,7 +53,7 @@ pub fn build_view(
     point_cloud_params: &PointCloudParams,
     _writer: &mut dyn fm::Write,
 ) -> Result<()> {
-    let (scans, scan_frames) = read_scans(reader, &scan_params)?;
+    let (scans, scan_frames) = read_scans(reader, scan_params)?;
 
     let clouds = build_frame_clouds(&scans, &scan_frames, point_cloud_params);
 

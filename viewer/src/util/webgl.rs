@@ -72,7 +72,7 @@ pub fn define_attribute<T>(
         _ => panic!("unsupported WebGL attribute type"),
     };
 
-    let location = context.get_attrib_location(&program, name);
+    let location = context.get_attrib_location(program, name);
     if location == -1 {
         let desc = format!("failed to find WebGL program attribute '{}'", name);
         return Err(Error::new(WebGlError, desc));

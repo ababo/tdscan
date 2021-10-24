@@ -7,7 +7,7 @@ use crate::defs::{Error, ErrorKind::*, IntoResult, Result};
 use crate::fm::{Compression, RawRecord, Record, MAGIC, VERSION};
 
 pub trait Read {
-    fn read_raw_record<'a>(&'a mut self) -> Result<Option<RawRecord<'a>>>;
+    fn read_raw_record(&mut self) -> Result<Option<RawRecord>>;
     fn read_record(&mut self) -> Result<Option<Record>>;
 }
 
@@ -38,7 +38,7 @@ impl<R: io::Read> Reader<R> {
 
         inner
             .read_exact(&mut buf)
-            .into_result(|| format!("failed to read .fm magic"))?;
+            .into_result(|| "failed to read .fm magic".to_string())?;
         let val = u32::from_le_bytes(buf);
         if val != MAGIC {
             return Err(Error::new(
@@ -49,7 +49,7 @@ impl<R: io::Read> Reader<R> {
 
         inner
             .read_exact(&mut buf)
-            .into_result(|| format!("failed to read .fm version"))?;
+            .into_result(|| "failed to read .fm version".to_string())?;
         let val = u32::from_le_bytes(buf);
         if val != VERSION {
             return Err(Error::new(
@@ -60,7 +60,7 @@ impl<R: io::Read> Reader<R> {
 
         inner
             .read_exact(&mut buf)
-            .into_result(|| format!("failed to read .fm compression"))?;
+            .into_result(|| "failed to read .fm compression".to_string())?;
         let val = i32::from_le_bytes(buf);
 
         const COMPRESSION_NONE: i32 = Compression::None as i32;
@@ -83,7 +83,7 @@ impl<R: io::Read> Reader<R> {
 }
 
 impl<R: io::Read> Read for Reader<R> {
-    fn read_raw_record<'a>(&'a mut self) -> Result<Option<RawRecord<'a>>> {
+    fn read_raw_record(&mut self) -> Result<Option<RawRecord>> {
         let mut buf = [0; 4];
         match self.reader.read_exact(&mut buf) {
             Err(e) => {
@@ -92,7 +92,7 @@ impl<R: io::Read> Read for Reader<R> {
                 } else {
                     Err(Error::with_source(
                         MalformedData,
-                        format!("failed to read .fm record size"),
+                        "failed to read .fm record size".to_string(),
                         e,
                     ))
                 }
@@ -105,7 +105,7 @@ impl<R: io::Read> Read for Reader<R> {
 
         self.reader
             .read_exact(&mut self.buffer)
-            .into_result(|| format!("failed to read .fm record"))?;
+            .into_result(|| "failed to read .fm record".to_string())?;
 
         Ok(Some(RawRecord(&self.buffer)))
     }

@@ -29,7 +29,7 @@ impl Viewer {
 
         let adapter = WebGlAdapter::create(canvas).into_result()?;
         let controller = Controller::create(adapter).into_result()?;
-        Ok(Viewer { controller }).into()
+        Ok(Viewer { controller })
     }
 
     pub fn destroy(&self) {

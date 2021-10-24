@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::io;
 use std::io::{stdin, BufRead, BufReader};
 use std::mem::take;
@@ -57,10 +58,11 @@ pub fn import_obj_with_params(params: &ImportObjParams) -> Result<()> {
     let mtl_dir = params
         .in_path
         .as_deref()
-        .unwrap_or(".".as_ref())
+        .unwrap_or_else(|| ".".as_ref())
         .parent()
-        .unwrap_or(".".as_ref());
+        .unwrap_or_else(|| ".".as_ref());
 
+    #[allow(clippy::redundant_closure)]
     import_obj(
         &mut reader,
         |p| fs::read_file(p),
@@ -89,23 +91,21 @@ pub fn import_obj<F: Fn(&Path) -> Result<Vec<u8>>>(
         ..Default::default()
     };
 
-    for line_res in BufReader::new(reader).lines() {
-        if let Ok(line) = line_res {
-            data.line += 1;
+    for line in BufReader::new(reader).lines().flatten() {
+        data.line += 1;
 
-            let parts: Vec<&str> = line.trim().split_whitespace().collect();
-            if parts.len() > 0 {
-                match parts[0] {
-                    "f" => import_f(&mut data, &parts)?,
-                    "mtllib" => {
-                        import_mtllib(&read_file, mtl_dir, &mut data, &parts)?
-                    }
-                    "usemtl" => import_usemtl(&mut data, &parts)?,
-                    "v" => import_v(&mut data, &parts)?,
-                    "vn" => import_vn(&mut data, &parts)?,
-                    "vt" => import_vt(&mut data, &parts)?,
-                    _ => (),
+        let parts: Vec<&str> = line.trim().split_whitespace().collect();
+        if !parts.is_empty() {
+            match parts[0] {
+                "f" => import_f(&mut data, &parts)?,
+                "mtllib" => {
+                    import_mtllib(&read_file, mtl_dir, &mut data, &parts)?
                 }
+                "usemtl" => import_usemtl(&mut data, &parts)?,
+                "v" => import_v(&mut data, &parts)?,
+                "vn" => import_vn(&mut data, &parts)?,
+                "vt" => import_vt(&mut data, &parts)?,
+                _ => (),
             }
         }
     }
@@ -133,7 +133,7 @@ struct ImportData {
     mtl_dir: PathBuf,
 }
 
-fn import_f(data: &mut ImportData, parts: &Vec<&str>) -> Result<()> {
+fn import_f(data: &mut ImportData, parts: &[&str]) -> Result<()> {
     let num_vertices_err_res = |kind, prop| {
         let msg = "number of vertices in f-statement at line";
         Err(Error::new(kind, format!("{} {} {}", prop, msg, data.line)))
@@ -147,7 +147,7 @@ fn import_f(data: &mut ImportData, parts: &Vec<&str>) -> Result<()> {
     let mut face_vertices = [(0, 0, 0); MAX_NUM_FACE_VERTICES];
 
     for (i, part) in parts[1..].iter().enumerate() {
-        let mut iter = part.split("/");
+        let mut iter = part.split('/');
         let vertex = parse_f_component(data.line, &mut iter, i + 1, false)?;
         let texture = parse_f_component(data.line, &mut iter, i + 1, true)?;
         let normal = parse_f_component(data.line, &mut iter, i + 1, true)?;
@@ -165,9 +165,9 @@ fn import_f(data: &mut ImportData, parts: &Vec<&str>) -> Result<()> {
         let (v2, t2, n2) = face_vertices[i + 1];
         let (v3, t3, n3) = face_vertices[len - 1];
 
-        validate_face_vertex(&data, v1, t1, n1)?;
-        validate_face_vertex(&data, v2, t2, n2)?;
-        validate_face_vertex(&data, v2, t2, n2)?;
+        validate_face_vertex(data, v1, t1, n1)?;
+        validate_face_vertex(data, v2, t2, n2)?;
+        validate_face_vertex(data, v2, t2, n2)?;
 
         data.view.faces.push(fm::element_view::Face {
             vertex1: v1,
@@ -187,7 +187,7 @@ fn import_f(data: &mut ImportData, parts: &Vec<&str>) -> Result<()> {
 
 fn parse_f_component(
     line: usize,
-    iter: &mut std::str::Split<&str>,
+    iter: &mut std::str::Split<char>,
     vnum: usize,
     relax: bool,
 ) -> Result<u32> {
@@ -212,38 +212,39 @@ fn import_mtllib<F: Fn(&Path) -> Result<Vec<u8>>>(
     read_file: &F,
     mtl_dir: &Path,
     data: &mut ImportData,
-    parts: &Vec<&str>,
+    parts: &[&str],
 ) -> Result<()> {
     let num_filenames_err_res = |kind, prop| {
         let msg = "filenames in mtllib-statement at line";
         Err(Error::new(kind, format!("{} {} {}", prop, msg, data.line)))
     };
-    if parts.len() < 2 {
-        return num_filenames_err_res(MalformedData, "no");
-    } else if parts.len() > 2 {
-        return num_filenames_err_res(
-            UnsupportedFeature,
-            "unsupported number of",
-        );
+
+    match parts.len().cmp(&2) {
+        Ordering::Less => return num_filenames_err_res(MalformedData, "no"),
+        Ordering::Greater => {
+            return num_filenames_err_res(
+                UnsupportedFeature,
+                "unsupported number of",
+            )
+        }
+        _ => {}
     }
 
     let mtl_data = read_file(&mtl_dir.join(parts[1]))?;
-    for line_res in BufReader::new(mtl_data.as_slice()).lines() {
-        if let Ok(line) = line_res {
-            data.mtl_line += 1;
+    for line in BufReader::new(mtl_data.as_slice()).lines().flatten() {
+        data.mtl_line += 1;
 
-            let parts: Vec<&str> = line.trim().split_whitespace().collect();
-            if !parts.is_empty() {
-                match parts[0] {
-                    "map_Ka" => {
-                        import_mtl_map_kad(&read_file, mtl_dir, data, &parts)?
-                    }
-                    "map_Kd" => {
-                        import_mtl_map_kad(&read_file, mtl_dir, data, &parts)?
-                    }
-                    "newmtl" => import_mtl_newmtl(data, &parts)?,
-                    _ => (),
+        let parts: Vec<&str> = line.trim().split_whitespace().collect();
+        if !parts.is_empty() {
+            match parts[0] {
+                "map_Ka" => {
+                    import_mtl_map_kad(&read_file, mtl_dir, data, &parts)?
                 }
+                "map_Kd" => {
+                    import_mtl_map_kad(&read_file, mtl_dir, data, &parts)?
+                }
+                "newmtl" => import_mtl_newmtl(data, &parts)?,
+                _ => (),
             }
         }
     }
@@ -251,7 +252,7 @@ fn import_mtllib<F: Fn(&Path) -> Result<Vec<u8>>>(
     Ok(())
 }
 
-fn import_usemtl(data: &mut ImportData, parts: &Vec<&str>) -> Result<()> {
+fn import_usemtl(data: &mut ImportData, parts: &[&str]) -> Result<()> {
     if parts.len() != 2 {
         let desc = format!("malformed usemtl-statement at line {}", data.line);
         return Err(Error::new(MalformedData, desc));
@@ -272,7 +273,7 @@ fn import_mtl_map_kad<F: Fn(&Path) -> Result<Vec<u8>>>(
     read_file: &F,
     mtl_dir: &Path,
     data: &mut ImportData,
-    parts: &Vec<&str>,
+    parts: &[&str],
 ) -> Result<()> {
     if parts.len() != 2 {
         let desc = format!(
@@ -315,7 +316,7 @@ fn import_mtl_map_kad<F: Fn(&Path) -> Result<Vec<u8>>>(
     Ok(())
 }
 
-fn import_mtl_newmtl(data: &mut ImportData, parts: &Vec<&str>) -> Result<()> {
+fn import_mtl_newmtl(data: &mut ImportData, parts: &[&str]) -> Result<()> {
     if data.mtl_material.is_some() {
         let desc = format!(
             "multiple materials are not supported, found at line {}",
@@ -327,7 +328,7 @@ fn import_mtl_newmtl(data: &mut ImportData, parts: &Vec<&str>) -> Result<()> {
     Ok(())
 }
 
-fn import_v(data: &mut ImportData, parts: &Vec<&str>) -> Result<()> {
+fn import_v(data: &mut ImportData, parts: &[&str]) -> Result<()> {
     if parts.len() < 4 || parts.len() > 5 {
         return Err(Error::new(
             MalformedData,
@@ -344,7 +345,7 @@ fn import_v(data: &mut ImportData, parts: &Vec<&str>) -> Result<()> {
     Ok(())
 }
 
-fn import_vn(data: &mut ImportData, parts: &Vec<&str>) -> Result<()> {
+fn import_vn(data: &mut ImportData, parts: &[&str]) -> Result<()> {
     if parts.len() != 4 {
         return Err(Error::new(
             MalformedData,
@@ -361,7 +362,7 @@ fn import_vn(data: &mut ImportData, parts: &Vec<&str>) -> Result<()> {
     Ok(())
 }
 
-fn import_vt(data: &mut ImportData, parts: &Vec<&str>) -> Result<()> {
+fn import_vt(data: &mut ImportData, parts: &[&str]) -> Result<()> {
     if parts.len() < 3 || parts.len() > 4 {
         return Err(Error::new(
             MalformedData,
@@ -401,7 +402,7 @@ fn validate_face_vertex(
             "{} vertex {} in f-statement at line {}",
             prefix, vertex, line
         );
-        return Err(Error::new(InconsistentState, desc));
+        Err(Error::new(InconsistentState, desc))
     };
 
     if data.state.vertices.len() < vertex as usize {

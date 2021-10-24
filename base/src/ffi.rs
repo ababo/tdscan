@@ -24,7 +24,7 @@ struct FmWriterData {
 impl Write for FmWriterData {
     fn write(&mut self, buf: &[u8]) -> IoResult<usize> {
         let ret = (self.callback)(buf.as_ptr(), buf.len(), self.cb_data);
-        match ret.into_result(|| format!("FFI error")) {
+        match ret.into_result(|| "FFI error".to_string()) {
             Ok(()) => Ok(buf.len()),
             Err(err) => Err(IoError::new(IoErrorKind::Other, err)),
         }

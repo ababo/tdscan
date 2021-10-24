@@ -33,21 +33,21 @@ impl FromStr for Compression {
             "gzip" => Ok(Compression::Gzip),
             _ => Err(Error::new(
                 MalformedData,
-                format!("unknown .fm compression (can be 'none' or 'gzip')"),
+                "unknown .fm compression (can be 'none' or 'gzip')".to_string(),
             )),
         }
     }
 }
 
-pub const DEFAULT_COMPRESSION: &'static str = "gzip";
-pub const DEFAULT_GZIP_LEVEL: &'static str = "6";
+pub const DEFAULT_COMPRESSION: &str = "gzip";
+pub const DEFAULT_GZIP_LEVEL: &str = "6";
 
 fn validate_gzip_level(value: String) -> StdResult<(), String> {
     let parsed = value
         .parse::<u32>()
         .map_err(|_| "must be a positive integer".to_string())?;
     if parsed > 9 {
-        return Err(format!("unsupported gzip level (can be from 0 to 9"));
+        return Err("unsupported gzip level (can be from 0 to 9".to_string());
     }
     Ok(())
 }
@@ -86,6 +86,6 @@ pub struct RawRecord<'a>(&'a [u8]);
 impl<'a> RawRecord<'a> {
     pub fn decode(&self) -> Result<Record> {
         Record::decode(self.0)
-            .into_result(|| format!("failed to decode .fm record"))
+            .into_result(|| "failed to decode .fm record".to_string())
     }
 }

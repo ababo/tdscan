@@ -26,7 +26,7 @@ impl<W: io::Write> RawWriter<W> {
             RawWriter::Gzip(mut encoder) => {
                 if let Err(err) = encoder
                     .try_finish()
-                    .into_result(|| format!("failed to finish encoding"))
+                    .into_result(|| "failed to finish encoding".to_string())
                 {
                     return Err((RawWriter::Gzip(encoder), err));
                 }
@@ -62,13 +62,13 @@ impl<W: io::Write> Writer<W> {
     pub fn new(mut inner: W, params: &WriterParams) -> Result<Self> {
         inner
             .write_all(&MAGIC.to_le_bytes())
-            .into_result(|| format!("failed to write .fm magic"))?;
+            .into_result(|| "failed to write .fm magic".to_string())?;
         inner
             .write_all(&VERSION.to_le_bytes())
-            .into_result(|| format!("failed to write .fm version"))?;
+            .into_result(|| "failed to write .fm version".to_string())?;
         inner
             .write_all(&(params.compression as i32).to_le_bytes())
-            .into_result(|| format!("failed to write .fm compression"))?;
+            .into_result(|| "failed to write .fm compression".to_string())?;
 
         let writer = match params.compression {
             Compression::None => RawWriter::Plain(inner),
@@ -102,26 +102,26 @@ impl<W: io::Write> Write for Writer<W> {
     fn write_raw_record<'a>(&mut self, record: &RawRecord<'a>) -> Result<()> {
         self.writer
             .write_all(&(record.0.len() as u32).to_le_bytes())
-            .into_result(|| format!("failed to write .fm record size"))?;
+            .into_result(|| "failed to write .fm record size".to_string())?;
 
         self.writer
             .write_all(record.0)
-            .into_result(|| format!("failed to write .fm record"))
+            .into_result(|| "failed to write .fm record".to_string())
     }
 
     fn write_record(&mut self, record: &Record) -> Result<()> {
         let size = record.encoded_len();
-        self.buffer.resize(0, 0);
+        self.buffer.clear();
         self.buffer.reserve(size);
         record.encode(&mut self.buffer).unwrap();
 
         // The borrow checker doesn't allow to reuse write_raw_record().
         self.writer
             .write_all(&(size as u32).to_le_bytes())
-            .into_result(|| format!("failed to write .fm record size"))?;
+            .into_result(|| "failed to write .fm record size".to_string())?;
 
         self.writer
             .write_all(&self.buffer)
-            .into_result(|| format!("failed to write .fm record"))
+            .into_result(|| "failed to write .fm record".to_string())
     }
 }

@@ -35,6 +35,7 @@ pub async fn next_frame() -> f64 {
     JsFuture::from(promise).await.unwrap().as_f64().unwrap()
 }
 
+#[allow(clippy::type_complexity)]
 pub struct Subscription(
     Option<(EventTarget, String, Closure<dyn Fn(Event) + 'static>)>,
 );
@@ -53,7 +54,7 @@ impl Subscription {
         } else {
             Err(Error::new(
                 BadOperation,
-                format!("cannot unsubscribe using inactive subscription"),
+                "cannot unsubscribe using inactive subscription".to_string(),
             ))
         }
     }

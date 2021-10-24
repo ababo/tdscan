@@ -7,11 +7,9 @@ pub type JsResult<T> = std::result::Result<T, JsValue>;
 
 pub fn jsval_to_err(value: JsValue) -> Error {
     let desc = if let Some(err) = value.dyn_ref::<JsError>() {
-        let msg: String = err.message().into();
-        format!("{}", msg)
+        err.message().into()
     } else if let Some(r#str) = value.as_string() {
-        let msg: String = r#str.into();
-        format!("{}", msg)
+        r#str
     } else {
         format!("{:?}", value)
     };

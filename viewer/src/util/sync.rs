@@ -13,14 +13,14 @@ impl<L: Copy + Ord> LevelLock<L> {
         }
     }
 
-    pub fn try_lock<'a>(&'a self, level: L) -> Result<LevelGuard<'a, L>> {
+    pub fn try_lock(&self, level: L) -> Result<LevelGuard<'_, L>> {
         if level > self.level.get() {
             Ok(LevelGuard {
-                lock: &self,
+                lock: self,
                 level: self.level.replace(level),
             })
         } else {
-            Err(Error::new(BadOperation, format!("currently busy")))
+            Err(Error::new(BadOperation, "currently busy".to_string()))
         }
     }
 }

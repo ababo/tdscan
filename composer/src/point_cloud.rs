@@ -138,13 +138,13 @@ pub fn build_point_cloud(
 
 pub fn build_frame_clouds(
     scans: &BTreeMap<String, fm::Scan>,
-    scan_frames: &Vec<fm::ScanFrame>,
+    scan_frames: &[fm::ScanFrame],
     params: &PointCloudParams,
 ) -> Vec<Vec<Point3>> {
     let mut clouds = Vec::new();
     for frame in scan_frames {
         let scan = scans.get(&frame.scan).unwrap();
-        clouds.push(build_point_cloud(&scan, frame, params))
+        clouds.push(build_point_cloud(scan, frame, params))
     }
 
     if let Some(max_num_frame_points) = params.max_num_frame_points {

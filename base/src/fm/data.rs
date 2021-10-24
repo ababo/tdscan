@@ -13,10 +13,11 @@ impl FromStr for scan_frame::DepthConfidence {
             "high" => Ok(Self::High),
             _ => Err(Error::new(
                 MalformedData,
-                format!(concat!(
+                concat!(
                     "unknown scan depth confidence ",
                     "(can be 'low', 'medium' or 'high')"
-                )),
+                )
+                .to_string(),
             )),
         }
     }

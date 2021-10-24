@@ -3,7 +3,6 @@ use std::collections::BTreeMap;
 use std::io::{stdin, stdout};
 use std::path::PathBuf;
 
-use rlua;
 use rlua::Value as LuaValue;
 use serde_json::Value as JsonValue;
 use structopt::StructOpt;
@@ -38,7 +37,11 @@ pub fn fm_writer_to_file_or_stdout(
 }
 
 pub fn lua_err_to_err(err: rlua::Error) -> Error {
-    Error::with_source(LuaError, format!("failed to evaluate expression"), err)
+    Error::with_source(
+        LuaError,
+        "failed to evaluate expression".to_string(),
+        err,
+    )
 }
 
 pub fn lua_table_from_record<'a>(
@@ -67,16 +70,14 @@ fn lua_table_from_json_val<'a>(
         JsonValue::Null => Ok(LuaValue::Nil),
         JsonValue::Bool(b) => Ok(LuaValue::Boolean(*b)),
         JsonValue::Number(n) => Ok(LuaValue::Number(n.as_f64().unwrap())),
-        JsonValue::String(s) => {
-            ctx.create_string(s).map(|s| LuaValue::String(s))
-        }
+        JsonValue::String(s) => ctx.create_string(s).map(LuaValue::String),
         JsonValue::Array(a) => {
             let mut vec = Vec::with_capacity(a.len());
             for e in a {
                 let item = lua_table_from_json_val(ctx, e)?;
                 vec.push(item);
             }
-            ctx.create_sequence_from(vec).map(|t| LuaValue::Table(t))
+            ctx.create_sequence_from(vec).map(LuaValue::Table)
         }
         JsonValue::Object(o) => {
             let mut map = Vec::with_capacity(o.len());
@@ -85,7 +86,7 @@ fn lua_table_from_json_val<'a>(
                 let val = lua_table_from_json_val(ctx, v)?;
                 map.push((key, val));
             }
-            ctx.create_table_from(map).map(|t| LuaValue::Table(t))
+            ctx.create_table_from(map).map(LuaValue::Table)
         }
     }
 }
@@ -174,7 +175,7 @@ pub fn read_scans(
             "unknown scan '{}' for camera initial position override",
             name
         );
-        return Err(Error::new(InconsistentState, desc));
+        Err(Error::new(InconsistentState, desc))
     };
 
     for (name, eye) in scan_params.camera_initial_positions.iter() {

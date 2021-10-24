@@ -9,7 +9,7 @@ pub fn open_file<P: AsRef<Path>>(path: P) -> Result<File> {
         if let Some(path) = path.to_str() {
             format!("failed to open file '{}'", path)
         } else {
-            format!("failed to open file")
+            "failed to open file".to_string()
         }
     })
 }
@@ -20,7 +20,7 @@ pub fn create_file<P: AsRef<Path>>(path: P) -> Result<File> {
         if let Some(path) = path.to_str() {
             format!("failed to create file '{}'", path)
         } else {
-            format!("failed to create file")
+            "failed to create file".to_string()
         }
     })
 }
@@ -31,7 +31,7 @@ pub fn read_file<P: AsRef<Path>>(path: P) -> Result<Vec<u8>> {
         if let Some(path) = path.to_str() {
             format!("failed to read file '{}'", path)
         } else {
-            format!("failed to read file")
+            "failed to read file".to_string()
         }
     })
 }
@@ -42,7 +42,7 @@ pub fn read_file_to_string<P: AsRef<Path>>(path: P) -> Result<String> {
         if let Some(path) = path.to_str() {
             format!("failed to read file '{}' into string", path)
         } else {
-            format!("failed to read file into string")
+            "failed to read file into string".to_string()
         }
     })
 }

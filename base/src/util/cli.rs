@@ -18,16 +18,16 @@ impl<T: Debug + Default + FromStr, const N: usize> FromStr for Array<T, N> {
             Error::new(MalformedData, desc)
         };
 
-        let parse = |iter: &mut std::str::Split<&str>| {
-            let part = iter.next().ok_or_else(|| malformed_err())?;
+        let parse = |iter: &mut std::str::Split<char>| {
+            let part = iter.next().ok_or_else(malformed_err)?;
             if part.is_empty() {
                 Ok(T::default())
             } else {
-                part.parse::<T>().or_else(|_| Err(malformed_err()))
+                part.parse::<T>().map_err(|_| malformed_err())
             }
         };
 
-        let mut iter = s.split(",");
+        let mut iter = s.split(',');
         let mut vec = ArrayVec::<T, N>::new();
 
         for _ in 0..N {

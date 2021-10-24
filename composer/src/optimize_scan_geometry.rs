@@ -85,7 +85,7 @@ pub fn optimize_scan_geometry(
     };
 
     let mut init_params: Vec<f32> = Vec::new();
-    for (_, scan) in &scans {
+    for scan in scans.values() {
         let pos = scan.camera_initial_position.unwrap();
         init_params.push(pos.x);
         init_params.push(pos.y);
@@ -143,7 +143,7 @@ struct ScanOpt<'a> {
 impl<'a> ScanOpt<'a> {
     fn apply_params(
         &self,
-        params: &Vec<f32>,
+        params: &[f32],
     ) -> (BTreeMap<String, fm::Scan>, bool) {
         let mut scans = self.scans.clone();
         let mut ok = true;
@@ -158,7 +158,7 @@ impl<'a> ScanOpt<'a> {
             let pos = scan.camera_initial_position.as_mut().unwrap();
             let dir = scan.camera_initial_direction.as_mut().unwrap();
 
-            ok &= check_distance(pos.x, params[base + 0])
+            ok &= check_distance(pos.x, params[base])
                 & check_distance(pos.y, params[base + 1])
                 & check_distance(pos.z, params[base + 2])
                 & check_distance(dir.x, params[base + 3])
@@ -166,7 +166,7 @@ impl<'a> ScanOpt<'a> {
                 & check_distance(dir.z, params[base + 5])
                 & check_angle(scan.camera_up_angle, params[base + 6]);
 
-            pos.x = params[base + 0];
+            pos.x = params[base];
             pos.y = params[base + 1];
             pos.z = params[base + 2];
 
@@ -199,7 +199,7 @@ impl<'a> ArgminOp for ScanOpt<'a> {
         let clouds = build_frame_clouds(
             &scans,
             self.scan_frames,
-            &self.point_cloud_params,
+            self.point_cloud_params,
         );
 
         let mut sum = 0.0;
@@ -249,7 +249,7 @@ impl<'a> Observe<ScanOpt<'a>> for Observer {
             eprint!(
                 " -y {}={},{},{}",
                 scan,
-                state.best_param[base + 0],
+                state.best_param[base],
                 state.best_param[base + 1],
                 state.best_param[base + 2]
             );

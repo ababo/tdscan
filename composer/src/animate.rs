@@ -1,6 +1,5 @@
 use std::path::PathBuf;
 
-use rlua;
 use structopt::StructOpt;
 
 use crate::misc::{fm_reader_from_file_or_stdin, fm_writer_to_file_or_stdout};
@@ -67,7 +66,7 @@ pub fn animate(
     })
     .map_err(lua_err_to_err)?;
 
-    let mut time = state.time.clone();
+    let mut time = state.time;
 
     use fm::record::Type::*;
     writer.write_record(&fm::Record {
@@ -100,10 +99,10 @@ pub fn animate(
 fn read_element(
     reader: &mut dyn fm::Read,
 ) -> Result<(fm::ElementView, fm::ElementViewState)> {
-    let err = |desc| Error::new(InconsistentState, format!("{}", desc));
+    let err = |desc: &str| Error::new(InconsistentState, desc.to_string());
 
     let read_record = |reader: &mut dyn fm::Read, desc| {
-        reader.read_record()?.ok_or(err(desc))
+        reader.read_record()?.ok_or_else(|| err(desc))
     };
 
     let desc = "no element view as a first record";
@@ -133,7 +132,7 @@ fn read_element(
 }
 
 fn lua_err_to_err(err: rlua::Error) -> Error {
-    Error::with_source(LuaError, format!("failed to run script"), err)
+    Error::with_source(LuaError, "failed to run script".to_string(), err)
 }
 
 fn set_view_state(

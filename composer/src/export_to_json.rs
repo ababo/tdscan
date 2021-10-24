@@ -59,20 +59,15 @@ pub fn export_to_json(
     truncate_len: Option<usize>,
     pretty: bool,
 ) -> Result<()> {
-    loop {
-        match reader.read_record()? {
-            Some(rec) => {
-                if let Some(max_len) = truncate_len {
-                    let mut val = to_value(rec).into_result(|| {
-                        format!("failed to convert record into JSON value")
-                    })?;
-                    truncate_json_value(&mut val, max_len);
-                    write_record(writer, val, pretty)?;
-                } else {
-                    write_record(writer, rec, pretty)?;
-                }
-            }
-            None => break,
+    while let Some(rec) = reader.read_record()? {
+        if let Some(max_len) = truncate_len {
+            let mut val = to_value(rec).into_result(|| {
+                "failed to convert record into JSON value".to_string()
+            })?;
+            truncate_json_value(&mut val, max_len);
+            write_record(writer, val, pretty)?;
+        } else {
+            write_record(writer, rec, pretty)?;
         }
     }
 
@@ -89,10 +84,10 @@ fn write_record<T: Serialize>(
     } else {
         to_writer(&mut *writer, &record)
     }
-    .into_result(|| format!("failed to write record JSON"))?;
+    .into_result(|| "failed to write record JSON".to_string())?;
     writer
         .write_all("\n".as_bytes())
-        .into_result(|| format!("failed to write end-of-line"))
+        .into_result(|| "failed to write end-of-line".to_string())
 }
 
 #[cfg(test)]

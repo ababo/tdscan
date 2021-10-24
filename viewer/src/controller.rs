@@ -5,8 +5,8 @@ use std::mem;
 use std::ops::Bound::*;
 use std::rc::Rc;
 
-use arrayvec::ArrayVec;
 use crate::util::glam::{point3_to_vec3, vec3_to_point3};
+use arrayvec::ArrayVec;
 use glam::{EulerRot, Quat, Vec3};
 
 use crate::util::sync::LevelLock;
@@ -397,7 +397,7 @@ impl<A: Adapter + 'static> Controller<A> {
         let mut all_vertices = self.vertices.borrow_mut();
 
         if data.elements.len() + 1 > u8::MAX as usize {
-            let desc = format!("too many elements");
+            let desc = "too many elements".to_string();
             return Err(Error::new(UnsupportedFeature, desc));
         }
 
@@ -432,7 +432,7 @@ impl<A: Adapter + 'static> Controller<A> {
         vertex_descs.dedup();
 
         if all_vertices.len() + vertex_descs.len() > u16::MAX as usize {
-            let desc = format!("too many vertices");
+            let desc = "too many vertices".to_string();
             return Err(Error::new(UnsupportedFeature, desc));
         }
 
@@ -515,7 +515,7 @@ impl<A: Adapter + 'static> Controller<A> {
                     "view state for unknown element '{}'",
                     &view_state.element
                 );
-                return Error::new(InconsistentState, desc);
+                Error::new(InconsistentState, desc)
             })?;
 
         let bad_number_res = |what, expected, actual| {
@@ -523,7 +523,7 @@ impl<A: Adapter + 'static> Controller<A> {
                 "expected {} view state {} for element '{}', encountered {}",
                 expected, what, &view_state.element, actual
             );
-            return Err(Error::new(InconsistentState, desc));
+            Err(Error::new(InconsistentState, desc))
         };
 
         let num_vertices = element.vertices.last().map(|d| d.0).unwrap_or(0);
@@ -550,10 +550,10 @@ impl<A: Adapter + 'static> Controller<A> {
                 "{} view state time {} for element '{}'",
                 prop, view_state.time, view_state.element
             );
-            return Err(Error::new(InconsistentState, desc));
+            Err(Error::new(InconsistentState, desc))
         };
 
-        let index = element.index.clone();
+        let index = element.index;
         if data.states[index].contains_key(&view_state.time) {
             return view_state_time_err_res("duplicate");
         }
@@ -666,17 +666,17 @@ impl<A: Adapter + 'static> Controller<A> {
 
         let states = data.states_at(at);
 
-        for (_, element) in &data.elements {
+        for element in data.elements.values() {
             let element_state = &states[element.index];
             for (i, (vn, nn)) in element.vertices.iter().enumerate() {
                 let j = element.vertex_base as usize + i;
                 match element_state {
                     Some(s) => {
-                        let k = vn.clone() as usize - 1;
-                        vertices[j].vertex = s.vertices[k].clone();
+                        let k = *vn as usize - 1;
+                        vertices[j].vertex = s.vertices[k];
                         vertices[j].normal = if *nn != 0 {
-                            let k = nn.clone() as usize - 1;
-                            s.normals[k].clone()
+                            let k = *nn as usize - 1;
+                            s.normals[k]
                         } else {
                             fm::Point3::default()
                         };

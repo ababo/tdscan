@@ -65,7 +65,7 @@ enum FmDepthConfidence {
 struct FmScanFrame {
   const char *scan;
   int64_t time;
-  struct FmImage image;
+  struct FmImage *image;
   const float *depths;
   size_t depths_size;
   const uint8_t *depth_confidences;

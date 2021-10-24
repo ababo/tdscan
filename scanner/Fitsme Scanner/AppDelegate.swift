@@ -12,6 +12,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     public let name: String
     public let nof: Int
     public let at: TimeInterval
+    public let imgrt: Int
 
     public var inFrameIndex = 0
     public var outFrameIndex = 0
@@ -21,7 +22,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     public init(
       eye: FmPoint3, ctr: FmPoint3, vel: Float, fps: Double, name: String,
-      nof: Int, at: TimeInterval
+      nof: Int, at: TimeInterval, imgrt: Int
     ) {
       self.eye = eye
       self.ctr = ctr
@@ -30,6 +31,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
       self.name = name
       self.nof = nof
       self.at = at
+      self.imgrt = imgrt
     }
 
     public func nextOutFrameReady() -> Bool { inFrameIndex > outFrameIndex }
@@ -171,11 +173,12 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     let name = request.query?["name"] ?? UUID().uuidString
     let nof = UInt(request.query?["nof"] ?? "1")
     let at = TimeInterval(request.query?["at"] ?? String(uts))
+    let imgrt = UInt(request.query?["imgrt"] ?? "1")
 
     let numFormats = ARWorldTrackingConfiguration.supportedVideoFormats.count
     if eye == nil || eye!.count != 3 || ctr.count != 3 || vel == nil
       || fmt == nil || fmt! >= numFormats || fps == nil || fps! < 0
-      || nof == nil || at == nil || at! < uts
+      || nof == nil || at == nil || at! < uts || imgrt == nil
     {
       print("Bad '/scan' request arguments")
       return GCDWebServerResponse(
@@ -187,7 +190,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
       eye: FmPoint3(x: eye![0], y: eye![1], z: eye![2]),
       ctr: FmPoint3(x: ctr[0], y: ctr[1], z: ctr[2]),
       vel: vel!, fps: fps!, name: name, nof: Int(nof!),
-      at: at! - uts + uptime)
+      at: at! - uts + uptime, imgrt: Int(imgrt!))
 
     if !setScanIfNone(scan: scan) {
       print("Refused '/scan' request, busy handling previous request")
@@ -238,20 +241,29 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
       scan!.writer = createWriter(block: block, scan: scan!, frame: frame)
     }
 
-    let png = [UInt8](UIImage(cgImage: frame.image).pngData()!)
+    var png: [UInt8] = []
+    if frame.image != nil {
+      png = [UInt8](UIImage(cgImage: frame.image!).pngData()!)
+    }
+
     png.withUnsafeBufferPointer { pngPtr in
       frame.depths.withUnsafeBufferPointer { depthsPtr in
         frame.depthConfidences.withUnsafeBufferPointer { depthConfidencesPtr in
           scan!.name.cString(using: .utf8)!.withUnsafeBufferPointer { namePtr in
-            let image = FmImage(
-              type: kFmImagePng, data: pngPtr.baseAddress, data_size: png.count)
             var fmFrame = FmScanFrame(
               scan: namePtr.baseAddress,
-              time: Int64((frame.time - scan!.at) * 1_000_000_000),
-              image: image, depths: depthsPtr.baseAddress,
+              time: Int64((frame.time - scan!.at) * 1_000_000_000), image: nil,
+              depths: depthsPtr.baseAddress,
               depths_size: frame.depths.count,
               depth_confidences: depthConfidencesPtr.baseAddress,
               depth_confidences_size: frame.depthConfidences.count)
+            if frame.image != nil {
+              fmFrame.image = UnsafeMutablePointer<FmImage>.allocate(
+                capacity: 1)
+              fmFrame.image[0].type = kFmImagePng
+              fmFrame.image[0].data = pngPtr.baseAddress
+              fmFrame.image[0].data_size = png.count
+            }
             let err = fm_write_scan_frame(scan!.writer, &fmFrame)
             assert(err == kFmOk)
           }
@@ -322,8 +334,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         camera_angular_velocity: scan.vel,
         camera_initial_position: scan.eye,
         camera_initial_direction: scan.ctr,
-        image_width: Int32(frame.image.width),
-        image_height: Int32(frame.image.height),
+        image_width: Int32(frame.image!.width),
+        image_height: Int32(frame.image!.height),
         depth_width: Int32(frame.depthWidth),
         depth_height: Int32(frame.depthHeight),
         sensor_plane_depth: 1
@@ -343,7 +355,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         return kFmOk
       }
 
-  func onFrame(frame: ScanFrame) {
+  func onFrame(frame: inout ScanFrame) {
     let scan = getScan()
     if scan == nil || scan!.noMoreInFrames() {
       return
@@ -353,6 +365,11 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
       && (frame.time - scan!.at) * scan!.fps <= Double(scan!.inFrameIndex)
     {
       return
+    }
+
+    // First frame must contain an image to be used when creating FmScan.
+    if scan!.inFrameIndex % scan!.imgrt != 0 {
+      frame.image = nil
     }
 
     let url = AppDelegate.frameURL(index: scan!.inFrameIndex)

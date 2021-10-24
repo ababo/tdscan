@@ -128,7 +128,7 @@ pub struct FmImage {
 pub struct FmScanFrame {
     scan: *const c_char,
     time: i64,
-    image: FmImage,
+    image: *const FmImage,
     depths: *const c_float,
     depths_size: usize,
     depth_confidences: *const u8,
@@ -140,15 +140,21 @@ pub unsafe extern "C" fn fm_write_scan_frame(
     writer: FmWriter,
     frame: &FmScanFrame,
 ) -> c_int {
+    let image = if frame.image.is_null() {
+        None
+    } else {
+        Some(fm::Image {
+            r#type: (*frame.image).r#type,
+            data: from_raw_parts((*frame.image).data, (*frame.image).data_size)
+                .to_vec(),
+        })
+    };
+
     let rec = fm::Record {
         r#type: Some(ScanFrame(fm::ScanFrame {
             scan: CStr::from_ptr(frame.scan).to_str().unwrap().to_owned(),
             time: frame.time,
-            image: Some(fm::Image {
-                r#type: frame.image.r#type,
-                data: from_raw_parts(frame.image.data, frame.image.data_size)
-                    .to_vec(),
-            }),
+            image,
             depths: from_raw_parts(frame.depths, frame.depths_size).to_vec(),
             depth_confidences: from_raw_parts(
                 frame.depth_confidences,

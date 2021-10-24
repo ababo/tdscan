@@ -2,7 +2,7 @@ import ARKit
 
 struct ScanFrame {
   public let time: TimeInterval
-  public let image: CGImage
+  public var image: CGImage?
   public let depthWidth: Int
   public let depthHeight: Int
   public let depths: [Float]
@@ -25,17 +25,21 @@ struct ScanFrame {
     }
     offset += MemoryLayout<Int>.size
 
-    var imageContext: CGContext?
-    data.withUnsafeMutableBytes { ptr in
-      imageContext = CGContext(
-        data: ptr.baseAddress! + offset, width: imageWidth, height: imageHeight,
-        bitsPerComponent: 8,
-        bytesPerRow: imageWidth * 4,
-        space: CGColorSpaceCreateDeviceRGB(),
-        bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)
+    var image: CGImage? = nil
+    if imageWidth > 0 && imageHeight > 0 {
+      var imageContext: CGContext?
+      data.withUnsafeMutableBytes { ptr in
+        imageContext = CGContext(
+          data: ptr.baseAddress! + offset, width: imageWidth,
+          height: imageHeight,
+          bitsPerComponent: 8,
+          bytesPerRow: imageWidth * 4,
+          space: CGColorSpaceCreateDeviceRGB(),
+          bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)
+      }
+      offset += imageWidth * 4 * imageHeight
+      image = imageContext!.makeImage()!
     }
-    offset += imageWidth * 4 * imageHeight
-    let image = imageContext!.makeImage()!
 
     let depthWidth = data.withUnsafeBytes { ptr in
       (ptr.baseAddress! + offset).load(as: Int.self)
@@ -83,18 +87,21 @@ struct ScanFrame {
         bytes: &time,
         count: MemoryLayout<TimeInterval>.size))
 
-    var imageWidth = image.width
+    var imageWidth = image?.width ?? 0
     data.append(
       Data(
         bytes: &imageWidth,
         count: MemoryLayout<Int>.size))
-    var imageHeight = image.height
+    var imageHeight = image?.height ?? 0
     data.append(
       Data(
         bytes: &imageHeight,
         count: MemoryLayout<Int>.size))
-    let imageData = image.dataProvider!.data! as Data
-    data.append(imageData)
+
+    if image != nil {
+      let imageData = image!.dataProvider!.data! as Data
+      data.append(imageData)
+    }
 
     var depthWidth = self.depthWidth
     data.append(
@@ -119,7 +126,7 @@ struct ScanFrame {
 
 class ScanSession: NSObject, ARSessionDelegate {
   public let arSession = ARSession()
-  public var onFrame: ((ScanFrame) -> Void)?
+  public var onFrame: ((inout ScanFrame) -> Void)?
 
   var useCount = 0
 
@@ -192,14 +199,14 @@ class ScanSession: NSObject, ARSessionDelegate {
     CVPixelBufferUnlockBaseAddress(depthMap, lockFlags)
     CVPixelBufferUnlockBaseAddress(confidenceMap, lockFlags)
 
-    onFrame?(
-      ScanFrame(
-        time: didUpdate.timestamp,
-        image: cgImage,
-        depthWidth: depthWidth,
-        depthHeight: depthHeight,
-        depths: depths,
-        depthConfidences: depthConfidences
-      ))
+    var scan = ScanFrame(
+      time: didUpdate.timestamp,
+      image: cgImage,
+      depthWidth: depthWidth,
+      depthHeight: depthHeight,
+      depths: depths,
+      depthConfidences: depthConfidences
+    )
+    onFrame?(&scan)
   }
 }

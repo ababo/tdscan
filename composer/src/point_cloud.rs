@@ -160,7 +160,7 @@ pub fn distance_between_point_clouds(
     a: &[Point3],
     b: &[Point3],
 ) -> Option<f64> {
-    let mut kdtree = KdTree::with_capacity(3, a.len());
+    let mut kdtree = KdTree::new(3);
     for (i, p) in a.iter().enumerate() {
         kdtree.add(p.coords.as_ref(), i).unwrap();
     }
@@ -198,12 +198,12 @@ pub fn distance_between_point_clouds(
 }
 
 fn remove_outliers(clouds: &mut [Vec<Point3>], distance: f64) {
-    let count = clouds.iter().flatten().count();
-    if distance.is_infinite() || count < 2 {
+    if distance.is_infinite() || clouds.iter().map(Vec::len).sum::<usize>() < 2
+    {
         return;
     }
 
-    let mut kdtree = KdTree::with_capacity(3, count);
+    let mut kdtree = KdTree::new(3);
     for point in clouds.iter().flatten() {
         kdtree.add(*point.coords.as_ref(), ()).unwrap();
     }

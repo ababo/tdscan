@@ -44,12 +44,19 @@ pub struct PointCloudParams {
     pub max_z_distance: f32,
 
     #[structopt(
-        help = "Minimum distance to consider point as an outlier",
+        help = "Number of neighbors for outlier removal",
+        long,
+        default_value = "20"
+    )]
+    pub outlier_num_neighbors: usize,
+
+    #[structopt(
+        help = "Standard deviation ratio for outlier removal",
         long,
         short = "u",
         default_value = "inf"
     )]
-    pub outlier_distance: f32,
+    pub outlier_std_ratio: f32,
 
     #[structopt(
         help = "Maximum number of points per frame",
@@ -151,7 +158,11 @@ pub fn build_frame_clouds(
         select_random_points(&mut clouds, max_num_frame_points);
     }
 
-    remove_outliers(&mut clouds, params.outlier_distance as f64);
+    remove_outliers(
+        &mut clouds,
+        params.outlier_num_neighbors,
+        params.outlier_std_ratio as f64,
+    );
 
     clouds
 }
@@ -197,9 +208,17 @@ pub fn distance_between_point_clouds(
     }
 }
 
-fn remove_outliers(clouds: &mut [Vec<Point3>], distance: f64) {
-    if distance.is_infinite() || clouds.iter().map(Vec::len).sum::<usize>() < 2
-    {
+fn remove_outliers(
+    clouds: &mut [Vec<Point3>],
+    num_neighbors: usize,
+    std_ratio: f64,
+) {
+    if std_ratio.is_infinite() {
+        return;
+    }
+
+    let num_points = clouds.iter().map(Vec::len).sum::<usize>();
+    if num_points < 1 + num_neighbors {
         return;
     }
 
@@ -208,18 +227,38 @@ fn remove_outliers(clouds: &mut [Vec<Point3>], distance: f64) {
         kdtree.add(*point.coords.as_ref(), ()).unwrap();
     }
 
-    let squared_distance = distance * distance;
+    let mut avgs = Vec::with_capacity(num_points);
+    for points in clouds.iter() {
+        for point in points {
+            let nearest = kdtree
+                .nearest(
+                    point.coords.as_ref(),
+                    1 + num_neighbors,
+                    &squared_euclidean,
+                )
+                .unwrap();
 
+            avgs.push(
+                nearest.iter().map(|p| p.0.sqrt()).sum::<f64>()
+                    / num_neighbors as f64,
+            );
+        }
+    }
+
+    let avg = avgs.iter().sum::<f64>() / avgs.len() as f64;
+    let std = (avgs.iter().map(|d| (d - avg) * (d - avg)).sum::<f64>()
+        / (num_points - 1) as f64)
+        .sqrt();
+
+    let mut k = 0;
     for points in clouds.iter_mut() {
         let mut j = 0;
         for i in 0..points.len() {
-            let (dist, _) = kdtree
-                .nearest(points[i].coords.as_ref(), 2, &squared_euclidean)
-                .unwrap()[1];
-            if dist <= squared_distance {
+            if avgs[k] < avg + std_ratio * std {
                 points.swap(i, j);
                 j += 1;
             }
+            k += 1;
         }
         points.truncate(j);
     }
@@ -265,18 +304,5 @@ mod test {
             Point3::new(21.0, 0.0, 0.0),
         ];
         assert_eq_f32!(distance_between_point_clouds(&a, &b).unwrap(), 1.0);
-    }
-
-    #[test]
-    fn test_remove_outliers() {
-        let mut clouds = vec![
-            vec![Point3::new(1.0, 0.0, 0.0), Point3::new(2.0, 0.0, 0.0)],
-            vec![Point3::new(7.0, 0.0, 0.0), Point3::new(3.0, 0.0, 0.0)],
-        ];
-        remove_outliers(&mut clouds, 1.0);
-        assert_eq!(clouds[0].len(), 2);
-        assert_eq!(clouds[0][0], Point3::new(1.0, 0.0, 0.0));
-        assert_eq!(clouds[0][1], Point3::new(2.0, 0.0, 0.0));
-        assert_eq!(clouds[1][0], Point3::new(3.0, 0.0, 0.0));
     }
 }

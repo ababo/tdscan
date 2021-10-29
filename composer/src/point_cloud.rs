@@ -250,11 +250,14 @@ fn remove_outliers(
         / (num_points - 1) as f64)
         .sqrt();
 
+    eprintln!("average distance {}, standard deviation {}", avg, std);
+
     let mut k = 0;
+    let threshold = std_ratio * std;
     for points in clouds.iter_mut() {
         let mut j = 0;
         for i in 0..points.len() {
-            if avgs[k] < avg + std_ratio * std {
+            if avgs[k] < avg + threshold {
                 points.swap(i, j);
                 j += 1;
             }

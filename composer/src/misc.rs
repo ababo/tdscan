@@ -119,6 +119,7 @@ pub struct ScanParams {
             short = "l"
     )]
     pub camera_up_angles: Vec<(String, f32)>,
+
     #[structopt(
         help = "Scan name to override with",
         long = "name",

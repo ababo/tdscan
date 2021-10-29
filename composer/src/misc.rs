@@ -1,5 +1,5 @@
 use base::util::cli::{parse_key_val, Array as CliArray};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::io::{stdin, stdout};
 use std::path::PathBuf;
 
@@ -121,6 +121,15 @@ pub struct ScanParams {
     pub camera_up_angles: Vec<(String, f32)>,
 
     #[structopt(
+        help = "Downsample factor",
+        long = "downsample-factor",
+            number_of_values = 1,
+            parse(try_from_str = parse_key_val),
+            short = "w"
+    )]
+    pub downsample_factors: Vec<(String, usize)>,
+
+    #[structopt(
         help = "Scan name to override with",
         long = "name",
             number_of_values = 1,
@@ -134,7 +143,7 @@ pub fn read_scans(
     scan_params: &ScanParams,
 ) -> Result<(BTreeMap<String, fm::Scan>, Vec<fm::ScanFrame>)> {
     let mut scans = BTreeMap::<String, fm::Scan>::new();
-    let mut scan_frames = Vec::<fm::ScanFrame>::new();
+    let mut frames = Vec::<fm::ScanFrame>::new();
     let mut last_time = 0;
 
     loop {
@@ -146,7 +155,7 @@ pub fn read_scans(
         use fm::record::Type::*;
         match rec.unwrap().r#type {
             Some(Scan(s)) => {
-                if !scan_frames.is_empty() {
+                if !frames.is_empty() {
                     let desc = format!("scan '{}' after scan frame ", &s.name);
                     return Err(Error::new(InconsistentState, desc));
                 }
@@ -165,7 +174,7 @@ pub fn read_scans(
                     return Err(Error::new(InconsistentState, desc));
                 }
                 last_time = f.time;
-                scan_frames.push(f);
+                frames.push(f);
             }
             _ => (),
         }
@@ -211,6 +220,11 @@ pub fn read_scans(
         }
     }
 
+    if !scan_params.downsample_factors.is_empty() {
+        let factors = scan_params.downsample_factors.iter().cloned().collect();
+        downsample_scan_frames(&factors, &mut frames);
+    }
+
     for (name, new_name) in scan_params.names.iter() {
         if let Some(scan) = scans.get_mut(name) {
             scan.name = new_name.clone();
@@ -218,7 +232,7 @@ pub fn read_scans(
             return unknown_scan_err(name);
         }
     }
-    for frame in scan_frames.iter_mut() {
+    for frame in frames.iter_mut() {
         if let Some((_, new_name)) = scan_params
             .names
             .iter()
@@ -228,7 +242,52 @@ pub fn read_scans(
         }
     }
 
-    Ok((scans, scan_frames))
+    Ok((scans, frames))
+}
+
+pub fn downsample_scan_frames(
+    downsample_factors: &HashMap<String, usize>,
+    frames: &mut Vec<fm::ScanFrame>,
+) {
+    let mut data = HashMap::<String, (fm::ScanFrame, usize)>::new();
+
+    let mut j = 0;
+    for i in 0..frames.len() {
+        let factor = downsample_factors
+            .get(&frames[i].scan)
+            .cloned()
+            .unwrap_or(1);
+        if factor == 1 {
+            frames.swap(i, j);
+            j += 1;
+            continue;
+        }
+
+        if let Some((acc, num)) = data.get_mut(&frames[i].scan) {
+            for k in 0..acc.depths.len() {
+                acc.depths[k] += &frames[i].depths[k];
+                acc.depth_confidences[k] += &frames[i].depth_confidences[k];
+            }
+            *num += 1;
+
+            if *num == factor {
+                let (mut acc, num) = data.remove(&frames[i].scan).unwrap();
+                for k in 0..acc.depths.len() {
+                    acc.depths[k] /= num as f32;
+                    acc.depth_confidences[k] =
+                        (acc.depth_confidences[k] as f64 / num as f64).round()
+                            as i32;
+                }
+
+                frames[j] = acc;
+                j += 1;
+            }
+        } else {
+            data.insert(frames[i].scan.clone(), (frames[i].clone(), 1));
+        }
+    }
+
+    frames.truncate(j);
 }
 
 pub fn truncate_json_value(value: &mut JsonValue, max_len: usize) {
@@ -254,4 +313,71 @@ pub fn truncate_json_value(value: &mut JsonValue, max_len: usize) {
         }
         _ => {}
     };
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    use base::assert_eq_f32;
+
+    fn new_scan_frame(
+        scan: &str,
+        time: fm::Time,
+        depth: &[f32],
+        depth_confidences: &[i32],
+    ) -> fm::ScanFrame {
+        fm::ScanFrame {
+            scan: scan.to_string(),
+            time,
+            depths: depth.to_vec(),
+            depth_confidences: depth_confidences.to_vec(),
+            ..Default::default()
+        }
+    }
+
+    fn new_downsample_factors(
+        factors: &[(&str, usize)],
+    ) -> HashMap<String, usize> {
+        factors.iter().map(|f| (f.0.to_string(), f.1)).collect()
+    }
+
+    fn assert_eq_scan_frame(a: &fm::ScanFrame, b: &fm::ScanFrame) {
+        assert_eq!(a.scan, b.scan);
+        assert_eq!(a.time, b.time);
+        assert_eq!(a.depths.len(), b.depths.len());
+        for i in 0..a.depths.len() {
+            assert_eq_f32!(a.depths[i], b.depths[i]);
+        }
+        assert_eq!(a.depth_confidences, b.depth_confidences);
+    }
+
+    #[test]
+    fn test_downsample_scan_frames() {
+        let mut frames = vec![
+            new_scan_frame("a", 1, &[1.0, 2.0], &[1, 2]),
+            new_scan_frame("a", 2, &[2.0, 1.0], &[2, 1]),
+            new_scan_frame("b", 3, &[2.0, 3.0], &[2, 3]),
+            new_scan_frame("a", 4, &[1.0, 2.0], &[1, 2]),
+            new_scan_frame("b", 5, &[3.0, 2.0], &[3, 2]),
+            new_scan_frame("a", 6, &[2.0, 1.0], &[2, 1]),
+        ];
+
+        let factors = new_downsample_factors(&[("a", 3)]);
+        downsample_scan_frames(&factors, &mut frames);
+
+        assert_eq!(frames.len(), 3);
+        assert_eq_scan_frame(
+            &frames[0],
+            &new_scan_frame("b", 3, &[2.0, 3.0], &[2, 3]),
+        );
+        assert_eq_scan_frame(
+            &frames[1],
+            &new_scan_frame("a", 1, &[4.0 / 3.0, 5.0 / 3.0], &[1, 2]),
+        );
+        assert_eq_scan_frame(
+            &frames[2],
+            &new_scan_frame("b", 5, &[3.0, 2.0], &[3, 2]),
+        );
+    }
 }

@@ -220,6 +220,11 @@ pub fn read_scans(
         }
     }
 
+    for (name, _) in scan_params.downsample_factors.iter() {
+        if scans.get_mut(name).is_none() {
+            return unknown_scan_err(name);
+        }
+    }
     if !scan_params.downsample_factors.is_empty() {
         let factors = scan_params.downsample_factors.iter().cloned().collect();
         downsample_scan_frames(&factors, &mut frames);

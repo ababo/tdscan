@@ -5,6 +5,12 @@ version = "0.1.0"
 authors = ["Simon Prykhodko <semion.ababo@gmail.com>"]
 edition = "2021"
 
+build = "build.rs"
+
+[build-dependencies]
+ureq = "2.3.0"
+zip = "0.5"
+
 [dependencies]
 argmin = "0.4.7"
 base = { path = "../base" }

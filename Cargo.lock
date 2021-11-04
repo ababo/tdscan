@@ -390,6 +390,7 @@ version = "0.1.0"
 dependencies = [
  "argmin",
  "base",
+ "cc",
  "kdtree",
  "nalgebra",
  "rand",

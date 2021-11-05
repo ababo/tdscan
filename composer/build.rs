@@ -48,13 +48,9 @@ fn unzip<P: AsRef<Path>, P2: AsRef<Path>>(zip: P, to: P2) {
 }
 
 fn build_poisson_recon() {
-    let lib = target_dir().join("libPoissonRecon.a");
-    if lib.exists() {
-        return;
-    }
+    println!("cargo:rerun-if-changed=src/poisson/poisson.cc");
 
     const COMMIT: &str = "8683f6c44c2a3f03c10e456f1bdfae5fc69ec3f7";
-
     let name = format!("PoissonRecon-{}", COMMIT);
     let proj = target_dir().join(&name);
     if !proj.exists() {
@@ -82,11 +78,13 @@ fn build_poisson_recon() {
         .flag_if_supported("/std:c++14")
         .opt_level(3)
         .warnings(false)
-        .flag("-Wno-#pragma-messages")
-        .flag_if_supported("-Wno-cpp")
+        .flag_if_supported("-w")
         .file(src.join("PointData.cpp").to_str().unwrap())
         .file(src.join("PoissonReconLib.cpp").to_str().unwrap())
+        .file(PathBuf::from("src").join("poisson").join("poisson.cc"))
         .compile("libPoissonRecon.a");
+
+    println!("cargo:rustc-link-lib=static=PoissonRecon");
 }
 
 fn main() {

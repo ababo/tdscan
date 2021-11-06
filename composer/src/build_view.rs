@@ -2,6 +2,8 @@ use std::path::PathBuf;
 
 use structopt::StructOpt;
 
+use crate::poisson;
+
 use crate::misc::{
     fm_reader_from_file_or_stdin, fm_writer_to_file_or_stdout, read_scans,
     ScanParams,
@@ -70,6 +72,11 @@ pub fn build_view(
             .unwrap();
         }
     }
+
+    let cloud = poisson::Cloud::<f64>{ vertices: vec![]};
+    let _ = poisson::reconstruct(&cloud, &poisson::Params::default());
+    let cloud = poisson::Cloud::<f32>{ vertices: vec![]};
+    let _ = poisson::reconstruct(&cloud, &poisson::Params::default());
 
     Ok(())
 }

@@ -393,6 +393,7 @@ dependencies = [
  "cc",
  "kdtree",
  "nalgebra",
+ "num",
  "rand",
  "rlua",
  "serde",

@@ -6,6 +6,7 @@ mod import_obj;
 mod misc;
 mod optimize_scan_geometry;
 mod point_cloud;
+mod poisson;
 mod select;
 
 use structopt::StructOpt;

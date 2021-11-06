@@ -85,6 +85,9 @@ fn build_poisson_recon() {
         .compile("libPoissonRecon.a");
 
     println!("cargo:rustc-link-lib=static=PoissonRecon");
+    if let Some(stdlib) = option_env!("CXXSTDLIB") {
+        println!("cargo:rustc-link-lib=static={}", stdlib);
+    }
 }
 
 fn main() {

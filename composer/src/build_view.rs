@@ -3,7 +3,6 @@ use std::path::PathBuf;
 use structopt::StructOpt;
 
 use crate::poisson;
-
 use crate::misc::{
     fm_reader_from_file_or_stdin, fm_writer_to_file_or_stdout, read_scans,
     ScanParams,

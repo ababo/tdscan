@@ -25,8 +25,9 @@ pub struct Params {
 
     // The target width of the finest level octree cells (ignored if depth is specified).
     pub finest_cell_width: f32,
+
     // The ratio between the diameter of the cube used for reconstruction
-    // and the diameter of the samples' bounding cube. .Specifies the factor
+    // and the diameter of the samples' bounding cube. Specifies the factor
     // of the bounding cube that the input samples should fit into.
     pub scale: f32,
 

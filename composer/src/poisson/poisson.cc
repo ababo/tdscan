@@ -3,51 +3,49 @@
 #include "Src_CC_wrap/PoissonReconLib.h"
 
 extern "C" {
-typedef void *cloud32;
+struct trait_obj {
+  size_t data[2];
+};
 
-size_t poisson_cloud32_size(const cloud32 *cloud);
-bool poisson_cloud32_has_normals(const cloud32 *cloud);
-bool poisson_cloud32_has_colors(const cloud32 *cloud);
-void poisson_cloud32_get_point(const cloud32 *cloud, size_t index,
-                               float *coords);
-void poisson_cloud32_get_normal(const cloud32 *cloud, size_t index,
-                                float *coords);
-void poisson_cloud32_get_color(const cloud32 *cloud, size_t index, float *rgb);
+typedef trait_obj cloud32;
 
-typedef void *cloud64;
+size_t poisson_cloud32_size(cloud32 cloud);
+bool poisson_cloud32_has_normals(cloud32 cloud);
+bool poisson_cloud32_has_colors(cloud32 cloud);
+void poisson_cloud32_get_point(cloud32 cloud, size_t index, float *coords);
+void poisson_cloud32_get_normal(cloud32 cloud, size_t index, float *coords);
+void poisson_cloud32_get_color(cloud32 cloud, size_t index, float *rgb);
 
-size_t poisson_cloud64_size(const cloud64 *cloud);
-bool poisson_cloud64_has_normals(const cloud64 *cloud);
-bool poisson_cloud64_has_colors(const cloud64 *cloud);
-void poisson_cloud64_get_point(const cloud64 *cloud, size_t index,
-                               double *coords);
-void poisson_cloud64_get_normal(const cloud64 *cloud, size_t index,
-                                double *coords);
-void poisson_cloud64_get_color(const cloud64 *cloud, size_t index, double *rgb);
+typedef trait_obj cloud64;
 
-typedef void *mesh32;
+size_t poisson_cloud64_size(cloud64 cloud);
+bool poisson_cloud64_has_normals(cloud64 cloud);
+bool poisson_cloud64_has_colors(cloud64 cloud);
+void poisson_cloud64_get_point(cloud64 cloud, size_t index, double *coords);
+void poisson_cloud64_get_normal(cloud64 cloud, size_t index, double *coords);
+void poisson_cloud64_get_color(cloud64 cloud, size_t index, double *rgb);
 
-void poisson_mesh32_add_vertex(mesh32 *mesh32, const float *coords);
-void poisson_mesh32_add_normal(mesh32 *mesh32, const float *coords);
-void poisson_mesh32_add_color(mesh32 *mesh32, const float *rgb);
-void poisson_mesh32_add_density(mesh32 *mesh32, double d);
-void poisson_mesh32_add_triangle(mesh32 *mesh32, size_t i1, size_t i2,
-                                 size_t i3);
+typedef trait_obj mesh32;
 
-typedef void *mesh64;
+void poisson_mesh32_add_vertex(mesh32 mesh, const float *coords);
+void poisson_mesh32_add_normal(mesh32 mesh, const float *coords);
+void poisson_mesh32_add_color(mesh32 mesh, const float *rgb);
+void poisson_mesh32_add_density(mesh32 mesh, double d);
+void poisson_mesh32_add_triangle(mesh32 mesh, size_t i1, size_t i2, size_t i3);
 
-void poisson_mesh64_add_vertex(mesh64 *mesh64, const double *coords);
-void poisson_mesh64_add_normal(mesh64 *mesh64, const double *coords);
-void poisson_mesh64_add_color(mesh64 *mesh64, const double *rgb);
-void poisson_mesh64_add_density(mesh64 *mesh64, double d);
-void poisson_mesh64_add_triangle(mesh64 *mesh64, size_t i1, size_t i2,
-                                 size_t i3);
+typedef trait_obj mesh64;
+
+void poisson_mesh64_add_vertex(mesh64 mesh, const double *coords);
+void poisson_mesh64_add_normal(mesh64 mesh, const double *coords);
+void poisson_mesh64_add_color(mesh64 mesh, const double *rgb);
+void poisson_mesh64_add_density(mesh64 mesh, double d);
+void poisson_mesh64_add_triangle(mesh64 mesh, size_t i1, size_t i2, size_t i3);
 }
 
 namespace {
 
 struct Cloud32 : public PoissonReconLib::ICloud<float> {
-  const cloud32 *cloud;
+  cloud32 cloud;
 
   size_t size() const override { return poisson_cloud32_size(cloud); }
   bool hasNormals() const override {
@@ -66,7 +64,7 @@ struct Cloud32 : public PoissonReconLib::ICloud<float> {
 };
 
 struct Cloud64 : public PoissonReconLib::ICloud<double> {
-  const cloud64 *cloud;
+  cloud64 cloud;
 
   size_t size() const override { return poisson_cloud64_size(cloud); }
   bool hasNormals() const override {
@@ -85,7 +83,7 @@ struct Cloud64 : public PoissonReconLib::ICloud<double> {
 };
 
 struct Mesh32 : public PoissonReconLib::IMesh<float> {
-  mesh32 *mesh;
+  mesh32 mesh;
 
   void addVertex(const float *coords) override {
     poisson_mesh32_add_vertex(mesh, coords);
@@ -103,7 +101,7 @@ struct Mesh32 : public PoissonReconLib::IMesh<float> {
 };
 
 struct Mesh64 : public PoissonReconLib::IMesh<double> {
-  mesh64 *mesh;
+  mesh64 mesh;
 
   void addVertex(const double *coords) override {
     poisson_mesh64_add_vertex(mesh, coords);
@@ -125,8 +123,7 @@ struct Mesh64 : public PoissonReconLib::IMesh<double> {
 extern "C" {
 typedef PoissonReconLib::Parameters params;
 
-bool poisson_reconstruct32(const params *params, const cloud32 *cloud,
-                           mesh32 *mesh) {
+bool poisson_reconstruct32(const params *params, cloud32 cloud, mesh32 mesh) {
   Mesh32 mesh_wrapper;
   mesh_wrapper.mesh = mesh;
   Cloud32 cloud_wrapper;
@@ -134,8 +131,7 @@ bool poisson_reconstruct32(const params *params, const cloud32 *cloud,
   return PoissonReconLib::Reconstruct(*params, cloud_wrapper, mesh_wrapper);
 }
 
-bool poisson_reconstruct64(const params *params, const cloud32 *cloud,
-                           mesh32 *mesh) {
+bool poisson_reconstruct64(const params *params, cloud32 cloud, mesh32 mesh) {
   Mesh64 mesh_wrapper;
   mesh_wrapper.mesh = mesh;
   Cloud64 cloud_wrapper;

@@ -66,7 +66,7 @@ pub struct PointCloudParams {
     pub max_num_frame_points: Option<usize>,
 }
 
-type Point3 = nalgebra::Point3<f64>;
+pub type Point3 = nalgebra::Point3<f64>;
 type Vector3 = nalgebra::Vector3<f64>;
 type Quaternion = nalgebra::UnitQuaternion<f64>;
 type Matrix4 = nalgebra::Matrix4<f64>;

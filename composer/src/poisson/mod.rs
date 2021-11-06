@@ -1,3 +1,4 @@
+use std::mem::transmute;
 use std::os::raw;
 
 use num::traits::Float;
@@ -94,26 +95,6 @@ pub struct Params {
     pub cg_accuracy: f32,
 }
 
-#[repr(C)]
-pub struct Cloud<F: Float> {
-    pub vertices: Vec<[F; 3]>,
-}
-
-#[repr(C)]
-pub struct Mesh<F: Float> {
-    pub vertices: Vec<[F; 3]>,
-    pub faces: Vec<[usize; 3]>,
-}
-
-impl<F: Float> Mesh<F> {
-    fn new() -> Self {
-        Mesh {
-            vertices: vec![],
-            faces: vec![],
-        }
-    }
-}
-
 impl Default for Params {
     fn default() -> Self {
         Params {
@@ -139,61 +120,246 @@ impl Default for Params {
     }
 }
 
+pub trait Cloud<F: Float> {
+    fn len(&self) -> usize;
+    fn has_normals(&self) -> bool {
+        false
+    }
+    fn has_colors(&self) -> bool {
+        false
+    }
+    fn point(&self, _index: usize) -> [F; 3];
+    fn normal(&self, _index: usize) -> [F; 3] {
+        [F::nan(), F::nan(), F::nan()]
+    }
+    fn color(&self, _index: usize) -> [F; 3] {
+        [F::nan(), F::nan(), F::nan()]
+    }
+}
+
+pub trait Mesh<F: Float> {
+    fn add_vertex(&mut self, vertex: &[F; 3]);
+    fn add_normal(&mut self, _normal: &[F; 3]) {}
+    fn add_color(&mut self, _color: &[F; 3]) {}
+    fn add_density(&mut self, _density: f64) {}
+    fn add_triangle(&mut self, triangle: &[usize; 3]);
+}
+
 pub trait Reconstruct<F: Float> {
-    fn reconstruct(cloud: &Cloud<F>, params: &Params) -> Option<Mesh<F>>;
+    fn reconstruct(
+        params: &Params,
+        cloud: &dyn Cloud<F>,
+        mesh: &mut dyn Mesh<F>,
+    ) -> bool;
 }
 
 impl Reconstruct<f32> for f32 {
-    fn reconstruct(cloud: &Cloud<f32>, params: &Params) -> Option<Mesh<f32>> {
-        let mut mesh = Mesh::new();
-        if unsafe {
-            poisson_reconstruct32(
-                params,
-                cloud as *const Cloud<f32> as *const raw::c_void,
-                &mut mesh as *mut Mesh<f32> as *mut raw::c_void,
-            )
-        } {
-            Some(mesh)
-        } else {
-            None
+    fn reconstruct(
+        params: &Params,
+        cloud: &dyn Cloud<f32>,
+        mesh: &mut dyn Mesh<f32>,
+    ) -> bool {
+        unsafe {
+            poisson_reconstruct32(params, transmute(cloud), transmute(mesh))
         }
     }
 }
 
 impl Reconstruct<f64> for f64 {
-    fn reconstruct(cloud: &Cloud<f64>, params: &Params) -> Option<Mesh<f64>> {
-        let mut mesh = Mesh::new();
-        if unsafe {
-            poisson_reconstruct64(
-                params,
-                cloud as *const Cloud<f64> as *const raw::c_void,
-                &mut mesh as *mut Mesh<f64> as *mut raw::c_void,
-            )
-        } {
-            Some(mesh)
-        } else {
-            None
+    fn reconstruct(
+        params: &Params,
+        cloud: &dyn Cloud<f64>,
+        mesh: &mut dyn Mesh<f64>,
+    ) -> bool {
+        unsafe {
+            poisson_reconstruct64(params, transmute(cloud), transmute(mesh))
         }
     }
 }
 
 pub fn reconstruct<F: Float + Reconstruct<F>>(
-    cloud: &Cloud<F>,
     params: &Params,
-) -> Option<Mesh<F>> {
-    F::reconstruct(cloud, params)
+    cloud: &dyn Cloud<F>,
+    mesh: &mut dyn Mesh<F>,
+) -> bool {
+    F::reconstruct(params, cloud, mesh)
 }
+
+#[repr(C)]
+pub struct TraitObj(usize, usize);
 
 extern "C" {
     fn poisson_reconstruct32(
         params: &Params,
-        cloud: *const raw::c_void,
-        mesh: *mut raw::c_void,
+        cloud: TraitObj,
+        mesh: TraitObj,
     ) -> bool;
 
     fn poisson_reconstruct64(
         params: &Params,
-        cloud: *const raw::c_void,
-        mesh: *mut raw::c_void,
+        cloud: TraitObj,
+        mesh: TraitObj,
     ) -> bool;
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn poisson_cloud32_size(cloud: TraitObj) -> usize {
+    transmute::<TraitObj, &dyn Cloud<f32>>(cloud).len()
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn poisson_cloud32_has_normals(cloud: TraitObj) -> bool {
+    transmute::<TraitObj, &dyn Cloud<f32>>(cloud).has_normals()
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn poisson_cloud32_has_colors(cloud: TraitObj) -> bool {
+    transmute::<TraitObj, &dyn Cloud<f32>>(cloud).has_colors()
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn poisson_cloud32_get_point(
+    cloud: TraitObj,
+    index: usize,
+    coords: &mut [f32; 3],
+) {
+    *coords = transmute::<TraitObj, &dyn Cloud<f32>>(cloud).point(index);
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn poisson_cloud32_get_normal(
+    cloud: TraitObj,
+    index: usize,
+    coords: &mut [f32; 3],
+) {
+    *coords = transmute::<TraitObj, &dyn Cloud<f32>>(cloud).normal(index);
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn poisson_cloud32_get_color(
+    cloud: TraitObj,
+    index: usize,
+    rgb: &mut [f32; 3],
+) {
+    *rgb = transmute::<TraitObj, &dyn Cloud<f32>>(cloud).color(index);
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn poisson_mesh32_add_vertex(
+    mesh: TraitObj,
+    coords: &[f32; 3],
+) {
+    transmute::<TraitObj, &mut dyn Mesh<f32>>(mesh).add_vertex(coords);
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn poisson_mesh32_add_normal(
+    mesh: TraitObj,
+    coords: &[f32; 3],
+) {
+    transmute::<TraitObj, &mut dyn Mesh<f32>>(mesh).add_normal(coords);
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn poisson_mesh32_add_color(
+    mesh: TraitObj,
+    rgb: &[f32; 3],
+) {
+    transmute::<TraitObj, &mut dyn Mesh<f32>>(mesh).add_color(rgb);
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn poisson_mesh32_add_density(mesh: TraitObj, d: f64) {
+    transmute::<TraitObj, &mut dyn Mesh<f32>>(mesh).add_density(d);
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn poisson_mesh32_add_triangle(
+    mesh: TraitObj,
+    i1: usize,
+    i2: usize,
+    i3: usize,
+) {
+    transmute::<TraitObj, &mut dyn Mesh<f32>>(mesh).add_triangle(&[i1, i2, i3]);
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn poisson_cloud64_size(cloud: TraitObj) -> usize {
+    transmute::<TraitObj, &dyn Cloud<f64>>(cloud).len()
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn poisson_cloud64_has_normals(cloud: TraitObj) -> bool {
+    transmute::<TraitObj, &dyn Cloud<f64>>(cloud).has_normals()
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn poisson_cloud64_has_colors(cloud: TraitObj) -> bool {
+    transmute::<TraitObj, &dyn Cloud<f64>>(cloud).has_colors()
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn poisson_cloud64_get_point(
+    cloud: TraitObj,
+    index: usize,
+    coords: &mut [f64; 3],
+) {
+    *coords = transmute::<TraitObj, &dyn Cloud<f64>>(cloud).point(index);
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn poisson_cloud64_get_normal(
+    cloud: TraitObj,
+    index: usize,
+    coords: &mut [f64; 3],
+) {
+    *coords = transmute::<TraitObj, &dyn Cloud<f64>>(cloud).normal(index);
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn poisson_cloud64_get_color(
+    cloud: TraitObj,
+    index: usize,
+    rgb: &mut [f64; 3],
+) {
+    *rgb = transmute::<TraitObj, &dyn Cloud<f64>>(cloud).color(index);
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn poisson_mesh64_add_vertex(
+    mesh: TraitObj,
+    coords: &[f64; 3],
+) {
+    transmute::<TraitObj, &mut dyn Mesh<f64>>(mesh).add_vertex(coords);
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn poisson_mesh64_add_normal(
+    mesh: TraitObj,
+    coords: &[f64; 3],
+) {
+    transmute::<TraitObj, &mut dyn Mesh<f64>>(mesh).add_normal(coords);
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn poisson_mesh64_add_color(
+    mesh: TraitObj,
+    rgb: &[f64; 3],
+) {
+    transmute::<TraitObj, &mut dyn Mesh<f64>>(mesh).add_color(rgb);
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn poisson_mesh64_add_density(mesh: TraitObj, d: f64) {
+    transmute::<TraitObj, &mut dyn Mesh<f64>>(mesh).add_density(d);
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn poisson_mesh64_add_triangle(
+    mesh: TraitObj,
+    i1: usize,
+    i2: usize,
+    i3: usize,
+) {
+    transmute::<TraitObj, &mut dyn Mesh<f64>>(mesh).add_triangle(&[i1, i2, i3]);
 }

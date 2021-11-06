@@ -10,5 +10,5 @@ fi
 PROJECT_PATH=$(dirname "$0")
 
 cd $PROJECT_PATH/base
-cargo build --target aarch64-apple-ios --release
+cargo build -p base --target aarch64-apple-ios --release
 exit $?

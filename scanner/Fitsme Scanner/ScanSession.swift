@@ -126,7 +126,7 @@ struct ScanFrame {
 
 class ScanSession: NSObject, ARSessionDelegate {
   public let arSession = ARSession()
-  public var onFrame: ((inout ScanFrame) -> Void)?
+  public var onFrame: ((inout ScanFrame, /*angleOfView*/ Float32) -> Void)?
 
   var useCount = 0
 
@@ -150,11 +150,18 @@ class ScanSession: NSObject, ARSessionDelegate {
   }
 
   func run(videoFormat: Int) {
-    let formats = ARWorldTrackingConfiguration.supportedVideoFormats
-    let config = ARWorldTrackingConfiguration()
-    config.videoFormat = formats[videoFormat]
-    config.frameSemantics = .sceneDepth
-    arSession.run(config)
+    let trueDepthFormats = ARFaceTrackingConfiguration.supportedVideoFormats
+    if videoFormat < trueDepthFormats.count {
+      let config = ARFaceTrackingConfiguration()
+      config.videoFormat = trueDepthFormats[videoFormat]
+      arSession.run(config, options: [])
+    } else {
+      let lidarFormats = ARWorldTrackingConfiguration.supportedVideoFormats
+      let config = ARWorldTrackingConfiguration()
+      config.videoFormat = lidarFormats[videoFormat - trueDepthFormats.count]
+      config.frameSemantics = .sceneDepth
+      arSession.run(config)
+    }
   }
 
   public func release() {
@@ -170,10 +177,27 @@ class ScanSession: NSObject, ARSessionDelegate {
     let ciImage = CIImage(cvPixelBuffer: didUpdate.capturedImage)
     let cgImage = context.createCGImage(ciImage, from: ciImage.extent)!
 
-    let depthMap = didUpdate.sceneDepth!.depthMap
-    let confidenceMap = didUpdate.sceneDepth!.confidenceMap!
-    let depthWidth = CVPixelBufferGetWidth(depthMap)
-    let depthHeight = CVPixelBufferGetHeight(depthMap)
+    var depthMap: CVPixelBuffer? = nil
+    var confidenceMap: CVPixelBuffer? = nil
+    var angleOfView = Float32.nan
+    var quality = 0
+    if didUpdate.capturedDepthData != nil {
+      depthMap = didUpdate.capturedDepthData!.depthDataMap
+      quality = didUpdate.capturedDepthData!.depthDataQuality == .high ? 3 : 1
+      let mat = didUpdate.capturedDepthData!.cameraCalibrationData?
+        .intrinsicMatrix
+      if mat != nil {
+        angleOfView = atan(mat![2][0] / mat![0][0]) * 2.0
+      }
+    } else if didUpdate.sceneDepth != nil {
+      depthMap = didUpdate.sceneDepth!.depthMap
+      confidenceMap = didUpdate.sceneDepth!.confidenceMap!
+    } else {
+      return
+    }
+
+    let depthWidth = CVPixelBufferGetWidth(depthMap!)
+    let depthHeight = CVPixelBufferGetHeight(depthMap!)
 
     var depths: [Float] = []
     var depthConfidences: [UInt8] = []
@@ -181,23 +205,29 @@ class ScanSession: NSObject, ARSessionDelegate {
     depthConfidences.reserveCapacity(depthWidth * depthHeight)
 
     let lockFlags = CVPixelBufferLockFlags(rawValue: 0)
-    CVPixelBufferLockBaseAddress(depthMap, lockFlags)
+    CVPixelBufferLockBaseAddress(depthMap!, lockFlags)
     let depthBuf = unsafeBitCast(
-      CVPixelBufferGetBaseAddress(depthMap),
+      CVPixelBufferGetBaseAddress(depthMap!),
       to: UnsafeMutablePointer<Float32>.self)
 
-    CVPixelBufferLockBaseAddress(confidenceMap, lockFlags)
-    let confidenceBuf = unsafeBitCast(
-      CVPixelBufferGetBaseAddress(confidenceMap),
-      to: UnsafeMutablePointer<UInt8>.self)
-
-    for i in 0..<depthWidth * depthHeight {
-      depths.append(depthBuf[i])
-      depthConfidences.append(confidenceBuf[i] + 1)
+    if confidenceMap != nil {
+      CVPixelBufferLockBaseAddress(confidenceMap!, lockFlags)
+      let confidenceBuf = unsafeBitCast(
+        CVPixelBufferGetBaseAddress(confidenceMap!),
+        to: UnsafeMutablePointer<UInt8>.self)
+      for i in 0..<depthWidth * depthHeight {
+        depths.append(depthBuf[i])
+        depthConfidences.append(confidenceBuf[i] + 1)
+      }
+      CVPixelBufferUnlockBaseAddress(confidenceMap!, lockFlags)
+    } else {
+      for i in 0..<depthWidth * depthHeight {
+        depths.append(depthBuf[i])
+        depthConfidences.append(UInt8(quality))
+      }
     }
 
-    CVPixelBufferUnlockBaseAddress(depthMap, lockFlags)
-    CVPixelBufferUnlockBaseAddress(confidenceMap, lockFlags)
+    CVPixelBufferUnlockBaseAddress(depthMap!, lockFlags)
 
     var scan = ScanFrame(
       time: didUpdate.timestamp,
@@ -207,6 +237,6 @@ class ScanSession: NSObject, ARSessionDelegate {
       depths: depths,
       depthConfidences: depthConfidences
     )
-    onFrame?(&scan)
+    onFrame?(&scan, angleOfView)
   }
 }

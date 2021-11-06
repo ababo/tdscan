@@ -110,6 +110,10 @@ pub fn build_point_cloud(
             }
 
             let mut depth = frame.depths[depth_index] as f64;
+            if depth.is_nan() || depth.is_infinite() {
+                continue;
+            }
+
             let depth_width = scan.depth_width as f64;
             let w = j as f64 - depth_width / 2.0;
             let h = i as f64 - scan.depth_height as f64 / 2.0;

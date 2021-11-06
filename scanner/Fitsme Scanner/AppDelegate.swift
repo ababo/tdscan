@@ -19,6 +19,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     public var writer: FmWriter?
     public var block: GCDWebServerBodyReaderCompletionBlock?
     public var lastOutUptime: TimeInterval = 0
+    public var angleOfView = Float32.nan
 
     public init(
       eye: FmPoint3, ctr: FmPoint3, vel: Float, fps: Double, name: String,
@@ -125,7 +126,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     -> GCDWebServerResponse
   {
     var formats: [[String: Any]] = []
-    for format in ARWorldTrackingConfiguration.supportedVideoFormats {
+    for format in ARFaceTrackingConfiguration.supportedVideoFormats
+      + ARWorldTrackingConfiguration.supportedVideoFormats
+    {
       let devicePosition: String
       switch format.captureDevicePosition {
       case AVCaptureDevice.Position.front: devicePosition = "front"
@@ -175,7 +178,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     let at = TimeInterval(request.query?["at"] ?? String(uts))
     let imgrt = UInt(request.query?["imgrt"] ?? "1")
 
-    let numFormats = ARWorldTrackingConfiguration.supportedVideoFormats.count
+    let numFormats =
+      ARFaceTrackingConfiguration.supportedVideoFormats.count
+      + ARWorldTrackingConfiguration.supportedVideoFormats.count
     if eye == nil || eye!.count != 3 || ctr.count != 3 || vel == nil
       || fmt == nil || fmt! >= numFormats || fps == nil || fps! < 0
       || nof == nil || at == nil || at! < uts || imgrt == nil
@@ -301,15 +306,18 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var err = fm_create_writer(onWriterCallback, scanPtr, &writer)
     assert(err == kFmOk)
 
-    var angleOfView: Float
-    switch session.arSession.configuration!.videoFormat.captureDeviceType {
-    case AVCaptureDevice.DeviceType.builtInWideAngleCamera:
-      // See https://photo.stackexchange.com/questions/106509.
-      angleOfView = 1.17460658659
-    case AVCaptureDevice.DeviceType.builtInUltraWideCamera:
-      angleOfView = 2.09439510239
-    default:
-      fatalError("Unknown angle of view")
+    var angleOfView = scan.angleOfView
+    if scan.angleOfView.isNaN {
+      switch session.arSession.configuration!.videoFormat.captureDeviceType {
+      case AVCaptureDevice.DeviceType.builtInWideAngleCamera:
+        // See https://photo.stackexchange.com/questions/106509.
+        angleOfView = 1.17460658659
+      case AVCaptureDevice.DeviceType.builtInUltraWideCamera:
+        // Ultra wide camera is claimed to have 120 degrees FoV.
+        angleOfView = 2.09439510239
+      default:
+        fatalError("Unknown angle of view")
+      }
     }
 
     let upAngle: Float
@@ -355,7 +363,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         return kFmOk
       }
 
-  func onFrame(frame: inout ScanFrame) {
+  func onFrame(frame: inout ScanFrame, angleOfView: Float32) {
     let scan = getScan()
     if scan == nil || scan!.noMoreInFrames() {
       return
@@ -366,6 +374,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     {
       return
     }
+
+    scan!.angleOfView = angleOfView
 
     // First frame must contain an image to be used when creating FmScan.
     if scan!.inFrameIndex % scan!.imgrt != 0 {

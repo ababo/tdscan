@@ -1,3 +1,4 @@
+use std::f64::NAN;
 use std::path::PathBuf;
 
 use structopt::StructOpt;
@@ -7,7 +8,8 @@ use crate::misc::{
     ScanParams,
 };
 use crate::point_cloud::{
-    build_frame_clouds, Point3, PointCloudParams, PointNormal, Vector3,
+    build_frame_clouds, validate_point_bounds, Point3, PointCloudParams,
+    PointNormal, Vector3,
 };
 use crate::poisson;
 use base::defs::{Error, ErrorKind, Result};
@@ -80,6 +82,7 @@ pub fn build_view(
             "failed to reconstruct surface".to_string(),
         ));
     }
+    mesh.apply_bounds(point_cloud_params);
 
     eprintln!("writing resulting view...");
     use std::io::Write;
@@ -143,6 +146,14 @@ struct Mesh {
     vertices: Vec<Point3>,
     normals: Vec<Vector3>,
     triangles: Vec<[usize; 3]>,
+}
+
+impl Mesh {
+    fn apply_bounds(&mut self, params: &PointCloudParams) {
+        assert_eq!(self.vertices.len(), self.normals.len());
+
+       // TODO: implement this.
+    }
 }
 
 impl poisson::Mesh<f64> for Mesh {

@@ -148,11 +148,7 @@ pub fn build_point_cloud(
             }
 
             let point = points[depth_index];
-            let z_dist = (point[0] * point[0] + point[1] * point[1]).sqrt();
-            if point[2] < params.min_z as f64
-                || point[2] > params.max_z as f64
-                || z_dist > params.max_z_distance as f64
-            {
+            if !validate_point_bounds(params, &point) {
                 continue;
             }
 
@@ -316,6 +312,16 @@ fn select_random_points(
             points.truncate(max_num_frame_points);
         }
     }
+}
+
+#[inline]
+pub fn validate_point_bounds(
+    params: &PointCloudParams,
+    point: &Point3,
+) -> bool {
+    point.z >= params.min_z as f64 && point.z <= params.max_z as f64
+        || (point.x * point.x + point.y * point.y).sqrt()
+            <= params.max_z_distance as f64
 }
 
 #[cfg(test)]

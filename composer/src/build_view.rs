@@ -25,6 +25,9 @@ pub struct BuildViewParams {
     #[structopt(flatten)]
     point_cloud_params: PointCloudParams,
 
+    #[structopt(flatten)]
+    poisson_params: poisson::Params,
+
     #[structopt(
         help = "Output element view .fm file (STDOUT if omitted)",
         long,
@@ -46,6 +49,7 @@ pub fn build_view_with_params(params: &BuildViewParams) -> Result<()> {
         reader.as_mut(),
         &params.scan_params,
         &params.point_cloud_params,
+        &params.poisson_params,
         writer.as_mut(),
     )
 }
@@ -54,6 +58,7 @@ pub fn build_view(
     reader: &mut dyn fm::Read,
     scan_params: &ScanParams,
     point_cloud_params: &PointCloudParams,
+    poisson_params: &poisson::Params,
     _writer: &mut dyn fm::Write,
 ) -> Result<()> {
     let (scans, scan_frames) = read_scans(reader, scan_params)?;
@@ -68,13 +73,8 @@ pub fn build_view(
 
     let mut mesh = Mesh::default();
 
-    let params = poisson::Params {
-        // TODO: Set proper params here.
-        ..Default::default()
-    };
-
     eprintln!("reconstructing mesh...");
-    if !poisson::reconstruct(&params, &cloud, &mut mesh) {
+    if !poisson::reconstruct(poisson_params, &cloud, &mut mesh) {
         return Err(Error::new(
             ErrorKind::PoissonError,
             "failed to reconstruct surface".to_string(),

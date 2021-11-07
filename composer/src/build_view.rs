@@ -2,12 +2,14 @@ use std::path::PathBuf;
 
 use structopt::StructOpt;
 
-use crate::poisson;
 use crate::misc::{
     fm_reader_from_file_or_stdin, fm_writer_to_file_or_stdout, read_scans,
     ScanParams,
 };
-use crate::point_cloud::{build_frame_clouds, Point3, PointCloudParams};
+use crate::point_cloud::{
+    build_frame_clouds, Point3, PointCloudParams, PointNormal, Vector3,
+};
+use crate::poisson;
 use base::defs::{Error, ErrorKind, Result};
 use base::fm;
 
@@ -56,26 +58,22 @@ pub fn build_view(
 ) -> Result<()> {
     let (scans, scan_frames) = read_scans(reader, scan_params)?;
 
-    let points: Vec<Point3> =
+    eprintln!("building point clouds...");
+    let cloud = Cloud(
         build_frame_clouds(&scans, &scan_frames, point_cloud_params)
             .into_iter()
             .flatten()
-            .collect();
-    // TODO: Replace these dummy normals with properly computed ones.
-    let normals = vec![Point3::origin(); points.len()];
-    let cloud = Cloud { points, normals };
+            .collect(),
+    );
 
-    let mut mesh = Mesh {
-        vertices: vec![],
-        normals: vec![],
-        triangles: vec![],
-    };
+    let mut mesh = Mesh::default();
 
     let params = poisson::Params {
         // TODO: Set proper params here.
         ..Default::default()
     };
 
+    eprintln!("reconstructing mesh...");
     if !poisson::reconstruct(&params, &cloud, &mut mesh) {
         return Err(Error::new(
             ErrorKind::PoissonError,
@@ -83,6 +81,7 @@ pub fn build_view(
         ));
     }
 
+    eprintln!("writing resulting view...");
     use std::io::Write;
     let mut file =
         std::fs::File::create("/Users/ababo/Desktop/foo.obj").unwrap();
@@ -106,7 +105,9 @@ pub fn build_view(
         file.write_all(
             format!(
                 "f {0}//{0} {1}//{1} {2}//{2}\n",
-                triangle[0], triangle[1], triangle[2]
+                triangle[0] + 1,
+                triangle[1] + 1,
+                triangle[2] + 1
             )
             .into_bytes()
             .as_slice(),
@@ -117,14 +118,11 @@ pub fn build_view(
     Ok(())
 }
 
-struct Cloud {
-    points: Vec<Point3>,
-    normals: Vec<Point3>,
-}
+struct Cloud(Vec<PointNormal>);
 
 impl poisson::Cloud<f64> for Cloud {
     fn len(&self) -> usize {
-        self.points.len()
+        self.0.len()
     }
 
     fn has_normals(&self) -> bool {
@@ -132,23 +130,28 @@ impl poisson::Cloud<f64> for Cloud {
     }
 
     fn point(&self, index: usize) -> [f64; 3] {
-        *self.points[index].coords.as_ref()
+        *self.0[index].0.coords.as_ref()
     }
 
     fn normal(&self, index: usize) -> [f64; 3] {
-        *self.normals[index].coords.as_ref()
+        *self.0[index].1.as_ref()
     }
 }
 
+#[derive(Default)]
 struct Mesh {
     vertices: Vec<Point3>,
-    normals: Vec<Point3>,
+    normals: Vec<Vector3>,
     triangles: Vec<[usize; 3]>,
 }
 
 impl poisson::Mesh<f64> for Mesh {
     fn add_vertex(&mut self, vertex: &[f64; 3]) {
         self.vertices.push(Point3::from(*vertex));
+    }
+
+    fn add_normal(&mut self, normal: &[f64; 3]) {
+        self.normals.push(Vector3::from(*normal));
     }
 
     fn add_triangle(&mut self, triangle: &[usize; 3]) {

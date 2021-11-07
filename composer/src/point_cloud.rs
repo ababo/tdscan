@@ -67,7 +67,7 @@ pub struct PointCloudParams {
 }
 
 pub type Point3 = nalgebra::Point3<f64>;
-type Vector3 = nalgebra::Vector3<f64>;
+pub type Vector3 = nalgebra::Vector3<f64>;
 type Quaternion = nalgebra::UnitQuaternion<f64>;
 type Matrix4 = nalgebra::Matrix4<f64>;
 
@@ -75,12 +75,20 @@ fn fm_point3_to_point3(p: &fm::Point3) -> Point3 {
     Point3::new(p.x as f64, p.y as f64, p.z as f64)
 }
 
+pub struct PointNormal(pub Point3, pub Vector3);
+
 pub fn build_point_cloud(
     scan: &fm::Scan,
     frame: &fm::ScanFrame,
     params: &PointCloudParams,
-) -> Vec<Point3> {
-    let mut points = Vec::new();
+) -> Vec<PointNormal> {
+    let depth_width = scan.depth_width as usize;
+    let depth_height = scan.depth_height as usize;
+
+    // Normal calculation is based on deltas.
+    if depth_width < 2 || depth_height < 2 {
+        return vec![];
+    }
 
     let tan = (scan.camera_angle_of_view as f64 / 2.0).tan();
 
@@ -101,20 +109,16 @@ pub fn build_point_cloud(
     let time_rot =
         Quaternion::from_axis_angle(&Vector3::z_axis(), camera_angle);
 
-    for i in 0..scan.depth_height {
-        for j in 0..scan.depth_width {
-            let depth_index = (i * scan.depth_width + j) as usize;
-            let confidence = frame.depth_confidences[depth_index];
-            if confidence < params.min_depth_confidence as i32 {
-                continue;
-            }
-
+    let mut points = Vec::with_capacity(depth_height * depth_width);
+    for i in 0..depth_height {
+        for j in 0..depth_width {
+            let depth_index = i * depth_width + j;
             let mut depth = frame.depths[depth_index] as f64;
             if depth.is_nan() || depth.is_infinite() {
                 continue;
             }
 
-            let depth_width = scan.depth_width as f64;
+            let depth_width = depth_width as f64;
             let w = j as f64 - depth_width / 2.0;
             let h = i as f64 - scan.depth_height as f64 / 2.0;
 
@@ -130,8 +134,20 @@ pub fn build_point_cloud(
                 depth * nalgebra::Vector4::new(u, -v, -1.0, 0.0);
 
             let point = (view_rot * focus_to_object).xyz() + eye.coords;
-            let point = time_rot * point;
+            points.push(Point3::from(time_rot * point));
+        }
+    }
 
+    let mut point_normals = Vec::new();
+    for i in 0..depth_height {
+        for j in 0..depth_width {
+            let depth_index = i * depth_width + j;
+            let confidence = frame.depth_confidences[depth_index];
+            if confidence < params.min_depth_confidence as i32 {
+                continue;
+            }
+
+            let point = points[depth_index];
             let z_dist = (point[0] * point[0] + point[1] * point[1]).sqrt();
             if point[2] < params.min_z as f64
                 || point[2] > params.max_z as f64
@@ -140,18 +156,33 @@ pub fn build_point_cloud(
                 continue;
             }
 
-            points.push(Point3::from(point));
+            // Keep points from a 1µm x 1µm grid with no depth variation.
+            const MIN_NORM: f64 = 1E-12;
+
+            let vdiff = if i > 0 {
+                points[depth_index] - points[depth_index - depth_width]
+            } else {
+                points[depth_index + depth_width] - points[depth_index]
+            };
+            let hdiff = if j > 0 {
+                points[depth_index] - points[depth_index - 1]
+            } else {
+                points[depth_index + 1] - points[depth_index]
+            };
+            if let Some(normal) = vdiff.cross(&hdiff).try_normalize(MIN_NORM) {
+                point_normals.push(PointNormal(point, normal));
+            }
         }
     }
 
-    points
+    point_normals
 }
 
 pub fn build_frame_clouds(
     scans: &BTreeMap<String, fm::Scan>,
     scan_frames: &[fm::ScanFrame],
     params: &PointCloudParams,
-) -> Vec<Vec<Point3>> {
+) -> Vec<Vec<PointNormal>> {
     let mut clouds = Vec::new();
     for frame in scan_frames {
         let scan = scans.get(&frame.scan).unwrap();
@@ -172,18 +203,18 @@ pub fn build_frame_clouds(
 }
 
 pub fn distance_between_point_clouds(
-    a: &[Point3],
-    b: &[Point3],
+    a: &[PointNormal],
+    b: &[PointNormal],
 ) -> Option<f64> {
     let mut kdtree = KdTree::new(3);
     for (i, p) in a.iter().enumerate() {
-        kdtree.add(p.coords.as_ref(), i).unwrap();
+        kdtree.add(p.0.coords.as_ref(), i).unwrap();
     }
 
     let mut dists = vec![INFINITY; a.len()];
     for p in b {
         let (dist, i) = kdtree
-            .nearest(p.coords.as_ref(), 1, &squared_euclidean)
+            .nearest(p.0.coords.as_ref(), 1, &squared_euclidean)
             .unwrap()[0];
         if dist < dists[*i] {
             dists[*i] = dist;
@@ -213,7 +244,7 @@ pub fn distance_between_point_clouds(
 }
 
 fn remove_outliers(
-    clouds: &mut [Vec<Point3>],
+    clouds: &mut [Vec<PointNormal>],
     num_neighbors: usize,
     std_ratio: f64,
 ) {
@@ -228,7 +259,7 @@ fn remove_outliers(
 
     let mut kdtree = KdTree::new(3);
     for point in clouds.iter().flatten() {
-        kdtree.add(*point.coords.as_ref(), ()).unwrap();
+        kdtree.add(*point.0.coords.as_ref(), ()).unwrap();
     }
 
     let mut avgs = Vec::with_capacity(num_points);
@@ -236,7 +267,7 @@ fn remove_outliers(
         for point in points {
             let nearest = kdtree
                 .nearest(
-                    point.coords.as_ref(),
+                    point.0.coords.as_ref(),
                     1 + num_neighbors,
                     &squared_euclidean,
                 )
@@ -270,7 +301,7 @@ fn remove_outliers(
 }
 
 fn select_random_points(
-    clouds: &mut [Vec<Point3>],
+    clouds: &mut [Vec<PointNormal>],
     max_num_frame_points: usize,
 ) {
     // Use deterministic generator to maintain consistency while optimizing.
@@ -282,7 +313,7 @@ fn select_random_points(
                 let j = rng.gen_range(i..points.len());
                 points.swap(i, j);
             }
-            points.resize(max_num_frame_points, Point3::origin());
+            points.truncate(max_num_frame_points);
         }
     }
 }

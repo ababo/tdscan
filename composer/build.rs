@@ -50,7 +50,7 @@ fn unzip<P: AsRef<Path>, P2: AsRef<Path>>(zip: P, to: P2) {
 fn build_poisson_recon() {
     println!("cargo:rerun-if-changed=src/poisson/poisson.cc");
 
-    const COMMIT: &str = "8683f6c44c2a3f03c10e456f1bdfae5fc69ec3f7";
+    const COMMIT: &str = "73ac105f938a552f42dc37208c6bcf30d812729f";
     let name = format!("PoissonRecon-{}", COMMIT);
     let proj = target_dir().join(&name);
     if !proj.exists() {
@@ -59,7 +59,7 @@ fn build_poisson_recon() {
             println!("Downloading PoissonRecon.zip");
             let mut file = File::create(&zip).unwrap();
             let url = format!(
-                "https://github.com/CloudCompare/PoissonRecon/archive/{}.zip",
+                "https://github.com/ababo/PoissonRecon/archive/{}.zip",
                 COMMIT
             );
             let mut resp = ureq::get(&url).call().unwrap().into_reader();

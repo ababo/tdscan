@@ -51,6 +51,7 @@ pub struct Params {
     #[structopt(
         help = "Poisson maximum depth",
         long = "poisson-depth",
+        short = "h",
         default_value = "8"
     )]
     pub depth: raw::c_int,
@@ -83,9 +84,10 @@ pub struct Params {
     #[structopt(
         help = "Poisson samples per node.",
         long = "poisson-samples-per-node",
+        short = "s",
         default_value = "1.5"
     )]
-    pub sample_per_node: f32,
+    pub samples_per_node: f32,
 
     // The importance that interpolation of the point samples is given
     // in the formulation of the screened Poisson equation. The results
@@ -94,6 +96,7 @@ pub struct Params {
     #[structopt(
         help = "Poisson point weight.",
         long = "poisson-point-weight",
+        short = "w",
         default_value = "2.0"
     )]
     pub point_weight: f32,
@@ -205,7 +208,7 @@ impl Default for Params {
             depth: 8,
             finest_cell_width: 0.0,
             scale: 1.1,
-            sample_per_node: 1.5,
+            samples_per_node: 1.5,
             point_weight: 2.0,
             iters: 8,
             density: false,

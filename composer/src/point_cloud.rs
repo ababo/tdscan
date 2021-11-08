@@ -320,8 +320,9 @@ pub fn validate_point_bounds(
     params: &PointCloudParams,
     point: &Point3,
 ) -> bool {
-    point.z >= params.min_z as f64 && point.z <= params.max_z as f64
-        || (point.x * point.x + point.y * point.y).sqrt()
+    point.z >= params.min_z as f64
+        && point.z <= params.max_z as f64
+        && (point.x * point.x + point.y * point.y).sqrt()
             <= params.max_z_distance as f64
 }
 

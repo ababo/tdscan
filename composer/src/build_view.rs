@@ -1,4 +1,3 @@
-use std::f64::NAN;
 use std::path::PathBuf;
 
 use structopt::StructOpt;
@@ -8,8 +7,7 @@ use crate::misc::{
     ScanParams,
 };
 use crate::point_cloud::{
-    build_frame_clouds, validate_point_bounds, Point3, PointCloudParams,
-    PointNormal, Vector3,
+    build_frame_clouds, Point3, PointCloudParams, PointNormal, Vector3,
 };
 use crate::poisson;
 use base::defs::{Error, ErrorKind, Result};
@@ -149,10 +147,10 @@ struct Mesh {
 }
 
 impl Mesh {
-    fn apply_bounds(&mut self, params: &PointCloudParams) {
+    fn apply_bounds(&mut self, _params: &PointCloudParams) {
         assert_eq!(self.vertices.len(), self.normals.len());
 
-       // TODO: implement this.
+        // TODO: implement this.
     }
 }
 

@@ -114,16 +114,12 @@ pub fn build_point_cloud(
         for j in 0..depth_width {
             let depth_index = i * depth_width + j;
             let mut depth = frame.depths[depth_index] as f64;
-            if depth.is_nan() || depth.is_infinite() {
-                continue;
-            }
-
-            let depth_width = depth_width as f64;
-            let w = j as f64 - depth_width / 2.0;
+            let depth_width_f64 = depth_width as f64;
+            let w = j as f64 - depth_width_f64 / 2.0;
             let h = i as f64 - scan.depth_height as f64 / 2.0;
 
-            let u = w / (depth_width / 2.0) * tan;
-            let v = h / (depth_width / 2.0) * tan;
+            let u = w / (depth_width_f64 / 2.0) * tan;
+            let v = h / (depth_width_f64 / 2.0) * tan;
 
             // If depth sensor measures distance rather than depth.
             if !scan.sensor_plane_depth {
@@ -142,6 +138,11 @@ pub fn build_point_cloud(
     for i in 0..depth_height {
         for j in 0..depth_width {
             let depth_index = i * depth_width + j;
+            let depth = frame.depths[depth_index];
+            if depth.is_nan() || depth.is_infinite() {
+                continue;
+            }
+
             let confidence = frame.depth_confidences[depth_index];
             if confidence < params.min_depth_confidence as i32 {
                 continue;

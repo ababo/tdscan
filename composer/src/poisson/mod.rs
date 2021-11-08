@@ -96,7 +96,7 @@ pub struct Params {
     #[structopt(
         help = "Poisson point weight.",
         long = "poisson-point-weight",
-        short = "w",
+        short = "v",
         default_value = "2.0"
     )]
     pub point_weight: f32,

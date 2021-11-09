@@ -153,9 +153,6 @@ pub fn build_point_cloud(
                 continue;
             }
 
-            // Keep points from a 1µm x 1µm grid with no depth variation.
-            const MIN_NORM: f64 = 1E-12;
-
             let vdiff = if i > 0 {
                 points[depth_index] - points[depth_index - depth_width]
             } else {
@@ -166,7 +163,8 @@ pub fn build_point_cloud(
             } else {
                 points[depth_index + 1] - points[depth_index]
             };
-            if let Some(normal) = vdiff.cross(&hdiff).try_normalize(MIN_NORM) {
+            let normal = vdiff.cross(&hdiff).normalize();
+            if !normal.iter().cloned().any(f64::is_nan) {
                 point_normals.push(PointNormal(point, normal));
             }
         }

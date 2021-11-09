@@ -13,6 +13,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     public let nof: Int
     public let at: TimeInterval
     public let imgrt: Int
+    public let mirror: Bool
 
     public var inFrameIndex = 0
     public var outFrameIndex = 0
@@ -23,7 +24,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     public init(
       eye: FmPoint3, ctr: FmPoint3, vel: Float, fps: Double, name: String,
-      nof: Int, at: TimeInterval, imgrt: Int
+      nof: Int, at: TimeInterval, imgrt: Int, mirror: Bool
     ) {
       self.eye = eye
       self.ctr = ctr
@@ -33,6 +34,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
       self.nof = nof
       self.at = at
       self.imgrt = imgrt
+      self.mirror = mirror
     }
 
     public func nextOutFrameReady() -> Bool { inFrameIndex > outFrameIndex }
@@ -178,12 +180,11 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     let at = TimeInterval(request.query?["at"] ?? String(uts))
     let imgrt = UInt(request.query?["imgrt"] ?? "1")
 
-    let numFormats =
-      ARFaceTrackingConfiguration.supportedVideoFormats.count
-      + ARWorldTrackingConfiguration.supportedVideoFormats.count
+    let numFrontFmts = ARFaceTrackingConfiguration.supportedVideoFormats.count
+    let numBackFmts = ARWorldTrackingConfiguration.supportedVideoFormats.count
     if eye == nil || eye!.count != 3 || ctr.count != 3 || vel == nil
-      || fmt == nil || fmt! >= numFormats || fps == nil || fps! < 0
-      || nof == nil || at == nil || at! < uts || imgrt == nil
+      || fmt == nil || fmt! >= numFrontFmts + numBackFmts || fps == nil
+      || fps! < 0 || nof == nil || at == nil || at! < uts || imgrt == nil
     {
       print("Bad '/scan' request arguments")
       return GCDWebServerResponse(
@@ -195,7 +196,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
       eye: FmPoint3(x: eye![0], y: eye![1], z: eye![2]),
       ctr: FmPoint3(x: ctr[0], y: ctr[1], z: ctr[2]),
       vel: vel!, fps: fps!, name: name, nof: Int(nof!),
-      at: at! - uts + uptime, imgrt: Int(imgrt!))
+      at: at! - uts + uptime, imgrt: Int(imgrt!),
+      mirror: fmt! < numFrontFmts)
 
     if !setScanIfNone(scan: scan) {
       print("Refused '/scan' request, busy handling previous request")
@@ -240,7 +242,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     let url = AppDelegate.frameURL(index: scan!.outFrameIndex)
     var data = try! Data(contentsOf: url)
     try! FileManager.default.removeItem(at: url)
-    let frame = ScanFrame.decode(data: &data)
+    var frame = ScanFrame.decode(data: &data)
 
     if scan!.writer == nil {
       scan!.writer = createWriter(block: block, scan: scan!, frame: frame)
@@ -248,7 +250,40 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     var png: [UInt8] = []
     if frame.image != nil {
-      png = [UInt8](UIImage(cgImage: frame.image!).pngData()!)
+      var img = UIImage(cgImage: frame.image!)
+      if scan!.mirror {
+        img = UIImage(
+          cgImage: img.cgImage!,
+          scale: img.scale, orientation: .upMirrored)
+        UIGraphicsBeginImageContextWithOptions(img.size, true, img.scale)
+        defer { UIGraphicsEndImageContext() }
+        img.draw(in: CGRect(origin: .zero, size: img.size))
+        img = UIGraphicsGetImageFromCurrentImageContext()!
+      }
+      png = [UInt8](img.pngData()!)
+    }
+
+    if scan!.mirror {
+      var tmp = [Float32](repeating: 0, count: frame.depthWidth)
+      for i in 0..<frame.depthHeight / 2 {
+        let j = frame.depthHeight - i - 1
+        frame.depths.withUnsafeMutableBufferPointer { depthPtr in
+          tmp.withUnsafeMutableBufferPointer { tmpPtr in
+            memcpy(
+              tmpPtr.baseAddress,
+              depthPtr.baseAddress! + i * frame.depthWidth,
+              frame.depthWidth * 4)
+            memcpy(
+              depthPtr.baseAddress! + i * frame.depthWidth,
+              depthPtr.baseAddress! + j * frame.depthWidth,
+              frame.depthWidth * 4)
+            memcpy(
+              depthPtr.baseAddress! + j * frame.depthWidth,
+              tmpPtr.baseAddress,
+              frame.depthWidth * 4)
+          }
+        }
+      }
     }
 
     png.withUnsafeBufferPointer { pngPtr in

@@ -61,6 +61,7 @@ pub fn build_view(
     poisson_params: &poisson::Params,
     _writer: &mut dyn fm::Write,
 ) -> Result<()> {
+    eprintln!("reading scans...");
     let (scans, scan_frames) = read_scans(reader, scan_params)?;
 
     eprintln!("building point clouds...");

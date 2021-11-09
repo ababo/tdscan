@@ -5,8 +5,8 @@ struct ScanFrame {
   public var image: CGImage?
   public let depthWidth: Int
   public let depthHeight: Int
-  public let depths: [Float]
-  public let depthConfidences: [UInt8]
+  public var depths: [Float]
+  public var depthConfidences: [UInt8]
 
   public static func decode(data: inout Data) -> ScanFrame {
     var offset = 0

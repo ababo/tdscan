@@ -323,8 +323,10 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
       scan.block = nil
     }
     setScan(scan: scan)
-    let err = fm_close_writer(scan.writer)
-    assert(err == kFmOk)
+    if scan.writer != nil {
+      let err = fm_close_writer(scan.writer)
+      assert(err == kFmOk)
+    }
 
     setScan(scan: nil)
   }

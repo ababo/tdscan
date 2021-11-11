@@ -13,7 +13,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     public let nof: Int
     public let at: TimeInterval
     public let imgrt: Int
-    public let mirror: Bool
+    public let trueDepth: Bool
 
     public var inFrameIndex = 0
     public var outFrameIndex = 0
@@ -34,7 +34,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
       self.nof = nof
       self.at = at
       self.imgrt = imgrt
-      self.mirror = mirror
+      self.trueDepth = mirror
     }
 
     public func nextOutFrameReady() -> Bool { inFrameIndex > outFrameIndex }
@@ -251,7 +251,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var png: [UInt8] = []
     if frame.image != nil {
       var img = UIImage(cgImage: frame.image!)
-      if scan!.mirror {
+      if scan!.trueDepth {
         img = UIImage(
           cgImage: img.cgImage!,
           scale: img.scale, orientation: .upMirrored)
@@ -263,7 +263,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
       png = [UInt8](img.pngData()!)
     }
 
-    if scan!.mirror {
+    if scan!.trueDepth && UIDevice.current.orientation.isPortrait {
       var tmp = [Float32](repeating: 0, count: frame.depthWidth)
       for i in 0..<frame.depthHeight / 2 {
         let j = frame.depthHeight - i - 1

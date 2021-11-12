@@ -82,6 +82,10 @@ pub fn build_point_cloud(
     frame: &fm::ScanFrame,
     params: &PointCloudParams,
 ) -> Vec<PointNormal> {
+    if frame.depths.is_empty() {
+        return vec![];
+    }
+
     let depth_width = scan.depth_width as usize;
     let depth_height = scan.depth_height as usize;
 

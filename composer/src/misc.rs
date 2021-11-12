@@ -130,6 +130,20 @@ pub struct ScanParams {
     pub downsample_factors: Vec<(String, usize)>,
 
     #[structopt(
+        help = "Drop scan depths",
+        long = "drop-depths",
+        number_of_values = 1,
+    )]
+    pub drop_depths: Vec<String>,
+
+    #[structopt(
+        help = "Drop scan images",
+        long = "drop-images",
+        number_of_values = 1,
+    )]
+    pub drop_images: Vec<String>,
+
+    #[structopt(
         help = "Scan name to override with",
         long = "name",
             number_of_values = 1,
@@ -228,6 +242,34 @@ pub fn read_scans(
     if !scan_params.downsample_factors.is_empty() {
         let factors = scan_params.downsample_factors.iter().cloned().collect();
         downsample_scan_frames(&factors, &mut frames);
+    }
+
+    for name in scan_params.drop_depths.iter() {
+        if scans.get_mut(name).is_none() {
+            return unknown_scan_err(name);
+        }
+    }
+    for name in scan_params.drop_images.iter() {
+        if scans.get_mut(name).is_none() {
+            return unknown_scan_err(name);
+        }
+    }
+    for frame in frames.iter_mut() {
+        if scan_params
+            .drop_depths
+            .iter()
+            .any(|name| name.as_str() == frame.scan)
+        {
+            frame.depths = vec![];
+            frame.depth_confidences = vec![];
+        }
+        if scan_params
+            .drop_images
+            .iter()
+            .any(|name| name.as_str() == frame.scan)
+        {
+            frame.image = None;
+        }
     }
 
     for (name, new_name) in scan_params.names.iter() {

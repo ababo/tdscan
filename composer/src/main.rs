@@ -18,6 +18,7 @@ struct Opts {
     command: Command,
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(StructOpt)]
 enum Command {
     Animate(animate::AnimateParams),

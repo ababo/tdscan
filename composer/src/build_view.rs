@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+use log::info;
 use structopt::StructOpt;
 
 use crate::misc::{
@@ -63,10 +64,14 @@ pub fn build_view(
     poisson_params: &poisson::Params,
     _writer: &mut dyn fm::Write,
 ) -> Result<()> {
-    eprintln!("reading scans...");
+    info!("reading scans...");
     let (scans, scan_frames) = read_scans(reader, scan_params)?;
 
-    eprintln!("building point clouds...");
+    info!(
+        "building point clouds from {} scans ({} frames)...",
+        scans.len(),
+        scan_frames.len()
+    );
     let cloud = Cloud(
         build_frame_clouds(&scans, &scan_frames, point_cloud_params)
             .into_iter()
@@ -76,16 +81,30 @@ pub fn build_view(
 
     let mut mesh = Mesh::default();
 
-    eprintln!("reconstructing mesh...");
+    info!(
+        "reconstructing mesh from cloud of {} points...",
+        cloud.0.len()
+    );
     if !poisson::reconstruct(poisson_params, &cloud, &mut mesh) {
         return Err(Error::new(
             ErrorKind::PoissonError,
             "failed to reconstruct surface".to_string(),
         ));
     }
+
+    info!(
+        "applying bounds to mesh of {} vertices and {} faces",
+        mesh.vertices.len(),
+        mesh.triangles.len()
+    );
     mesh.apply_bounds(point_cloud_params);
 
-    eprintln!("writing resulting view...");
+    info!(
+        "writing mesh of {} vertices and {} faces...",
+        mesh.vertices.len(),
+        mesh.triangles.len()
+    );
+
     use std::io::Write;
     let mut file =
         std::fs::File::create("/Users/ababo/Desktop/foo.obj").unwrap();
@@ -119,6 +138,7 @@ pub fn build_view(
         .unwrap();
     }
 
+    info!("done");
     Ok(())
 }
 

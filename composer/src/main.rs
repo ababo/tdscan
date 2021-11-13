@@ -9,6 +9,10 @@ mod point_cloud;
 mod poisson;
 mod select;
 
+use log::error;
+use simplelog::{
+    ColorChoice, Config as LogConfig, LevelFilter, TermLogger, TerminalMode,
+};
 use structopt::StructOpt;
 
 #[derive(StructOpt)]
@@ -31,6 +35,14 @@ enum Command {
 }
 
 fn main() {
+    TermLogger::init(
+        LevelFilter::Info,
+        LogConfig::default(),
+        TerminalMode::Stderr,
+        ColorChoice::Auto,
+    )
+    .unwrap();
+
     let opts: Opts = Opts::from_args();
 
     let res = match opts.command {
@@ -52,7 +64,7 @@ fn main() {
     };
 
     if let Err(err) = res {
-        eprintln!("error: {}", err);
+        error!("{}", err);
         std::process::exit(1);
     }
 }

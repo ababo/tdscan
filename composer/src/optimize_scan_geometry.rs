@@ -9,6 +9,7 @@ use argmin::core::{
 };
 use argmin::solver::gradientdescent::SteepestDescent;
 use argmin::solver::linesearch::MoreThuenteLineSearch;
+use log::info;
 use structopt::StructOpt;
 
 use crate::misc::{
@@ -76,6 +77,7 @@ pub fn optimize_scan_geometry(
     point_cloud_params: &PointCloudParams,
     writer: &mut dyn fm::Write,
 ) -> Result<()> {
+    info!("reading scans...");
     let (scans, scan_frames) = read_scans(reader, scan_params)?;
 
     let opt = ScanOpt {
@@ -99,6 +101,7 @@ pub fn optimize_scan_geometry(
         init_params.push(scan.camera_up_angle);
     }
 
+    info!("starting more-thuente line search...");
     let linesearch = MoreThuenteLineSearch::new();
     let solver = SteepestDescent::new(linesearch);
     let observer = Observer(scans.keys().cloned().collect());
@@ -109,6 +112,8 @@ pub fn optimize_scan_geometry(
 
     match res {
         Ok(ares) => {
+            info!("writing scans with updated geometry...");
+
             let opt = ares.operator;
             let (scans, _) = opt.apply_params(&ares.state.best_param);
 
@@ -125,6 +130,7 @@ pub fn optimize_scan_geometry(
                 })?;
             }
 
+            info!("done");
             Ok(())
         }
         Err(err) => {
@@ -243,26 +249,29 @@ impl<'a> Observe<ScanOpt<'a>> for Observer {
         state: &IterState<ScanOpt>,
         _kv: &ArgminKV,
     ) -> StdResult<(), ArgminError> {
-        eprint!("{} {}", state.iter, state.best_cost);
+        let mut params = String::new();
         for (i, scan) in self.0.iter().enumerate() {
             let base = i * 7;
-            eprint!(
+            params += &format!(
                 " -y {}={},{},{}",
                 scan,
                 state.best_param[base],
                 state.best_param[base + 1],
                 state.best_param[base + 2]
             );
-            eprint!(
+            params += &format!(
                 " -c {}={},{},{}",
                 scan,
                 state.best_param[base + 3],
                 state.best_param[base + 4],
                 state.best_param[base + 5]
             );
-            eprint!(" -l {}={}", scan, state.best_param[base + 6]);
+            params += &format!(" -l {}={}", scan, state.best_param[base + 6]);
         }
-        eprintln!();
+        info!(
+            "iter {}, best {}, params{}",
+            state.iter, state.best_cost, params
+        );
         Ok(())
     }
 }

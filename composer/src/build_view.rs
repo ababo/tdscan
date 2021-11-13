@@ -152,7 +152,7 @@ struct Mesh {
 impl Mesh {
     fn apply_bounds(&mut self, params: &PointCloudParams) {
         assert_eq!(self.vertices.len(), self.normals.len());
-        let mut mappings = HashMap::new();
+        let mut mappings = HashMap::with_capacity(self.vertices.len());
 
         let mut j = 0;
         for i in 0..self.vertices.len() {

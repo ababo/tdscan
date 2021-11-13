@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 use std::f64::INFINITY;
 
-use kdtree::distance::squared_euclidean;
-use kdtree::KdTree;
+use kiddo::distance::squared_euclidean;
+use kiddo::KdTree;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use structopt::StructOpt;
@@ -205,7 +205,7 @@ pub fn distance_between_point_clouds(
     a: &[PointNormal],
     b: &[PointNormal],
 ) -> Option<f64> {
-    let mut kdtree = KdTree::new(3);
+    let mut kdtree = KdTree::new();
     for (i, p) in a.iter().enumerate() {
         kdtree.add(p.0.coords.as_ref(), i).unwrap();
     }
@@ -256,9 +256,9 @@ fn remove_outliers(
         return;
     }
 
-    let mut kdtree = KdTree::new(3);
+    let mut kdtree = KdTree::with_capacity(200).unwrap();
     for point in clouds.iter().flatten() {
-        kdtree.add(*point.0.coords.as_ref(), ()).unwrap();
+        kdtree.add(point.0.coords.as_ref(), ()).unwrap();
     }
 
     let mut avgs = Vec::with_capacity(num_points);

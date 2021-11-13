@@ -391,7 +391,7 @@ dependencies = [
  "argmin",
  "base",
  "cc",
- "kdtree",
+ "kiddo",
  "nalgebra",
  "num",
  "rand",
@@ -690,10 +690,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "kdtree"
-version = "0.6.0"
+name = "kiddo"
+version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "80ee359328fc9087e9e3fc0a4567c4dd27ec69a127d6a70e8d9dd22845b8b1a2"
+checksum = "0cec531b34cbab36f2d79f3025ee09d0a714a013b9a1a1f2ea39ef79890dd69e"
 dependencies = [
  "num-traits",
 ]

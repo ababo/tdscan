@@ -13,7 +13,7 @@ zip = "0.5"
 [dependencies]
 argmin = "0.4.7"
 base = { path = "../base" }
-kdtree = "0.6.0"
+kiddo = "0.1.6"
 nalgebra = "0.29.0"
 num = "0.4"
 rand = "0.8.4"

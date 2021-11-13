@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 use structopt::StructOpt;
@@ -7,7 +8,8 @@ use crate::misc::{
     ScanParams,
 };
 use crate::point_cloud::{
-    build_frame_clouds, Point3, PointCloudParams, PointNormal, Vector3,
+    build_frame_clouds, validate_point_bounds, Point3, PointCloudParams,
+    PointNormal, Vector3,
 };
 use crate::poisson;
 use base::defs::{Error, ErrorKind, Result};
@@ -148,10 +150,34 @@ struct Mesh {
 }
 
 impl Mesh {
-    fn apply_bounds(&mut self, _params: &PointCloudParams) {
+    fn apply_bounds(&mut self, params: &PointCloudParams) {
         assert_eq!(self.vertices.len(), self.normals.len());
+        let mut mappings = HashMap::new();
 
-        // TODO: implement this.
+        let mut j = 0;
+        for i in 0..self.vertices.len() {
+            if validate_point_bounds(params, &self.vertices[i]) {
+                mappings.insert(i, j);
+                self.vertices.swap(i, j);
+                self.normals.swap(i, j);
+                j += 1;
+            }
+        }
+        self.vertices.truncate(j);
+        self.normals.truncate(j);
+
+        let mut j = 0;
+        'next: for i in 0..self.triangles.len() {
+            for k in 0..self.triangles[i].len() {
+                if let Some(l) = mappings.get(&self.triangles[i][k]) {
+                    self.triangles[j][k] = *l;
+                } else {
+                    continue 'next;
+                }
+            }
+            j += 1;
+        }
+        self.triangles.truncate(j);
     }
 }
 

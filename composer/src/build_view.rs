@@ -91,12 +91,6 @@ pub fn build_view(
             "failed to reconstruct surface".to_string(),
         ));
     }
-
-    info!(
-        "applying bounds to mesh of {} vertices and {} faces",
-        mesh.vertices.len(),
-        mesh.triangles.len()
-    );
     mesh.apply_bounds(point_cloud_params);
 
     info!(

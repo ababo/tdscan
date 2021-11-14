@@ -334,20 +334,24 @@ mod test {
 
     use base::assert_eq_f32;
 
+    fn new_point_normal(x: f64, y: f64, z: f64) -> PointNormal {
+        PointNormal(Point3::new(x, y, z), Vector3::new(0.0, 0.0, 0.0))
+    }
+
     #[test]
     fn test_distance_between_point_clouds() {
         assert_eq!(distance_between_point_clouds(&vec![], &vec![]), None);
 
         let a = vec![
-            Point3::new(1.0, 0.0, 0.0),
-            Point3::new(5.0, 0.0, 0.0),
-            Point3::new(9.0, 0.0, 0.0),
-            Point3::new(15.0, 0.0, 0.0),
+            new_point_normal(1.0, 0.0, 0.0),
+            new_point_normal(5.0, 0.0, 0.0),
+            new_point_normal(9.0, 0.0, 0.0),
+            new_point_normal(15.0, 0.0, 0.0),
         ];
         let b = vec![
-            Point3::new(6.0, 0.0, 0.0),
-            Point3::new(10.0, 0.0, 0.0),
-            Point3::new(21.0, 0.0, 0.0),
+            new_point_normal(6.0, 0.0, 0.0),
+            new_point_normal(10.0, 0.0, 0.0),
+            new_point_normal(21.0, 0.0, 0.0),
         ];
         assert_eq_f32!(distance_between_point_clouds(&a, &b).unwrap(), 1.0);
     }

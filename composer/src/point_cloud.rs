@@ -44,6 +44,14 @@ pub struct PointCloudParams {
     pub max_z_distance: f32,
 
     #[structopt(
+        help = "Number of neighbors for normal smoothing",
+        long,
+        short = "m",
+        default_value = "0"
+    )]
+    pub normal_num_neighbors: usize,
+
+    #[structopt(
         help = "Number of neighbors for outlier removal",
         long,
         default_value = "20"
@@ -198,6 +206,8 @@ pub fn build_frame_clouds(
         params.outlier_std_ratio as f64,
     );
 
+    smooth_normals(&mut clouds, params.normal_num_neighbors);
+
     clouds
 }
 
@@ -294,6 +304,38 @@ fn remove_outliers(
                 j += 1;
             }
             k += 1;
+        }
+        points.truncate(j);
+    }
+}
+
+fn smooth_normals(clouds: &mut [Vec<PointNormal>], num_neighbors: usize) {
+    if num_neighbors == 0 {
+        return;
+    }
+
+    let mut kdtree = KdTree::with_capacity(200).unwrap();
+    for point in clouds.iter().flatten() {
+        kdtree.add(point.0.coords.as_ref(), point.1).unwrap();
+    }
+
+    for points in clouds.iter_mut() {
+        let mut j = 0;
+        for i in 0..points.len() {
+            let nearest = kdtree
+                .nearest(
+                    points[i].0.coords.as_ref(),
+                    1 + num_neighbors,
+                    &squared_euclidean,
+                )
+                .unwrap();
+            let normal =
+                nearest.iter().map(|p| p.1).sum::<Vector3>().normalize();
+            if !normal.iter().cloned().any(f64::is_nan) {
+                points[i].1 = normal;
+                points.swap(i, j);
+                j += 1;
+            }
         }
         points.truncate(j);
     }

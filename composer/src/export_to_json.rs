@@ -1,5 +1,5 @@
 use std::io;
-use std::io::stdout;
+use std::io::{BufWriter, stdout};
 use std::path::PathBuf;
 
 use serde::ser::Serialize;
@@ -40,7 +40,8 @@ pub fn export_to_json_with_params(params: &ExportToJsonParams) -> Result<()> {
     let mut reader = fm_reader_from_file_or_stdin(&params.in_path)?;
 
     let mut writer = if let Some(path) = &params.out_path {
-        Box::new(fs::create_file(path)?) as Box<dyn io::Write>
+        let writer = BufWriter::new(fs::create_file(path)?);
+        Box::new(writer) as Box<dyn io::Write>
     } else {
         Box::new(stdout()) as Box<dyn io::Write>
     };

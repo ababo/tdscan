@@ -252,9 +252,12 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     if frame.image != nil {
       var img = UIImage(cgImage: frame.image!)
       if scan!.trueDepth {
+        let orientation: UIImage.Orientation =
+          UIDevice.current.orientation.isPortrait
+          ? .downMirrored : .upMirrored
         img = UIImage(
           cgImage: img.cgImage!,
-          scale: img.scale, orientation: .upMirrored)
+          scale: img.scale, orientation: orientation)
         UIGraphicsBeginImageContextWithOptions(img.size, true, img.scale)
         defer { UIGraphicsEndImageContext() }
         img.draw(in: CGRect(origin: .zero, size: img.size))
@@ -263,24 +266,34 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
       png = [UInt8](img.pngData()!)
     }
 
-    if scan!.trueDepth && UIDevice.current.orientation.isPortrait {
-      var tmp = [Float32](repeating: 0, count: frame.depthWidth)
-      for i in 0..<frame.depthHeight / 2 {
-        let j = frame.depthHeight - i - 1
-        frame.depths.withUnsafeMutableBufferPointer { depthPtr in
-          tmp.withUnsafeMutableBufferPointer { tmpPtr in
-            memcpy(
-              tmpPtr.baseAddress,
-              depthPtr.baseAddress! + i * frame.depthWidth,
-              frame.depthWidth * 4)
-            memcpy(
-              depthPtr.baseAddress! + i * frame.depthWidth,
-              depthPtr.baseAddress! + j * frame.depthWidth,
-              frame.depthWidth * 4)
-            memcpy(
-              depthPtr.baseAddress! + j * frame.depthWidth,
-              tmpPtr.baseAddress,
-              frame.depthWidth * 4)
+    if scan!.trueDepth {
+      if UIDevice.current.orientation.isPortrait {
+        var tmp = [Float32](repeating: 0, count: frame.depthWidth)
+        for i in 0..<frame.depthHeight / 2 {
+          let j = frame.depthHeight - i - 1
+          frame.depths.withUnsafeMutableBufferPointer { depthPtr in
+            tmp.withUnsafeMutableBufferPointer { tmpPtr in
+              memcpy(
+                tmpPtr.baseAddress,
+                depthPtr.baseAddress! + i * frame.depthWidth,
+                frame.depthWidth * 4)
+              memcpy(
+                depthPtr.baseAddress! + i * frame.depthWidth,
+                depthPtr.baseAddress! + j * frame.depthWidth,
+                frame.depthWidth * 4)
+              memcpy(
+                depthPtr.baseAddress! + j * frame.depthWidth,
+                tmpPtr.baseAddress,
+                frame.depthWidth * 4)
+            }
+          }
+        }
+      } else {
+        for i in 0..<frame.depthHeight {
+          for j in 0..<frame.depthWidth / 2 {
+            let base = i * frame.depthWidth
+            let k = frame.depthWidth - j - 1
+            frame.depths.swapAt(base + j, base + k)
           }
         }
       }

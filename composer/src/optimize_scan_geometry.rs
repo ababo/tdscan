@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::f32::consts::PI;
 use std::path::PathBuf;
 use std::result::Result as StdResult;
@@ -19,7 +19,7 @@ use crate::misc::{
 use crate::point_cloud::{
     build_frame_clouds, distance_between_point_clouds, PointCloudParams,
 };
-use base::defs::{Error, ErrorKind, Result};
+use base::defs::{Error, ErrorKind::*, Result};
 use base::fm;
 
 #[derive(StructOpt)]
@@ -38,6 +38,14 @@ pub struct OptimizeScanGeometryParams {
 
     #[structopt(flatten)]
     scan_params: ScanParams,
+
+    #[structopt(
+        help = "Target scan to optimize (all scans if not specified)",
+        long = "target-scan",
+        number_of_values = 1,
+        short = "s"
+    )]
+    pub target_scans: Vec<String>,
 
     #[structopt(flatten)]
     point_cloud_params: PointCloudParams,
@@ -61,10 +69,14 @@ pub fn optimize_scan_geometry_with_params(
     let mut writer =
         fm_writer_to_file_or_stdout(&params.out_path, &params.fm_write_params)?;
 
+    let target_scans: HashSet<_> =
+        params.target_scans.iter().cloned().collect();
+
     optimize_scan_geometry(
         reader.as_mut(),
         params.num_iters,
         &params.scan_params,
+        &target_scans,
         &params.point_cloud_params,
         writer.as_mut(),
     )
@@ -74,20 +86,37 @@ pub fn optimize_scan_geometry(
     reader: &mut dyn fm::Read,
     num_iters: usize,
     scan_params: &ScanParams,
+    target_scans: &HashSet<String>,
     point_cloud_params: &PointCloudParams,
     writer: &mut dyn fm::Write,
 ) -> Result<()> {
     info!("reading scans...");
     let (scans, scan_frames) = read_scans(reader, scan_params)?;
 
+    let optimized: Vec<_> = if target_scans.is_empty() {
+        scans.keys().cloned().collect()
+    } else {
+        if let Some(target) = target_scans
+            .iter()
+            .find(|t| !scans.contains_key(t.as_str()))
+        {
+            let desc = format!("unknown target scan '{}'", target);
+            return Err(Error::new(InconsistentState, desc));
+        }
+        target_scans.iter().cloned().collect()
+    };
+
     let opt = ScanOpt {
         point_cloud_params,
         scans: &scans,
         scan_frames: &scan_frames,
+        optimized: optimized.clone(),
     };
 
     let mut init_params: Vec<f32> = Vec::new();
-    for scan in scans.values() {
+    for target in optimized.iter() {
+        let scan = scans.get(target).unwrap();
+
         let pos = scan.camera_initial_position.unwrap();
         init_params.push(pos.x);
         init_params.push(pos.y);
@@ -104,7 +133,7 @@ pub fn optimize_scan_geometry(
     info!("starting more-thuente line search...");
     let linesearch = MoreThuenteLineSearch::new();
     let solver = SteepestDescent::new(linesearch);
-    let observer = Observer(scans.keys().cloned().collect());
+    let observer = Observer(optimized);
     let res = Executor::new(opt, solver, init_params)
         .add_observer(observer, ObserverMode::NewBest)
         .max_iters(num_iters as u64)
@@ -135,7 +164,7 @@ pub fn optimize_scan_geometry(
         }
         Err(err) => {
             let desc = format!("failed to find scan geometry optimum: {}", err);
-            Err(Error::new(ErrorKind::ArgminError, desc))
+            Err(Error::new(ArgminError, desc))
         }
     }
 }
@@ -144,6 +173,7 @@ struct ScanOpt<'a> {
     point_cloud_params: &'a PointCloudParams,
     scans: &'a BTreeMap<String, fm::Scan>,
     scan_frames: &'a Vec<fm::ScanFrame>,
+    optimized: Vec<String>,
 }
 
 impl<'a> ScanOpt<'a> {
@@ -158,9 +188,10 @@ impl<'a> ScanOpt<'a> {
         let check_angle =
             |init: f32, val: f32| (val - init).abs() < 10.0 * PI / 180.0;
 
-        for (i, scan) in scans.values_mut().enumerate() {
+        for (i, target) in self.optimized.iter().enumerate() {
             let base = i * 7;
 
+            let scan = scans.get_mut(target).unwrap();
             let pos = scan.camera_initial_position.as_mut().unwrap();
             let dir = scan.camera_initial_direction.as_mut().unwrap();
 
@@ -250,23 +281,23 @@ impl<'a> Observe<ScanOpt<'a>> for Observer {
         _kv: &ArgminKV,
     ) -> StdResult<(), ArgminError> {
         let mut params = String::new();
-        for (i, scan) in self.0.iter().enumerate() {
+        for (i, target) in self.0.iter().enumerate() {
             let base = i * 7;
             params += &format!(
                 " -y {}={},{},{}",
-                scan,
+                target,
                 state.best_param[base],
                 state.best_param[base + 1],
                 state.best_param[base + 2]
             );
             params += &format!(
                 " -c {}={},{},{}",
-                scan,
+                target,
                 state.best_param[base + 3],
                 state.best_param[base + 4],
                 state.best_param[base + 5]
             );
-            params += &format!(" -l {}={}", scan, state.best_param[base + 6]);
+            params += &format!(" -l {}={}", target, state.best_param[base + 6]);
         }
         info!(
             "iter {}, best {}, params{}",

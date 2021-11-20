@@ -13,7 +13,7 @@ use crate::point_cloud::{
     PointNormal, Vector3,
 };
 use crate::poisson;
-use base::defs::{Error, ErrorKind, Result};
+use base::defs::{Error, ErrorKind::*, Result};
 use base::fm;
 
 #[derive(StructOpt)]
@@ -87,7 +87,7 @@ pub fn build_view(
     );
     if !poisson::reconstruct(poisson_params, &cloud, &mut mesh) {
         return Err(Error::new(
-            ErrorKind::PoissonError,
+            PoissonError,
             "failed to reconstruct surface".to_string(),
         ));
     }

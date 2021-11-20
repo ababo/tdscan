@@ -132,14 +132,14 @@ pub struct ScanParams {
     #[structopt(
         help = "Drop scan depths",
         long = "drop-depths",
-        number_of_values = 1,
+        number_of_values = 1
     )]
     pub drop_depths: Vec<String>,
 
     #[structopt(
         help = "Drop scan images",
         long = "drop-images",
-        number_of_values = 1,
+        number_of_values = 1
     )]
     pub drop_images: Vec<String>,
 
@@ -195,11 +195,10 @@ pub fn read_scans(
     }
 
     let unknown_scan_err = |name| {
-        let desc = format!(
-            "unknown scan '{}' for camera initial position override",
-            name
-        );
-        Err(Error::new(InconsistentState, desc))
+        Err(Error::new(
+            InconsistentState,
+            format!("unknown scan '{}' specified", name),
+        ))
     };
 
     for (name, eye) in scan_params.camera_initial_positions.iter() {

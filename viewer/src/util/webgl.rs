@@ -6,7 +6,7 @@ use web_sys::{
     WebGlProgram, WebGlRenderingContext, WebGlShader, WebGlUniformLocation,
 };
 
-use base::defs::{Error, ErrorKind::WebGlError, Result};
+use base::defs::{Error, ErrorKind::*, Result};
 
 pub fn compile_shader(
     context: &WebGlRenderingContext,

@@ -1,7 +1,7 @@
 use js_sys::Error as JsError;
 use wasm_bindgen::{JsCast, JsValue};
 
-use base::defs::{Error, ErrorKind, Result};
+use base::defs::{Error, ErrorKind::*, Result};
 
 pub type JsResult<T> = std::result::Result<T, JsValue>;
 
@@ -13,7 +13,7 @@ pub fn jsval_to_err(value: JsValue) -> Error {
     } else {
         format!("{:?}", value)
     };
-    Error::new(ErrorKind::JsError, format!("{:?}", desc))
+    Error::new(JsError, format!("{:?}", desc))
 }
 
 pub trait IntoResult<T> {

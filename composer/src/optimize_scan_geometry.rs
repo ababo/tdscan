@@ -1,5 +1,4 @@
 use std::collections::{BTreeMap, HashSet};
-use std::f32::consts::PI;
 use std::path::PathBuf;
 use std::result::Result as StdResult;
 
@@ -9,7 +8,7 @@ use argmin::core::{
 };
 use argmin::solver::gradientdescent::SteepestDescent;
 use argmin::solver::linesearch::MoreThuenteLineSearch;
-use log::info;
+use log::{info, warn};
 use structopt::StructOpt;
 
 use crate::misc::{
@@ -27,6 +26,16 @@ use base::fm;
 pub struct OptimizeScanGeometryParams {
     #[structopt(help = "Input scan .fm file (STDIN if omitted)")]
     in_path: Option<PathBuf>,
+
+    #[structopt(help = "Angle variability range", long, default_value = "0.2")]
+    angle_range: f32,
+
+    #[structopt(
+        help = "Distance variability range",
+        long,
+        default_value = "0.1"
+    )]
+    distance_range: f32,
 
     #[structopt(
         help = "Number of iterations",
@@ -74,6 +83,8 @@ pub fn optimize_scan_geometry_with_params(
 
     optimize_scan_geometry(
         reader.as_mut(),
+        params.angle_range,
+        params.distance_range,
         params.num_iters,
         &params.scan_params,
         &target_scans,
@@ -82,8 +93,11 @@ pub fn optimize_scan_geometry_with_params(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn optimize_scan_geometry(
     reader: &mut dyn fm::Read,
+    angle_range: f32,
+    distance_range: f32,
     num_iters: usize,
     scan_params: &ScanParams,
     target_scans: &HashSet<String>,
@@ -111,6 +125,8 @@ pub fn optimize_scan_geometry(
         scans: &scans,
         scan_frames: &scan_frames,
         optimized: optimized.clone(),
+        angle_range,
+        distance_range,
     };
 
     let mut init_params: Vec<f32> = Vec::new();
@@ -174,6 +190,8 @@ struct ScanOpt<'a> {
     scans: &'a BTreeMap<String, fm::Scan>,
     scan_frames: &'a Vec<fm::ScanFrame>,
     optimized: Vec<String>,
+    angle_range: f32,
+    distance_range: f32,
 }
 
 impl<'a> ScanOpt<'a> {
@@ -184,9 +202,10 @@ impl<'a> ScanOpt<'a> {
         let mut scans = self.scans.clone();
         let mut ok = true;
 
-        let check_distance = |init: f32, val: f32| (val - init).abs() < 0.1;
         let check_angle =
-            |init: f32, val: f32| (val - init).abs() < 10.0 * PI / 180.0;
+            |init: f32, val: f32| (val - init).abs() < self.angle_range;
+        let check_distance =
+            |init: f32, val: f32| (val - init).abs() < self.distance_range;
 
         for (i, target) in self.optimized.iter().enumerate() {
             let base = i * 7;
@@ -202,6 +221,9 @@ impl<'a> ScanOpt<'a> {
                 & check_distance(dir.y, params[base + 4])
                 & check_distance(dir.z, params[base + 5])
                 & check_angle(scan.camera_up_angle, params[base + 6]);
+            if !ok {
+                warn!("params out of bounds");
+            }
 
             pos.x = params[base];
             pos.y = params[base + 1];

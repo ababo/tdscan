@@ -2,17 +2,20 @@ use std::path::PathBuf;
 
 use structopt::StructOpt;
 
-use crate::misc::{fm_reader_from_file_or_stdin, fm_writer_to_file_or_stdout};
 use crate::misc::{lua_err_to_err, lua_table_from_record};
 use base::defs::Result;
 use base::fm;
+use base::util::cli;
 use base::util::fs;
 
 #[derive(StructOpt)]
 #[structopt(about = "Select records from .fm file")]
-pub struct SelectParams {
-    #[structopt(help = "Input .fm file (STDIN if omitted)")]
-    in_path: Option<PathBuf>,
+pub struct SelectCommand {
+    #[structopt(flatten)]
+    input: cli::FmInput,
+
+    #[structopt(flatten)]
+    output: cli::FmOutput,
 
     #[structopt(
         help = "Lua predicate expression",
@@ -45,45 +48,38 @@ pub struct SelectParams {
         conflicts_with = "no-rec-decoding",
     )]
     truncate_len: Option<usize>,
-
-    #[structopt(
-        help = "Output .fm file (STDOUT if omitted)",
-        long,
-        short = "o"
-    )]
-    out_path: Option<PathBuf>,
-
-    #[structopt(flatten)]
-    fm_write_params: fm::WriterParams,
 }
 
-pub fn select_with_params(params: &SelectParams) -> Result<()> {
-    let mut reader = fm_reader_from_file_or_stdin(&params.in_path)?;
+impl SelectCommand {
+    pub fn run(&self) -> Result<()> {
+        let mut reader = self.input.get()?;
+        let mut writer = self.output.get()?;
 
-    let predicate = if let Some(path) = &params.predicate_path {
-        fs::read_file_to_string(path)?
-    } else {
-        params.predicate.as_ref().unwrap().to_string()
-    };
+        let predicate = if let Some(path) = &self.predicate_path {
+            fs::read_file_to_string(path)?
+        } else {
+            self.predicate.as_ref().unwrap().to_string()
+        };
 
-    let mut writer =
-        fm_writer_to_file_or_stdout(&params.out_path, &params.fm_write_params)?;
-
-    select(
-        reader.as_mut(),
-        &predicate,
-        params.no_rec_decoding,
-        params.truncate_len,
-        writer.as_mut(),
-    )
+        select(
+            reader.as_mut(),
+            writer.as_mut(),
+            &predicate,
+            self.no_rec_decoding,
+            self.truncate_len,
+        )
+    }
 }
+
+#[derive(StructOpt)]
+pub struct SelectParams {}
 
 pub fn select(
     reader: &mut dyn fm::Read,
+    writer: &mut dyn fm::Write,
     predicate: &str,
     no_rec_decoding: bool,
     truncate_len: Option<usize>,
-    writer: &mut dyn fm::Write,
 ) -> Result<()> {
     let lua = rlua::Lua::new();
     let mut num = 1;
@@ -147,10 +143,10 @@ mod tests {
         let mut writer = create_writer();
         select(
             &mut reader,
+            &mut writer,
             predicate,
             no_rec_decoding,
             truncate_len,
-            &mut writer,
         )
         .unwrap();
         writer_to_reader(writer)

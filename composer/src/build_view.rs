@@ -1,71 +1,59 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
 
 use log::info;
 use structopt::StructOpt;
 
-use crate::misc::{
-    fm_reader_from_file_or_stdin, fm_writer_to_file_or_stdout, read_scans,
-    ScanParams,
-};
 use crate::point_cloud::{
     build_frame_clouds, validate_point_bounds, Point3, PointCloudParams,
     PointNormal, Vector3,
 };
 use crate::poisson;
+use crate::scan::{read_scans, ScanParams};
 use base::defs::{Error, ErrorKind::*, Result};
 use base::fm;
+use base::util::cli;
 
 #[derive(StructOpt)]
 #[structopt(about = "Build element view from scan .fm file")]
-pub struct BuildViewParams {
-    #[structopt(help = "Input scan .fm file (STDIN if omitted)")]
-    in_path: Option<PathBuf>,
+pub struct BuildViewCommand {
+    #[structopt(flatten)]
+    input: cli::FmInput,
 
     #[structopt(flatten)]
-    scan_params: ScanParams,
+    output: cli::FmOutput,
 
     #[structopt(flatten)]
-    point_cloud_params: PointCloudParams,
-
-    #[structopt(flatten)]
-    poisson_params: poisson::Params,
-
-    #[structopt(
-        help = "Output element view .fm file (STDOUT if omitted)",
-        long,
-        short = "o"
-    )]
-    out_path: Option<PathBuf>,
-
-    #[structopt(flatten)]
-    fm_write_params: fm::WriterParams,
+    params: BuildViewParams,
 }
 
-pub fn build_view_with_params(params: &BuildViewParams) -> Result<()> {
-    let mut reader = fm_reader_from_file_or_stdin(&params.in_path)?;
+impl BuildViewCommand {
+    pub fn run(&self) -> Result<()> {
+        let mut reader = self.input.get()?;
+        let mut writer = self.output.get()?;
 
-    let mut writer =
-        fm_writer_to_file_or_stdout(&params.out_path, &params.fm_write_params)?;
+        build_view(reader.as_mut(), writer.as_mut(), &self.params)
+    }
+}
 
-    build_view(
-        reader.as_mut(),
-        &params.scan_params,
-        &params.point_cloud_params,
-        &params.poisson_params,
-        writer.as_mut(),
-    )
+#[derive(StructOpt)]
+pub struct BuildViewParams {
+    #[structopt(flatten)]
+    pub scan: ScanParams,
+
+    #[structopt(flatten)]
+    pub point_cloud: PointCloudParams,
+
+    #[structopt(flatten)]
+    pub poisson: poisson::Params,
 }
 
 pub fn build_view(
     reader: &mut dyn fm::Read,
-    scan_params: &ScanParams,
-    point_cloud_params: &PointCloudParams,
-    poisson_params: &poisson::Params,
     _writer: &mut dyn fm::Write,
+    params: &BuildViewParams,
 ) -> Result<()> {
     info!("reading scans...");
-    let (scans, scan_frames) = read_scans(reader, scan_params)?;
+    let (scans, scan_frames) = read_scans(reader, &params.scan)?;
 
     info!(
         "building point clouds from {} scans ({} frames)...",
@@ -73,7 +61,7 @@ pub fn build_view(
         scan_frames.len()
     );
     let cloud = Cloud(
-        build_frame_clouds(&scans, &scan_frames, point_cloud_params)
+        build_frame_clouds(&scans, &scan_frames, &params.point_cloud)
             .into_iter()
             .flatten()
             .collect(),
@@ -85,13 +73,13 @@ pub fn build_view(
         "reconstructing mesh from cloud of {} points...",
         cloud.0.len()
     );
-    if !poisson::reconstruct(poisson_params, &cloud, &mut mesh) {
+    if !poisson::reconstruct(&params.poisson, &cloud, &mut mesh) {
         return Err(Error::new(
             PoissonError,
             "failed to reconstruct surface".to_string(),
         ));
     }
-    mesh.apply_bounds(point_cloud_params);
+    mesh.apply_bounds(&params.point_cloud);
 
     info!(
         "writing mesh of {} vertices and {} faces...",

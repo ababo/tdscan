@@ -1,5 +1,4 @@
-use std::collections::{BTreeMap, HashSet};
-use std::path::PathBuf;
+use std::collections::{BTreeMap};
 use std::result::Result as StdResult;
 
 use argmin::core::{
@@ -11,22 +10,42 @@ use argmin::solver::linesearch::MoreThuenteLineSearch;
 use log::{info, warn};
 use structopt::StructOpt;
 
-use crate::misc::{
-    fm_reader_from_file_or_stdin, fm_writer_to_file_or_stdout, read_scans,
-    ScanParams,
-};
 use crate::point_cloud::{
     build_frame_clouds, distance_between_point_clouds, PointCloudParams,
 };
+use crate::scan::{read_scans, ScanParams};
 use base::defs::{Error, ErrorKind::*, Result};
 use base::fm;
+use base::util::cli;
 
 #[derive(StructOpt)]
 #[structopt(about = "Optimize scan geometry parameters")]
-pub struct OptimizeScanGeometryParams {
-    #[structopt(help = "Input scan .fm file (STDIN if omitted)")]
-    in_path: Option<PathBuf>,
+pub struct OptimizeScanGeometryCommand {
+    #[structopt(flatten)]
+    input: cli::FmInput,
 
+    #[structopt(flatten)]
+    output: cli::FmOutput,
+
+    #[structopt(flatten)]
+    params: OptimizeScanGeometryParams,
+}
+
+impl OptimizeScanGeometryCommand {
+    pub fn run(&self) -> Result<()> {
+        let mut reader = self.input.get()?;
+        let mut writer = self.output.get()?;
+
+        optimize_scan_geometry(
+            reader.as_mut(),
+            writer.as_mut(),
+            &self.params,
+        )
+    }
+}
+
+#[derive(StructOpt)]
+pub struct OptimizeScanGeometryParams {
     #[structopt(help = "Angle variability range", long, default_value = "0.2")]
     angle_range: f32,
 
@@ -46,7 +65,7 @@ pub struct OptimizeScanGeometryParams {
     num_iters: usize,
 
     #[structopt(flatten)]
-    scan_params: ScanParams,
+    scan: ScanParams,
 
     #[structopt(
         help = "Target scan to optimize (all scans if not specified)",
@@ -57,76 +76,38 @@ pub struct OptimizeScanGeometryParams {
     pub target_scans: Vec<String>,
 
     #[structopt(flatten)]
-    point_cloud_params: PointCloudParams,
-
-    #[structopt(
-        help = "Output scan view .fm file (STDOUT if omitted)",
-        long,
-        short = "o"
-    )]
-    out_path: Option<PathBuf>,
-
-    #[structopt(flatten)]
-    fm_write_params: fm::WriterParams,
-}
-
-pub fn optimize_scan_geometry_with_params(
-    params: &OptimizeScanGeometryParams,
-) -> Result<()> {
-    let mut reader = fm_reader_from_file_or_stdin(&params.in_path)?;
-
-    let mut writer =
-        fm_writer_to_file_or_stdout(&params.out_path, &params.fm_write_params)?;
-
-    let target_scans: HashSet<_> =
-        params.target_scans.iter().cloned().collect();
-
-    optimize_scan_geometry(
-        reader.as_mut(),
-        params.angle_range,
-        params.distance_range,
-        params.num_iters,
-        &params.scan_params,
-        &target_scans,
-        &params.point_cloud_params,
-        writer.as_mut(),
-    )
+    point_cloud: PointCloudParams,
 }
 
 #[allow(clippy::too_many_arguments)]
 pub fn optimize_scan_geometry(
     reader: &mut dyn fm::Read,
-    angle_range: f32,
-    distance_range: f32,
-    num_iters: usize,
-    scan_params: &ScanParams,
-    target_scans: &HashSet<String>,
-    point_cloud_params: &PointCloudParams,
     writer: &mut dyn fm::Write,
+    params: &OptimizeScanGeometryParams,
 ) -> Result<()> {
     info!("reading scans...");
-    let (scans, scan_frames) = read_scans(reader, scan_params)?;
+    let (scans, scan_frames) = read_scans(reader, &params.scan)?;
 
-    let optimized: Vec<_> = if target_scans.is_empty() {
+    let optimized: Vec<_> = if params.target_scans.is_empty() {
         scans.keys().cloned().collect()
     } else {
-        if let Some(target) = target_scans
+        if let Some(target) = params.target_scans
             .iter()
             .find(|t| !scans.contains_key(t.as_str()))
         {
             let desc = format!("unknown target scan '{}'", target);
             return Err(Error::new(InconsistentState, desc));
         }
-        target_scans.iter().cloned().collect()
+        params.target_scans.clone()
     };
 
     let opt = ScanOpt {
-        point_cloud_params,
+        point_cloud_params: &params.point_cloud,
         scans: &scans,
         scan_frames: &scan_frames,
         optimized: optimized.clone(),
-        angle_range,
-        distance_range,
+        angle_range: params.angle_range,
+        distance_range: params.distance_range,
     };
 
     let mut init_params: Vec<f32> = Vec::new();
@@ -152,7 +133,7 @@ pub fn optimize_scan_geometry(
     let observer = Observer(optimized);
     let res = Executor::new(opt, solver, init_params)
         .add_observer(observer, ObserverMode::NewBest)
-        .max_iters(num_iters as u64)
+        .max_iters(params.num_iters as u64)
         .run();
 
     match res {

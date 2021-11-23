@@ -2,16 +2,19 @@ use std::path::PathBuf;
 
 use structopt::StructOpt;
 
-use crate::misc::{fm_reader_from_file_or_stdin, fm_writer_to_file_or_stdout};
 use base::defs::{Error, ErrorKind::*, Result};
 use base::fm;
 use base::util::fs;
+use base::util::cli;
 
 #[derive(StructOpt)]
 #[structopt(about = "Animate element using .lua script")]
-pub struct AnimateParams {
-    #[structopt(help = "Input .fm file (STDIN if omitted)")]
-    in_path: Option<PathBuf>,
+pub struct AnimateCommand {
+    #[structopt(flatten)]
+    input: cli::FmInput,
+
+    #[structopt(flatten)]
+    output: cli::FmOutput,
 
     #[structopt(help = "Input .lua animation script", short = "s")]
     script_path: PathBuf,
@@ -21,41 +24,31 @@ pub struct AnimateParams {
 
     #[structopt(help = "Number of iterations", short = "n")]
     num_iters: i64,
-
-    #[structopt(
-        help = "Output .fm file (STDOUT if omitted)",
-        long,
-        short = "o"
-    )]
-    out_path: Option<PathBuf>,
-
-    #[structopt(flatten)]
-    fm_write_params: fm::WriterParams,
 }
 
-pub fn animate_with_params(params: &AnimateParams) -> Result<()> {
-    let mut reader = fm_reader_from_file_or_stdin(&params.in_path)?;
+impl AnimateCommand {
+    pub fn run(&self) -> Result<()> {
+        let mut reader = self.input.get()?;
+        let mut writer = self.output.get()?;
 
-    let script = fs::read_file_to_string(&params.script_path)?;
+        let script = fs::read_file_to_string(&self.script_path)?;
 
-    let mut writer =
-        fm_writer_to_file_or_stdout(&params.out_path, &params.fm_write_params)?;
-
-    animate(
-        reader.as_mut(),
-        &script,
-        params.timestep,
-        params.num_iters,
-        writer.as_mut(),
-    )
+        animate(
+            reader.as_mut(),
+            writer.as_mut(),
+            &script,
+            self.timestep,
+            self.num_iters,
+        )
+    }
 }
 
 pub fn animate(
     reader: &mut dyn fm::Read,
+    writer: &mut dyn fm::Write,
     script: &str,
     timestep: i64,
     num_iters: i64,
-    writer: &mut dyn fm::Write,
 ) -> Result<()> {
     let (view, state) = read_element(reader)?;
 
@@ -226,7 +219,7 @@ mod tests {
         let mut reader = create_reader_with_records(&vec![]);
         let mut writer = create_writer();
         let err =
-            animate(&mut reader, EMPTY_SCRIPT, 1, 1, &mut writer).unwrap_err();
+            animate(&mut reader, &mut writer, EMPTY_SCRIPT, 1, 1).unwrap_err();
         assert_eq!(
             err.description.as_str(),
             "no element view as a first record"
@@ -242,7 +235,7 @@ mod tests {
         let mut reader = create_reader_with_records(&vec![view]);
         let mut writer = create_writer();
         let err =
-            animate(&mut reader, EMPTY_SCRIPT, 1, 1, &mut writer).unwrap_err();
+            animate(&mut reader, &mut writer, EMPTY_SCRIPT, 1, 1).unwrap_err();
         assert_eq!(
             err.description.as_str(),
             "no element view state as a second record"
@@ -264,7 +257,7 @@ mod tests {
         let mut reader = create_reader_with_records(&vec![view, state]);
         let mut writer = create_writer();
         let err =
-            animate(&mut reader, EMPTY_SCRIPT, 1, 1, &mut writer).unwrap_err();
+            animate(&mut reader, &mut writer, EMPTY_SCRIPT, 1, 1).unwrap_err();
         assert_eq!(err.description.as_str(), "view state of unknown element");
     }
 
@@ -313,7 +306,7 @@ mod tests {
 
         let mut writer = create_writer();
 
-        animate(&mut reader, script, 12, 2, &mut writer).unwrap();
+        animate(&mut reader, &mut writer, script, 12, 2).unwrap();
 
         let mut reader = writer_to_reader(writer);
 

@@ -1,28 +1,25 @@
 use std::io;
-use std::io::{BufWriter, stdout};
-use std::path::PathBuf;
 
 use serde::ser::Serialize;
 use serde_json::{to_value, to_writer, to_writer_pretty};
 use structopt::StructOpt;
 
-use crate::misc::{fm_reader_from_file_or_stdin, truncate_json_value};
+use crate::misc::truncate_json_value;
+use base::define_raw_output;
 use base::defs::{IntoResult, Result};
 use base::fm;
-use base::util::fs;
+use base::util::cli;
+
+define_raw_output!(JsonOutput, "json");
 
 #[derive(StructOpt)]
 #[structopt(about = "Export .fm file into JSON")]
-pub struct ExportToJsonParams {
-    #[structopt(help = "Input .fm file (STDIN if omitted)")]
-    in_path: Option<PathBuf>,
+pub struct ExportToJsonCommand {
+    #[structopt(flatten)]
+    input: cli::FmInput,
 
-    #[structopt(
-        help = "Output .json file (STDOUT if omitted)",
-        long,
-        short = "o"
-    )]
-    out_path: Option<PathBuf>,
+    #[structopt(flatten)]
+    output: JsonOutput,
 
     #[structopt(
         help = concat!("Maximum length for string, array ",
@@ -36,22 +33,18 @@ pub struct ExportToJsonParams {
     pretty: bool,
 }
 
-pub fn export_to_json_with_params(params: &ExportToJsonParams) -> Result<()> {
-    let mut reader = fm_reader_from_file_or_stdin(&params.in_path)?;
+impl ExportToJsonCommand {
+    pub fn run(&self) -> Result<()> {
+        let mut reader = self.input.get()?;
+        let mut writer = self.output.get()?;
 
-    let mut writer = if let Some(path) = &params.out_path {
-        let writer = BufWriter::new(fs::create_file(path)?);
-        Box::new(writer) as Box<dyn io::Write>
-    } else {
-        Box::new(stdout()) as Box<dyn io::Write>
-    };
-
-    export_to_json(
-        reader.as_mut(),
-        &mut writer,
-        params.truncate_len,
-        params.pretty,
-    )
+        export_to_json(
+            reader.as_mut(),
+            &mut writer,
+            self.truncate_len,
+            self.pretty,
+        )
+    }
 }
 
 pub fn export_to_json(

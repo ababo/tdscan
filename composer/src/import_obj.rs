@@ -6,77 +6,70 @@ use std::path::{Path, PathBuf};
 
 use structopt::StructOpt;
 
-use crate::misc::fm_writer_to_file_or_stdout;
+use base::define_raw_input;
 use base::defs::{Error, ErrorKind::*, Result};
 use base::fm;
+use base::util::cli;
 use base::util::fs;
+
+define_raw_input!(ObjInput, "obj");
 
 const MAX_NUM_FACE_VERTICES: usize = 10;
 
 #[derive(StructOpt)]
 #[structopt(about = "Import data from Wavefront .obj file")]
-pub struct ImportObjParams {
-    #[structopt(help = "Input .obj file (STDIN if omitted)")]
-    in_path: Option<PathBuf>,
+pub struct ImportObjCommand {
+    #[structopt(flatten)]
+    input: ObjInput,
 
     #[structopt(help = "Element ID for imported data", long, short = "e")]
     element: Option<String>,
 
-    #[structopt(
-        help = "Output .fm file (STDOUT if omitted)",
-        long,
-        short = "o"
-    )]
-    out_path: Option<PathBuf>,
-
     #[structopt(flatten)]
-    fm_write_params: fm::WriterParams,
+    output: cli::FmOutput,
 }
 
-pub fn import_obj_with_params(params: &ImportObjParams) -> Result<()> {
-    let mut reader = if let Some(path) = &params.in_path {
-        Box::new(fs::open_file(path)?) as Box<dyn io::Read>
-    } else {
-        Box::new(stdin()) as Box<dyn io::Read>
-    };
+impl ImportObjCommand {
+    pub fn run(&self) -> Result<()> {
+        let mut reader = self.input.get()?;
+        let mut writer = self.output.get()?;
 
-    let mut writer =
-        fm_writer_to_file_or_stdout(&params.out_path, &params.fm_write_params)?;
+        let element = if let Some(id) = &self.element {
+            id.clone()
+        } else if let Some(path) = &self.input.path {
+            path.file_stem()
+                .unwrap_or_default()
+                .to_str()
+                .unwrap_or_default()
+                .to_string()
+        } else {
+            String::default()
+        };
 
-    let element = if let Some(id) = &params.element {
-        id.clone()
-    } else if let Some(path) = &params.in_path {
-        path.file_stem()
-            .unwrap_or_default()
-            .to_str()
-            .unwrap_or_default()
-            .to_string()
-    } else {
-        String::default()
-    };
+        let mtl_dir = self
+            .input
+            .path
+            .as_deref()
+            .unwrap_or_else(|| ".".as_ref())
+            .parent()
+            .unwrap_or_else(|| ".".as_ref());
 
-    let mtl_dir = params
-        .in_path
-        .as_deref()
-        .unwrap_or_else(|| ".".as_ref())
-        .parent()
-        .unwrap_or_else(|| ".".as_ref());
-
-    #[allow(clippy::redundant_closure)]
-    import_obj(
-        &mut reader,
-        |p| fs::read_file(p),
-        mtl_dir,
-        writer.as_mut(),
-        element.as_str(),
-    )
+        #[allow(clippy::redundant_closure)]
+        import_obj(
+            &mut reader,
+            writer.as_mut(),
+            |p| fs::read_file(p),
+            mtl_dir,
+            element.as_str(),
+        )
+    }
 }
 
 pub fn import_obj<F: Fn(&Path) -> Result<Vec<u8>>>(
     reader: &mut dyn io::Read,
+    writer: &mut dyn fm::Write,
     read_file: F,
     mtl_dir: &Path,
-    writer: &mut dyn fm::Write,
     element: &str,
 ) -> Result<()> {
     let mut data = ImportData {
@@ -455,9 +448,9 @@ mod tests {
         let mut writer = create_writer();
         import_obj(
             &mut reader,
+            &mut writer,
             read_file,
             "obj-path".as_ref(),
-            &mut writer,
             "buzz",
         )
         .unwrap_err()
@@ -633,9 +626,9 @@ mod tests {
 
         import_obj(
             &mut reader,
+            &mut writer,
             read_file,
             "obj-path".as_ref(),
-            &mut writer,
             "buzz",
         )
         .unwrap();

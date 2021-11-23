@@ -7,6 +7,7 @@ mod misc;
 mod optimize_scan_geometry;
 mod point_cloud;
 mod poisson;
+mod scan;
 mod select;
 
 use log::error;
@@ -22,16 +23,17 @@ struct Opts {
     command: Command,
 }
 
-#[allow(clippy::large_enum_variant)]
 #[derive(StructOpt)]
 enum Command {
-    Animate(animate::AnimateParams),
-    BuildView(build_view::BuildViewParams),
-    Combine(combine::CombineParams),
-    ExportToJson(export_to_json::ExportToJsonParams),
-    ImportObj(import_obj::ImportObjParams),
-    OptimizeScanGeometry(optimize_scan_geometry::OptimizeScanGeometryParams),
-    Select(select::SelectParams),
+    Animate(Box<animate::AnimateCommand>),
+    BuildView(Box<build_view::BuildViewCommand>),
+    Combine(Box<combine::CombineCommand>),
+    ExportToJson(Box<export_to_json::ExportToJsonCommand>),
+    ImportObj(Box<import_obj::ImportObjCommand>),
+    OptimizeScanGeometry(
+        Box<optimize_scan_geometry::OptimizeScanGeometryCommand>,
+    ),
+    Select(Box<select::SelectCommand>),
 }
 
 fn main() {
@@ -45,22 +47,15 @@ fn main() {
 
     let opts: Opts = Opts::from_args();
 
+    use Command::*;
     let res = match opts.command {
-        Command::Animate(params) => animate::animate_with_params(&params),
-        Command::BuildView(params) => {
-            build_view::build_view_with_params(&params)
-        }
-        Command::Combine(params) => combine::combine_with_params(&params),
-        Command::ExportToJson(params) => {
-            export_to_json::export_to_json_with_params(&params)
-        }
-        Command::ImportObj(params) => {
-            import_obj::import_obj_with_params(&params)
-        }
-        Command::OptimizeScanGeometry(params) => {
-            optimize_scan_geometry::optimize_scan_geometry_with_params(&params)
-        }
-        Command::Select(params) => select::select_with_params(&params),
+        Animate(cmd) => cmd.run(),
+        BuildView(cmd) => cmd.run(),
+        Combine(cmd) => cmd.run(),
+        ExportToJson(cmd) => cmd.run(),
+        ImportObj(cmd) => cmd.run(),
+        OptimizeScanGeometry(cmd) => cmd.run(),
+        Select(cmd) => cmd.run(),
     };
 
     if let Err(err) = res {

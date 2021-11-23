@@ -1,106 +1,69 @@
 use std::cmp::{Eq, Ord, Ordering, Ordering::*, PartialEq, PartialOrd};
-use std::collections::HashMap;
-use std::io::stdin;
-use std::path::PathBuf;
 use std::result::Result as StdResult;
 
 use structopt::StructOpt;
 
-use crate::misc::fm_writer_to_file_or_stdout;
 use base::defs::Result;
 use base::fm;
+use base::util::cli;
 use base::util::cli::{parse_key_val, Array as CliArray};
-use base::util::fs;
 
 #[derive(StructOpt)]
 #[structopt(about = "Combine multiple .fm files")]
-pub struct CombineParams {
-    #[structopt(help = "Input .fm files")]
-    in_paths: Vec<PathBuf>,
+pub struct CombineCommand {
+    #[structopt(flatten)]
+    inputs: cli::FmInputs,
 
-    #[structopt(help="Element displacement in form 'element=dx,dy,dz'",
-            long = "displacement",
-            number_of_values = 1,
-            parse(try_from_str = parse_key_val),
-            short = "d"
-        )]
+    #[structopt(flatten)]
+    output: cli::FmOutput,
+
+    #[structopt(flatten)]
+    params: CombineParams,
+}
+
+impl CombineCommand {
+    pub fn run(&self) -> Result<()> {
+        let mut readers = self.inputs.get()?;
+        let mut writer = self.output.get()?;
+
+        let mut reader_refs: Vec<&mut dyn fm::Read> = Vec::new();
+        for reader in &mut readers {
+            reader_refs.push(reader.as_mut());
+        }
+
+        combine(&mut reader_refs, writer.as_mut(), &self.params)
+    }
+}
+
+#[derive(StructOpt)]
+pub struct CombineParams {
+    #[structopt(
+        help="Element displacement in form 'element=dx,dy,dz'",
+        long = "displacement",
+        number_of_values = 1,
+        parse(try_from_str = parse_key_val),
+        short = "d"
+    )]
     displacements: Vec<(String, CliArray<f32, 3>)>,
 
     #[structopt(
-            help=concat!("Element rotation in form ",
-                "'element=around_x,around_y,around_z' using radians"),
-            long = "rotation",
-            number_of_values = 1,
-            parse(try_from_str = parse_key_val),
-            short = "r"
-        )]
+        help=concat!("Element rotation in form ",
+            "'element=around_x,around_y,around_z' using radians"),
+        long = "rotation",
+        number_of_values = 1,
+        parse(try_from_str = parse_key_val),
+        short = "r")
+    ]
     rotations: Vec<(String, CliArray<f32, 3>)>,
 
-    #[structopt(help="Element scaling in form 'element=scale'",
-            long = "scaling",
-            number_of_values = 1,
-            parse(try_from_str = parse_key_val),
-            short = "s"
-        )]
-    scalings: Vec<(String, f32)>,
-
     #[structopt(
-        help = "Output .fm file (STDOUT if omitted)",
-        long,
-        short = "o"
+        help="Element scaling in form 'element=scale'",
+        long = "scaling",
+        number_of_values = 1,
+        parse(try_from_str = parse_key_val),
+        short = "s"
     )]
-    out_path: Option<PathBuf>,
-
-    #[structopt(flatten)]
-    fm_write_params: fm::WriterParams,
-}
-
-pub fn combine_with_params(params: &CombineParams) -> Result<()> {
-    let mut readers = Vec::<Box<dyn fm::Read>>::new();
-    for path in &params.in_paths {
-        let file = fs::open_file(path)?;
-        readers.push(Box::new(fm::Reader::new(file)?));
-    }
-    if readers.is_empty() {
-        let reader = fm::Reader::new(stdin())?;
-        readers.push(Box::new(reader) as Box<dyn fm::Read>);
-    }
-
-    let mut reader_refs: Vec<&mut dyn fm::Read> = Vec::new();
-    for reader in &mut readers {
-        reader_refs.push(reader.as_mut());
-    }
-
-    let displacements = params
-        .displacements
-        .iter()
-        .map(|d| (d.0.clone(), d.1 .0))
-        .collect();
-    let rotations = params
-        .rotations
-        .iter()
-        .map(|d| (d.0.clone(), d.1 .0))
-        .collect();
-    let scalings = params.scalings.iter().cloned().collect();
-
-    let mut writer =
-        fm_writer_to_file_or_stdout(&params.out_path, &params.fm_write_params)?;
-
-    combine(
-        &mut reader_refs,
-        &displacements,
-        &rotations,
-        &scalings,
-        writer.as_mut(),
-    )
-}
-
-fn point3_to_fm_point3(p: &Point3) -> fm::Point3 {
-    fm::Point3 {
-        x: p[0],
-        y: p[1],
-        z: p[2],
-    }
+    scalings: Vec<(String, f32)>,
 }
 
 type Point3 = nalgebra::Point3<f32>;
@@ -109,10 +72,8 @@ type Vector3 = nalgebra::Vector3<f32>;
 
 pub fn combine(
     readers: &mut [&mut dyn fm::Read],
-    displacements: &HashMap<String, [f32; 3]>,
-    rotations: &HashMap<String, [f32; 3]>,
-    scalings: &HashMap<String, f32>,
     writer: &mut dyn fm::Write,
+    params: &CombineParams,
 ) -> Result<()> {
     let mut items = Vec::new();
     for reader in readers.iter_mut() {
@@ -129,27 +90,33 @@ pub fn combine(
         if let Some(fm::record::Type::ElementViewState(state)) =
             &mut item.0.as_mut().unwrap().r#type
         {
-            if let Some(disp) = displacements.get(&state.element) {
+            if let Some((_, disp)) = params
+                .displacements
+                .iter()
+                .find(|(e, _)| e == &state.element)
+            {
                 for i in 0..state.vertices.len() {
-                    state.vertices[i].x += disp[0];
-                    state.vertices[i].y += disp[1];
-                    state.vertices[i].z += disp[2];
+                    state.vertices[i].x += disp.0[0];
+                    state.vertices[i].y += disp.0[1];
+                    state.vertices[i].z += disp.0[2];
                 }
 
                 for i in 0..state.normals.len() {
-                    state.normals[i].x += disp[0];
-                    state.normals[i].y += disp[1];
-                    state.normals[i].z += disp[2];
+                    state.normals[i].x += disp.0[0];
+                    state.normals[i].y += disp.0[1];
+                    state.normals[i].z += disp.0[2];
                 }
             }
 
-            if let Some(rot) = rotations.get(&state.element) {
+            if let Some((_, rot)) =
+                params.rotations.iter().find(|(e, _)| e == &state.element)
+            {
                 let x_quat =
-                    Quaternion::from_axis_angle(&Vector3::x_axis(), rot[0]);
+                    Quaternion::from_axis_angle(&Vector3::x_axis(), rot.0[0]);
                 let y_quat =
-                    Quaternion::from_axis_angle(&Vector3::y_axis(), rot[1]);
+                    Quaternion::from_axis_angle(&Vector3::y_axis(), rot.0[1]);
                 let z_quat =
-                    Quaternion::from_axis_angle(&Vector3::z_axis(), rot[2]);
+                    Quaternion::from_axis_angle(&Vector3::z_axis(), rot.0[2]);
                 let quat = x_quat * y_quat * z_quat;
 
                 for i in 0..state.vertices.len() {
@@ -165,7 +132,9 @@ pub fn combine(
                 }
             }
 
-            if let Some(scale) = scalings.get(&state.element) {
+            if let Some((_, scale)) =
+                params.scalings.iter().find(|(e, _)| e == &state.element)
+            {
                 for i in 0..state.vertices.len() {
                     state.vertices[i].x *= scale;
                     state.vertices[i].y *= scale;
@@ -186,6 +155,14 @@ pub fn combine(
     }
 
     Ok(())
+}
+
+fn point3_to_fm_point3(p: &Point3) -> fm::Point3 {
+    fm::Point3 {
+        x: p[0],
+        y: p[1],
+        z: p[2],
+    }
 }
 
 struct Item(Option<fm::Record>);
@@ -297,24 +274,13 @@ mod tests {
         let mut reader2 = new_reader("e2", 2);
         let mut readers: [&mut dyn fm::Read; 2] = [&mut reader1, &mut reader2];
 
-        let mut displacements = HashMap::new();
-        displacements.insert(format!("e2"), [0.3, 0.4, 0.5]);
-
-        let mut rotations = HashMap::new();
-        rotations.insert(format!("e1"), [0.6, 0.7, 0.8]);
-
-        let mut scales = HashMap::new();
-        scales.insert(format!("e1"), 2.0);
-
+        let params = &CombineParams {
+            displacements: vec![("e2".to_string(), [0.3, 0.4, 0.5].into())],
+            rotations: vec![("e1".to_string(), [0.6, 0.7, 0.8].into())],
+            scalings: vec![("e1".to_string(), 2.0)],
+        };
         let mut writer = create_writer();
-        combine(
-            &mut readers[..],
-            &displacements,
-            &rotations,
-            &scales,
-            &mut writer,
-        )
-        .unwrap();
+        combine(&mut readers[..], &mut writer, &params).unwrap();
 
         let mut reader = writer_to_reader(writer);
 

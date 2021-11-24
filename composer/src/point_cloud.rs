@@ -9,8 +9,9 @@ use structopt::StructOpt;
 
 use base::fm;
 use base::fm::scan_frame::DepthConfidence;
+use base::util::cli::parse_key_val;
 
-#[derive(Clone, Copy, StructOpt)]
+#[derive(Clone, StructOpt)]
 pub struct PointCloudParams {
     #[structopt(
         help = "Minimum depth confidence",
@@ -28,12 +29,26 @@ pub struct PointCloudParams {
     pub min_z: f32,
 
     #[structopt(
+        help = "Per-scan minimum point Z-coordinate",
+        long = "scan-min-z",
+       parse(try_from_str = parse_key_val),
+    )]
+    pub scan_min_zs: Vec<(String, f32)>,
+
+    #[structopt(
         help = "Maximum point Z-coordinate",
         long,
         short = "t",
         default_value = "inf"
     )]
     pub max_z: f32,
+
+    #[structopt(
+        help = "Per-scan maximum point Z-coordinate",
+        long = "scan-max-z",
+       parse(try_from_str = parse_key_val),
+    )]
+    pub scan_max_zs: Vec<(String, f32)>,
 
     #[structopt(
         help = "Maximum point distance from Z axis",
@@ -64,6 +79,24 @@ pub struct PointCloudParams {
         short = "p"
     )]
     pub max_num_frame_points: Option<usize>,
+}
+
+impl PointCloudParams {
+    pub fn min_z(&self, scan: &str) -> f32 {
+        self.scan_min_zs
+            .iter()
+            .find(|(s, _)| s == scan)
+            .map(|p| p.1)
+            .unwrap_or(self.min_z)
+    }
+
+    pub fn max_z(&self, scan: &str) -> f32 {
+        self.scan_max_zs
+            .iter()
+            .find(|(s, _)| s == scan)
+            .map(|p| p.1)
+            .unwrap_or(self.max_z)
+    }
 }
 
 pub type Point3 = nalgebra::Point3<f64>;
@@ -113,6 +146,8 @@ pub fn build_point_cloud(
     let time_rot =
         Quaternion::from_axis_angle(&Vector3::z_axis(), camera_angle);
 
+    let (min_z, max_z) = (params.min_z(&scan.name), params.max_z(&scan.name));
+
     let mut points = Vec::with_capacity(depth_height * depth_width);
     for i in 0..depth_height {
         for j in 0..depth_width {
@@ -153,7 +188,12 @@ pub fn build_point_cloud(
             }
 
             let point = points[depth_index];
-            if !validate_point_bounds(params, &point) {
+            if !validate_point_bounds(
+                &point,
+                min_z,
+                max_z,
+                params.max_z_distance,
+            ) {
                 continue;
             }
 
@@ -319,13 +359,15 @@ fn select_random_points(
 
 #[inline]
 pub fn validate_point_bounds(
-    params: &PointCloudParams,
     point: &Point3,
+    min_z: f32,
+    max_z: f32,
+    max_z_distance: f32,
 ) -> bool {
-    point.z >= params.min_z as f64
-        && point.z <= params.max_z as f64
+    point.z >= min_z as f64
+        && point.z <= max_z as f64
         && (point.x * point.x + point.y * point.y).sqrt()
-            <= params.max_z_distance as f64
+            <= max_z_distance as f64
 }
 
 #[cfg(test)]

@@ -1,10 +1,10 @@
-use base::util::cli::{parse_key_val, Array as CliArray};
 use std::collections::{BTreeMap, HashMap};
 
 use structopt::StructOpt;
 
 use base::defs::{Error, ErrorKind::*, Result};
 use base::fm;
+use base::util::cli::{parse_key_val, Array as CliArray};
 
 #[derive(StructOpt)]
 pub struct ScanParams {

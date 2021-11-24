@@ -158,7 +158,12 @@ impl Mesh {
 
         let mut j = 0;
         for i in 0..self.vertices.len() {
-            if validate_point_bounds(params, &self.vertices[i]) {
+            if validate_point_bounds(
+                &self.vertices[i],
+                params.min_z,
+                params.max_z,
+                params.max_z_distance,
+            ) {
                 mappings.insert(i, j);
                 self.vertices.swap(i, j);
                 self.normals.swap(i, j);

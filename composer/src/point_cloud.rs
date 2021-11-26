@@ -32,7 +32,8 @@ pub struct PointCloudParams {
     #[structopt(
         help = "Per-scan minimum point Z-coordinate",
         long = "scan-min-z",
-       parse(try_from_str = parse_key_val),
+        number_of_values = 1,
+        parse(try_from_str = parse_key_val),
     )]
     pub scan_min_zs: Vec<(String, f32)>,
 
@@ -47,7 +48,8 @@ pub struct PointCloudParams {
     #[structopt(
         help = "Per-scan maximum point Z-coordinate",
         long = "scan-max-z",
-       parse(try_from_str = parse_key_val),
+        number_of_values = 1,
+        parse(try_from_str = parse_key_val),
     )]
     pub scan_max_zs: Vec<(String, f32)>,
 

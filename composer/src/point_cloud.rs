@@ -7,6 +7,7 @@ use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use structopt::StructOpt;
 
+use base::defs::{Error, ErrorKind::*, Result};
 use base::fm;
 use base::fm::scan_frame::DepthConfidence;
 use base::util::cli::parse_key_val;
@@ -96,6 +97,29 @@ impl PointCloudParams {
             .find(|(s, _)| s == scan)
             .map(|p| p.1)
             .unwrap_or(self.max_z)
+    }
+
+    pub fn validate<'a, S>(&self, scans: S) -> Result<()>
+    where
+        S: Iterator<Item = &'a str> + Clone,
+    {
+        let validate = |zs: &Vec<_>| {
+            let missing =
+                zs.iter().find(|(s, _)| !scans.clone().any(|n| n == s));
+            if let Some((name, _)) = missing {
+                Err(Error::new(
+                    InconsistentState,
+                    format!("unknown scan '{}' specified", name),
+                ))
+            } else {
+                Ok(())
+            }
+        };
+
+        validate(&self.scan_min_zs)?;
+        validate(&self.scan_max_zs)?;
+
+        Ok(())
     }
 }
 

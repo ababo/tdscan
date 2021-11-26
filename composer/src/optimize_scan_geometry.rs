@@ -88,6 +88,8 @@ pub fn optimize_scan_geometry(
     info!("reading scans...");
     let (scans, scan_frames) = read_scans(reader, &params.scan)?;
 
+    params.point_cloud.validate(scans.keys().map(String::as_str))?;
+
     let optimized: Vec<_> = if params.target_scans.is_empty() {
         scans.keys().cloned().collect()
     } else {

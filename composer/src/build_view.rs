@@ -55,6 +55,8 @@ pub fn build_view(
     info!("reading scans...");
     let (scans, scan_frames) = read_scans(reader, &params.scan)?;
 
+    params.point_cloud.validate(scans.keys().map(String::as_str))?;
+
     info!(
         "building point clouds from {} scans ({} frames)...",
         scans.len(),

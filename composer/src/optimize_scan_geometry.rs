@@ -46,13 +46,13 @@ impl OptimizeScanGeometryCommand {
 
 #[derive(StructOpt)]
 pub struct OptimizeScanGeometryParams {
-    #[structopt(help = "Angle variability range", long, default_value = "0.2")]
+    #[structopt(help = "Angle variability range", long, default_value = "inf")]
     angle_range: f32,
 
     #[structopt(
         help = "Distance variability range",
         long,
-        default_value = "0.1"
+        default_value = "inf"
     )]
     distance_range: f32,
 

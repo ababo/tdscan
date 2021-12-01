@@ -1,4 +1,3 @@
-mod animate;
 mod build_view;
 mod combine;
 mod export_to_json;
@@ -25,7 +24,6 @@ struct Opts {
 
 #[derive(StructOpt)]
 enum Command {
-    Animate(Box<animate::AnimateCommand>),
     BuildView(Box<build_view::BuildViewCommand>),
     Combine(Box<combine::CombineCommand>),
     ExportToJson(Box<export_to_json::ExportToJsonCommand>),
@@ -49,7 +47,6 @@ fn main() {
 
     use Command::*;
     let res = match opts.command {
-        Animate(cmd) => cmd.run(),
         BuildView(cmd) => cmd.run(),
         Combine(cmd) => cmd.run(),
         ExportToJson(cmd) => cmd.run(),

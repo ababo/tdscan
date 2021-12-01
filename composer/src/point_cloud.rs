@@ -4,9 +4,10 @@ use std::f64::INFINITY;
 use kiddo::distance::squared_euclidean;
 use kiddo::KdTree;
 use rand::rngs::StdRng;
-use rand::{Rng, SeedableRng};
+use rand::SeedableRng;
 use structopt::StructOpt;
 
+use crate::misc::select_random;
 use base::defs::{Error, ErrorKind::*, Result};
 use base::fm;
 use base::fm::scan_frame::DepthConfidence;
@@ -373,13 +374,7 @@ fn select_random_points(
     let mut rng = StdRng::seed_from_u64(0);
 
     for points in clouds.iter_mut() {
-        if points.len() > max_num_frame_points {
-            for i in 0..max_num_frame_points {
-                let j = rng.gen_range(i..points.len());
-                points.swap(i, j);
-            }
-            points.truncate(max_num_frame_points);
-        }
+        select_random(points, max_num_frame_points, &mut rng);
     }
 }
 

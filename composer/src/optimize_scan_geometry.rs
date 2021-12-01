@@ -68,12 +68,12 @@ pub struct OptimizeScanGeometryParams {
     scan: ScanParams,
 
     #[structopt(
-        help = "Target scan to optimize (all scans if not specified)",
-        long = "target-scan",
+        help = "Scan to optimize (all the scans if not specified)",
+        long = "optimized-scan",
         number_of_values = 1,
         short = "s"
     )]
-    pub target_scans: Vec<String>,
+    pub optimized_scans: Vec<String>,
 
     #[structopt(flatten)]
     point_cloud: PointCloudParams,
@@ -90,20 +90,20 @@ pub fn optimize_scan_geometry(
 
     params.point_cloud.validate(scans.keys().map(String::as_str))?;
 
-    let optimized: Vec<_> = if params.target_scans.is_empty() {
+    let optimized: Vec<_> = if params.optimized_scans.is_empty() {
         scans.keys().cloned().collect()
     } else {
-        if let Some(target) = params.target_scans
+        if let Some(target) = params.optimized_scans
             .iter()
             .find(|t| !scans.contains_key(t.as_str()))
         {
             let desc = format!("unknown target scan '{}'", target);
             return Err(Error::new(InconsistentState, desc));
         }
-        params.target_scans.clone()
+        params.optimized_scans.clone()
     };
 
-    let opt = ScanOpt {
+    let op = GeometryOp {
         point_cloud_params: &params.point_cloud,
         scans: &scans,
         scan_frames: &scan_frames,
@@ -112,7 +112,7 @@ pub fn optimize_scan_geometry(
         distance_range: params.distance_range,
     };
 
-    let mut init_params: Vec<f32> = Vec::new();
+    let mut init_params = Vec::new();
     for target in optimized.iter() {
         let scan = scans.get(target).unwrap();
 
@@ -133,7 +133,7 @@ pub fn optimize_scan_geometry(
     let linesearch = MoreThuenteLineSearch::new();
     let solver = SteepestDescent::new(linesearch);
     let observer = Observer(optimized);
-    let res = Executor::new(opt, solver, init_params)
+    let res = Executor::new(op, solver, init_params)
         .add_observer(observer, ObserverMode::NewBest)
         .max_iters(params.num_iters as u64)
         .run();
@@ -168,7 +168,7 @@ pub fn optimize_scan_geometry(
     }
 }
 
-struct ScanOpt<'a> {
+struct GeometryOp<'a> {
     point_cloud_params: &'a PointCloudParams,
     scans: &'a BTreeMap<String, fm::Scan>,
     scan_frames: &'a Vec<fm::ScanFrame>,
@@ -177,7 +177,7 @@ struct ScanOpt<'a> {
     distance_range: f32,
 }
 
-impl<'a> ScanOpt<'a> {
+impl<'a> GeometryOp<'a> {
     fn apply_params(
         &self,
         params: &[f32],
@@ -225,7 +225,7 @@ impl<'a> ScanOpt<'a> {
 
 const PENALTY: f32 = 1.0;
 
-impl<'a> ArgminOp for ScanOpt<'a> {
+impl<'a> ArgminOp for GeometryOp<'a> {
     type Param = Vec<f32>;
     type Output = f32;
     type Hessian = ();
@@ -279,10 +279,10 @@ impl<'a> ArgminOp for ScanOpt<'a> {
 
 struct Observer(Vec<String>);
 
-impl<'a> Observe<ScanOpt<'a>> for Observer {
+impl<'a> Observe<GeometryOp<'a>> for Observer {
     fn observe_iter(
         &mut self,
-        state: &IterState<ScanOpt>,
+        state: &IterState<GeometryOp>,
         _kv: &ArgminKV,
     ) -> StdResult<(), ArgminError> {
         let mut params = String::new();

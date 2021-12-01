@@ -1,3 +1,4 @@
+use rand::Rng;
 use rlua::Value as LuaValue;
 use serde_json::Value as JsonValue;
 
@@ -56,6 +57,20 @@ fn lua_table_from_json_val<'a>(
             }
             ctx.create_table_from(map).map(LuaValue::Table)
         }
+    }
+}
+
+pub fn select_random<T, R: Rng>(
+    items: &mut Vec<T>,
+    max_num: usize,
+    rng: &mut R,
+) {
+    if items.len() > max_num {
+        for i in 0..max_num {
+            let j = rng.gen_range(i..items.len());
+            items.swap(i, j);
+        }
+        items.truncate(max_num);
     }
 }
 

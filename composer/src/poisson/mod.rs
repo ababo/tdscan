@@ -51,7 +51,6 @@ pub struct Params {
     #[structopt(
         help = "Poisson maximum depth",
         long = "poisson-depth",
-        short = "h",
         default_value = "8"
     )]
     pub depth: raw::c_int,
@@ -84,7 +83,6 @@ pub struct Params {
     #[structopt(
         help = "Poisson samples per node.",
         long = "poisson-samples-per-node",
-        short = "s",
         default_value = "1.5"
     )]
     pub samples_per_node: f32,
@@ -96,7 +94,6 @@ pub struct Params {
     #[structopt(
         help = "Poisson point weight.",
         long = "poisson-point-weight",
-        short = "v",
         default_value = "2.0"
     )]
     pub point_weight: f32,

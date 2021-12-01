@@ -28,8 +28,7 @@ pub struct SelectCommand {
 
     #[structopt(
         help = "Input .lua file with predicate expression",
-        long,
-        short = "f"
+        long
     )]
     predicate_path: Option<PathBuf>,
 

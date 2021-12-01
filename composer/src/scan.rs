@@ -40,7 +40,6 @@ pub struct ScanParams {
         long = "downsample-factor",
             number_of_values = 1,
             parse(try_from_str = parse_key_val),
-            short = "w"
     )]
     pub downsample_factors: Vec<(String, usize)>,
 

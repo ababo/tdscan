@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap};
+use std::collections::BTreeMap;
 use std::result::Result as StdResult;
 
 use argmin::core::{
@@ -36,11 +36,7 @@ impl OptimizeScanGeometryCommand {
         let mut reader = self.input.get()?;
         let mut writer = self.output.get()?;
 
-        optimize_scan_geometry(
-            reader.as_mut(),
-            writer.as_mut(),
-            &self.params,
-        )
+        optimize_scan_geometry(reader.as_mut(), writer.as_mut(), &self.params)
     }
 }
 
@@ -88,12 +84,15 @@ pub fn optimize_scan_geometry(
     info!("reading scans...");
     let (scans, scan_frames) = read_scans(reader, &params.scan)?;
 
-    params.point_cloud.validate(scans.keys().map(String::as_str))?;
+    params
+        .point_cloud
+        .validate(scans.keys().map(String::as_str))?;
 
     let optimized: Vec<_> = if params.optimized_scans.is_empty() {
         scans.keys().cloned().collect()
     } else {
-        if let Some(target) = params.optimized_scans
+        if let Some(target) = params
+            .optimized_scans
             .iter()
             .find(|t| !scans.contains_key(t.as_str()))
         {

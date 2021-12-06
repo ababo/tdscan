@@ -50,7 +50,7 @@ fn unzip<P: AsRef<Path>, P2: AsRef<Path>>(zip: P, to: P2) {
 fn build_poisson_recon() {
     println!("cargo:rerun-if-changed=src/poisson/poisson.cc");
 
-    const COMMIT: &str = "73ac105f938a552f42dc37208c6bcf30d812729f";
+    const COMMIT: &str = "40f2c86f75a2d202276fe6559c738d8089cdedad";
     let name = format!("PoissonRecon-{}", COMMIT);
     let proj = target_dir().join(&name);
     if !proj.exists() {

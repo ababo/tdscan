@@ -124,11 +124,26 @@ struct ScanFrame {
   }
 }
 
+struct ScanMetadata {
+  public let intrinsicMatrix: simd_float3x3
+  public let intrinsicMatrixRefDims: CGSize
+  public let distortionTable: [Float]
+  public let inverseDistortionTable: [Float]
+
+  public func angleOfView() -> Float {
+    atan(intrinsicMatrix[2][0] / intrinsicMatrix[0][0]) * 2.0
+  }
+}
+
 class ScanSession: NSObject, ARSessionDelegate {
   public let arSession = ARSession()
-  public var onFrame: ((inout ScanFrame, /*angleOfView*/ Float32) -> Void)?
+  public var onFrame: ((inout ScanFrame, ScanMetadata?) -> Void)?
+  public var trueDepthMetadata = [ScanMetadata?](
+    repeating: nil,
+    count: ARFaceTrackingConfiguration.supportedVideoFormats.count)
 
   var useCount = 0
+  var videoFormat = 0
 
   override init() {
     super.init()
@@ -150,6 +165,8 @@ class ScanSession: NSObject, ARSessionDelegate {
   }
 
   func run(videoFormat: Int) {
+    self.videoFormat = videoFormat
+
     let trueDepthFormats = ARFaceTrackingConfiguration.supportedVideoFormats
     if videoFormat < trueDepthFormats.count {
       let config = ARFaceTrackingConfiguration()
@@ -179,16 +196,10 @@ class ScanSession: NSObject, ARSessionDelegate {
 
     var depthMap: CVPixelBuffer? = nil
     var confidenceMap: CVPixelBuffer? = nil
-    var angleOfView = Float32.nan
     var quality = 0
     if didUpdate.capturedDepthData != nil {
       depthMap = didUpdate.capturedDepthData!.depthDataMap
       quality = didUpdate.capturedDepthData!.depthDataQuality == .high ? 3 : 1
-      let mat = didUpdate.capturedDepthData!.cameraCalibrationData?
-        .intrinsicMatrix
-      if mat != nil {
-        angleOfView = atan(mat![2][0] / mat![0][0]) * 2.0
-      }
     } else if didUpdate.sceneDepth != nil {
       depthMap = didUpdate.sceneDepth!.depthMap
       confidenceMap = didUpdate.sceneDepth!.confidenceMap!
@@ -229,7 +240,7 @@ class ScanSession: NSObject, ARSessionDelegate {
 
     CVPixelBufferUnlockBaseAddress(depthMap!, lockFlags)
 
-    var scan = ScanFrame(
+    var frame = ScanFrame(
       time: didUpdate.timestamp,
       image: cgImage,
       depthWidth: depthWidth,
@@ -237,6 +248,34 @@ class ScanSession: NSObject, ARSessionDelegate {
       depths: depths,
       depthConfidences: depthConfidences
     )
-    onFrame?(&scan, angleOfView)
+
+    var metadata: ScanMetadata?
+    if self.videoFormat
+      < ARFaceTrackingConfiguration.supportedVideoFormats.count
+    {
+      if trueDepthMetadata[self.videoFormat] == nil {
+        let calibrationData = didUpdate.capturedDepthData!
+          .cameraCalibrationData!
+        trueDepthMetadata[self.videoFormat] = ScanMetadata(
+          intrinsicMatrix: calibrationData.intrinsicMatrix,
+          intrinsicMatrixRefDims: calibrationData
+            .intrinsicMatrixReferenceDimensions,
+          distortionTable: ScanSession.floatArrayFromData(
+            data: calibrationData.lensDistortionLookupTable!),
+          inverseDistortionTable: ScanSession.floatArrayFromData(
+            data: calibrationData.inverseLensDistortionLookupTable!)
+        )
+      }
+      metadata = trueDepthMetadata[self.videoFormat]
+    }
+
+    onFrame?(&frame, metadata)
+  }
+
+  static func floatArrayFromData(data: Data) -> [Float] {
+    let count = data.count / 4
+    var array = [Float](repeating: 0, count: count)
+    (data as NSData).getBytes(&array, length: count * 4)
+    return array
   }
 }

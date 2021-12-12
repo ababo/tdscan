@@ -20,11 +20,13 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     public var writer: FmWriter?
     public var block: GCDWebServerBodyReaderCompletionBlock?
     public var lastOutUptime: TimeInterval = 0
-    public var angleOfView = Float32.nan
+    public var metadata: ScanMetadata?
+    public var undistortMapX: [Double]?
+    public var undistortMapY: [Double]?
 
     public init(
       eye: FmPoint3, ctr: FmPoint3, vel: Float, fps: Double, name: String,
-      nof: Int, at: TimeInterval, imgrt: Int, mirror: Bool
+      nof: Int, at: TimeInterval, imgrt: Int, trueDepth: Bool
     ) {
       self.eye = eye
       self.ctr = ctr
@@ -34,7 +36,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
       self.nof = nof
       self.at = at
       self.imgrt = imgrt
-      self.trueDepth = mirror
+      self.trueDepth = trueDepth
     }
 
     public func nextOutFrameReady() -> Bool { inFrameIndex > outFrameIndex }
@@ -197,7 +199,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
       ctr: FmPoint3(x: ctr[0], y: ctr[1], z: ctr[2]),
       vel: vel!, fps: fps!, name: name, nof: Int(nof!),
       at: at! - uts + uptime, imgrt: Int(imgrt!),
-      mirror: fmt! < numFrontFmts)
+      trueDepth: fmt! < numFrontFmts)
 
     if !setScanIfNone(scan: scan) {
       print("Refused '/scan' request, busy handling previous request")
@@ -267,6 +269,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     if scan!.trueDepth {
+      undistortTrueDepth(scan: &scan!, frame: &frame)
+
       if UIDevice.current.orientation.isPortrait {
         var tmp = [Float32](repeating: 0, count: frame.depthWidth)
         for i in 0..<frame.depthHeight / 2 {
@@ -356,8 +360,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var err = fm_create_writer(onWriterCallback, scanPtr, &writer)
     assert(err == kFmOk)
 
-    var angleOfView = scan.angleOfView
-    if scan.angleOfView.isNaN {
+    var angleOfView = scan.metadata?.angleOfView() ?? Float.nan
+    if angleOfView.isNaN {
       switch session.arSession.configuration!.videoFormat.captureDeviceType {
       case AVCaptureDevice.DeviceType.builtInWideAngleCamera:
         // See https://photo.stackexchange.com/questions/106509.
@@ -413,7 +417,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         return kFmOk
       }
 
-  func onFrame(frame: inout ScanFrame, angleOfView: Float32) {
+  func onFrame(frame: inout ScanFrame, metadata: ScanMetadata?) {
     let scan = getScan()
     if scan == nil || scan!.noMoreInFrames() {
       return
@@ -425,7 +429,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
       return
     }
 
-    scan!.angleOfView = angleOfView
+    if scan!.metadata == nil {
+      scan!.metadata = metadata
+    }
 
     // First frame must contain an image to be used when creating FmScan.
     if scan!.inFrameIndex % scan!.imgrt != 0 {
@@ -447,5 +453,105 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     let tempDir = FileManager.default.temporaryDirectory
     let fileName = "frame\(index).bin"
     return tempDir.appendingPathComponent(fileName)
+  }
+
+  func undistortTrueDepth(scan: inout Scan, frame: inout ScanFrame) {
+    if scan.undistortMapX == nil {
+      computeUndistortMaps(scan: &scan, frame: &frame)
+    }
+
+    func distortedDepth(i: Double, j: Double) -> Double {
+      var (i, j) = (Int(i), Int(j))
+      if i >= frame.depthHeight {
+        i = frame.depthHeight - 1
+      }
+      if j >= frame.depthWidth {
+        j = frame.depthWidth - 1
+      }
+      return Double(frame.depths[i * frame.depthWidth + j])
+    }
+
+    var undistortedDepths = [Float](
+      repeating: 0, count: frame.depthWidth * frame.depthHeight)
+
+    for i in 0..<frame.depthHeight {
+      for j in 0..<frame.depthWidth {
+        let off = i * frame.depthWidth + j
+
+        let x = scan.undistortMapX![off]
+        let y = scan.undistortMapY![off]
+
+        let (x1, x2) = (floor(x), ceil(x))
+        let (y1, y2) = (floor(y), ceil(y))
+
+        let q11 = distortedDepth(i: y1, j: x1)
+        let q12 = distortedDepth(i: y2, j: x1)
+        let q21 = distortedDepth(i: y1, j: x2)
+        let q22 = distortedDepth(i: y2, j: x2)
+
+        undistortedDepths[off] = Float(
+          q11 * (x2 - x) * (y2 - y) + q21 * (x - x1) * (y2 - y) + q12 * (x2 - x)
+            * (y - y1) + q22 * (x - x1) * (y - y1))
+      }
+    }
+
+    frame.depths = undistortedDepths
+  }
+
+  func computeUndistortMaps(scan: inout Scan, frame: inout ScanFrame) {
+    let metadata = scan.metadata!
+
+    var intrinsicMatrix = [Double](repeating: 0, count: 9)
+    for i in 0..<3 {
+      for j in 0..<3 {
+        intrinsicMatrix[i * 3 + j] = Double(metadata.intrinsicMatrix[j, i])
+      }
+    }
+
+    let pixelScale =
+      Double(frame.depthWidth) / Double(metadata.intrinsicMatrixRefDims.width)
+    intrinsicMatrix[0] *= pixelScale
+    intrinsicMatrix[2] *= pixelScale
+    intrinsicMatrix[4] *= pixelScale
+    intrinsicMatrix[5] *= pixelScale
+
+    let center = intrinsicMatrix[2]
+
+    let numPixels = frame.depthWidth * frame.depthHeight
+    var xy = [Double](repeating: 0, count: numPixels * 2)
+    var scale = [Double](repeating: 0, count: numPixels)
+
+    var maxRadius: Double = 0
+    for i in 0..<frame.depthHeight {
+      for j in 0..<frame.depthWidth {
+        let off = i * frame.depthWidth + j
+        let base = off * 2
+        xy[base] = Double(j) - center
+        xy[base + 1] = Double(i) - center
+        scale[off] = sqrt(xy[base] * xy[base] + xy[base + 1] * xy[base + 1])
+        if scale[off] > maxRadius {
+          maxRadius = scale[off]
+        }
+      }
+    }
+
+    let idt = metadata.inverseDistortionTable
+    for i in 0..<scale.count {
+      let x = scale[i] / maxRadius * Double(idt.count)
+      if Int(x) < idt.count - 1 {
+        let lower = Double(idt[Int(x)])
+        let upper = Double(idt[Int(x) + 1])
+        scale[i] = (x - floor(x)) * (upper - lower) + lower + 1.0
+      } else {
+        scale[i] = Double(idt.last!) + 1.0
+      }
+    }
+
+    scan.undistortMapX = [Double](repeating: 0, count: numPixels)
+    scan.undistortMapY = [Double](repeating: 0, count: numPixels)
+    for i in 0..<scale.count {
+      scan.undistortMapX![i] = scale[i] * xy[i * 2] + center
+      scan.undistortMapY![i] = scale[i] * xy[i * 2 + 1] + center
+    }
   }
 }

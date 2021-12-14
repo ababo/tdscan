@@ -127,7 +127,6 @@ struct ScanFrame {
 struct ScanMetadata {
   public let intrinsicMatrix: simd_float3x3
   public let intrinsicMatrixRefDims: CGSize
-  public let distortionTable: [Float]
   public let inverseDistortionTable: [Float]
 
   public func angleOfView() -> Float {
@@ -260,8 +259,6 @@ class ScanSession: NSObject, ARSessionDelegate {
           intrinsicMatrix: calibrationData.intrinsicMatrix,
           intrinsicMatrixRefDims: calibrationData
             .intrinsicMatrixReferenceDimensions,
-          distortionTable: ScanSession.floatArrayFromData(
-            data: calibrationData.lensDistortionLookupTable!),
           inverseDistortionTable: ScanSession.floatArrayFromData(
             data: calibrationData.inverseLensDistortionLookupTable!)
         )

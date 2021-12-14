@@ -2,6 +2,46 @@ import ARKit
 import SwiftUI
 import UIKit
 
+extension Double: _VectorMath {}
+extension SIMD4: _VectorMath {}
+
+protocol UndistortElement {
+  associatedtype Unpacked: _VectorMath
+  func unpack() -> Unpacked
+  static func pack(value: Unpacked) -> Self
+}
+
+extension Float: UndistortElement {
+  typealias Unpacked = Double
+  func unpack() -> Unpacked { Double(self) }
+  static func pack(value: Unpacked) -> Self { Float(value) }
+}
+
+struct RGBA {
+  var r: UInt8
+  var g: UInt8
+  var b: UInt8
+  var a: UInt8
+}
+
+extension RGBA: UndistortElement {
+  typealias Unpacked = SIMD4<Double>
+  func unpack() -> Unpacked {
+    SIMD4<Double>(
+      Double(self.r),
+      Double(self.g),
+      Double(self.b),
+      Double(self.a))
+  }
+  static func pack(value: Unpacked) -> Self {
+    RGBA(
+      r: UInt8(value[0]),
+      g: UInt8(value[1]),
+      b: UInt8(value[2]),
+      a: UInt8(value[3]))
+  }
+}
+
 @main
 class AppDelegate: UIResponder, UIApplicationDelegate {
   class Scan {
@@ -21,8 +61,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     public var block: GCDWebServerBodyReaderCompletionBlock?
     public var lastOutUptime: TimeInterval = 0
     public var metadata: ScanMetadata?
-    public var undistortMapX: [Double]?
-    public var undistortMapY: [Double]?
+    public var undistortImageMap: ([Double], [Double])?
+    public var undistortDepthMap: ([Double], [Double])?
 
     public init(
       eye: FmPoint3, ctr: FmPoint3, vel: Float, fps: Double, name: String,
@@ -252,24 +292,27 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     var png: [UInt8] = []
     if frame.image != nil {
-      var img = UIImage(cgImage: frame.image!)
+      var img: UIImage
       if scan!.trueDepth {
+        undistortImage(frame: &frame, scan: &scan!)
+
         let orientation: UIImage.Orientation =
           UIDevice.current.orientation.isPortrait
           ? .downMirrored : .upMirrored
         img = UIImage(
-          cgImage: img.cgImage!,
-          scale: img.scale, orientation: orientation)
+          cgImage: frame.image!, scale: 1.0, orientation: orientation)
         UIGraphicsBeginImageContextWithOptions(img.size, true, img.scale)
         defer { UIGraphicsEndImageContext() }
         img.draw(in: CGRect(origin: .zero, size: img.size))
         img = UIGraphicsGetImageFromCurrentImageContext()!
+      } else {
+        img = UIImage(cgImage: frame.image!)
       }
       png = [UInt8](img.pngData()!)
     }
 
     if scan!.trueDepth {
-      undistortTrueDepth(scan: &scan!, frame: &frame)
+      undistortDepths(frame: &frame, scan: &scan!)
 
       if UIDevice.current.orientation.isPortrait {
         var tmp = [Float32](repeating: 0, count: frame.depthWidth)
@@ -455,31 +498,85 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     return tempDir.appendingPathComponent(fileName)
   }
 
-  func undistortTrueDepth(scan: inout Scan, frame: inout ScanFrame) {
-    if scan.undistortMapX == nil {
-      computeUndistortMaps(scan: &scan, frame: &frame)
+  func undistortImage(frame: inout ScanFrame, scan: inout Scan) {
+    if scan.undistortImageMap == nil {
+      scan.undistortImageMap = AppDelegate.buildUndistortMap(
+        width: frame.image!.width, height: frame.image!.height,
+        metadata: scan.metadata!)
     }
 
-    func distortedDepth(i: Double, j: Double) -> Double {
-      var (i, j) = (Int(i), Int(j))
-      if i >= frame.depthHeight {
-        i = frame.depthHeight - 1
-      }
-      if j >= frame.depthWidth {
-        j = frame.depthWidth - 1
-      }
-      return Double(frame.depths[i * frame.depthWidth + j])
+    let width = frame.image!.width
+    let height = frame.image!.height
+    let numPixels = width * height
+
+    let srcData = frame.image!.dataProvider!.data!
+    let srcBytePtr = CFDataGetBytePtr(srcData)
+    let srcRawPtr = UnsafeRawPointer(srcBytePtr)!
+    let srcRGBAPtr = srcRawPtr.bindMemory(to: RGBA.self, capacity: numPixels)
+    let src = UnsafeBufferPointer<RGBA>(start: srcRGBAPtr, count: numPixels)
+
+    let dstData = CFDataCreateMutableCopy(
+      kCFAllocatorDefault, numPixels * 4, srcData)!
+    let dstBytePtr = CFDataGetMutableBytePtr(dstData)
+    let dstRawPtr = UnsafeMutableRawPointer(dstBytePtr)!
+    let dstRGBAPtr = dstRawPtr.bindMemory(to: RGBA.self, capacity: numPixels)
+    let dst = UnsafeMutableBufferPointer<RGBA>(
+      start: dstRGBAPtr, count: numPixels)
+
+    AppDelegate.undistort(
+      dst: dst, src: src, width: frame.image!.width,
+      height: frame.image!.height, undistortMap: scan.undistortImageMap!)
+
+    let provider = CGDataProvider(data: dstData)!
+    frame.image = CGImage(
+      width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32,
+      bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(),
+      bitmapInfo: frame.image!.bitmapInfo, provider: provider, decode: nil,
+      shouldInterpolate: false, intent: frame.image!.renderingIntent)
+  }
+
+  func undistortDepths(frame: inout ScanFrame, scan: inout Scan) {
+    if scan.undistortDepthMap == nil {
+      scan.undistortDepthMap = AppDelegate.buildUndistortMap(
+        width: frame.depthWidth, height: frame.depthHeight,
+        metadata: scan.metadata!)
     }
 
     var undistortedDepths = [Float](
       repeating: 0, count: frame.depthWidth * frame.depthHeight)
 
-    for i in 0..<frame.depthHeight {
-      for j in 0..<frame.depthWidth {
-        let off = i * frame.depthWidth + j
+    undistortedDepths.withUnsafeMutableBufferPointer { dst in
+      frame.depths.withUnsafeBufferPointer { src in
+        AppDelegate.undistort(
+          dst: dst, src: src, width: frame.depthWidth,
+          height: frame.depthHeight, undistortMap: scan.undistortDepthMap!)
+      }
+    }
 
-        let x = scan.undistortMapX![off]
-        let y = scan.undistortMapY![off]
+    frame.depths = undistortedDepths
+  }
+
+  static func undistort<T: UndistortElement>(
+    dst: UnsafeMutableBufferPointer<T>, src: UnsafeBufferPointer<T>,
+    width: Int, height: Int, undistortMap: ([Double], [Double])
+  ) {
+    func distortedDepth(i: Double, j: Double) -> T.Unpacked {
+      var (i, j) = (Int(i), Int(j))
+      if i >= height {
+        i = height - 1
+      }
+      if j >= width {
+        j = width - 1
+      }
+      return src.baseAddress![i * width + j].unpack()
+    }
+
+    for i in 0..<height {
+      for j in 0..<width {
+        let off = i * width + j
+
+        let x = undistortMap.0[off]
+        let y = undistortMap.1[off]
 
         let (x1, x2) = (floor(x), ceil(x))
         let (y1, y2) = (floor(y), ceil(y))
@@ -489,18 +586,20 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         let q21 = distortedDepth(i: y1, j: x2)
         let q22 = distortedDepth(i: y2, j: x2)
 
-        undistortedDepths[off] = Float(
-          q11 * (x2 - x) * (y2 - y) + q21 * (x - x1) * (y2 - y) + q12 * (x2 - x)
-            * (y - y1) + q22 * (x - x1) * (y - y1))
+        var val = q11 * (x2 - x) * (y2 - y)
+        val += q21 * (x - x1) * (y2 - y)
+        val += q12 * (x2 - x) * (y - y1)
+        val += q22 * (x - x1) * (y - y1)
+        dst.baseAddress![off] = T.pack(value: val)
       }
     }
-
-    frame.depths = undistortedDepths
   }
 
-  func computeUndistortMaps(scan: inout Scan, frame: inout ScanFrame) {
-    let metadata = scan.metadata!
-
+  static func buildUndistortMap(
+    width: Int, height: Int, metadata: ScanMetadata
+  ) -> (
+    [Double], [Double]
+  ) {
     var intrinsicMatrix = [Double](repeating: 0, count: 9)
     for i in 0..<3 {
       for j in 0..<3 {
@@ -509,7 +608,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     let pixelScale =
-      Double(frame.depthWidth) / Double(metadata.intrinsicMatrixRefDims.width)
+      Double(width) / Double(metadata.intrinsicMatrixRefDims.width)
     intrinsicMatrix[0] *= pixelScale
     intrinsicMatrix[2] *= pixelScale
     intrinsicMatrix[4] *= pixelScale
@@ -517,14 +616,14 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     let center = intrinsicMatrix[2]
 
-    let numPixels = frame.depthWidth * frame.depthHeight
+    let numPixels = width * height
     var xy = [Double](repeating: 0, count: numPixels * 2)
     var scale = [Double](repeating: 0, count: numPixels)
 
     var maxRadius: Double = 0
-    for i in 0..<frame.depthHeight {
-      for j in 0..<frame.depthWidth {
-        let off = i * frame.depthWidth + j
+    for i in 0..<height {
+      for j in 0..<width {
+        let off = i * width + j
         let base = off * 2
         xy[base] = Double(j) - center
         xy[base + 1] = Double(i) - center
@@ -547,11 +646,13 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
       }
     }
 
-    scan.undistortMapX = [Double](repeating: 0, count: numPixels)
-    scan.undistortMapY = [Double](repeating: 0, count: numPixels)
+    var undistortMapX = [Double](repeating: 0, count: numPixels)
+    var undistortMapY = [Double](repeating: 0, count: numPixels)
     for i in 0..<scale.count {
-      scan.undistortMapX![i] = scale[i] * xy[i * 2] + center
-      scan.undistortMapY![i] = scale[i] * xy[i * 2 + 1] + center
+      undistortMapX[i] = scale[i] * xy[i * 2] + center
+      undistortMapY[i] = scale[i] * xy[i * 2 + 1] + center
     }
+
+    return (undistortMapX, undistortMapY)
   }
 }

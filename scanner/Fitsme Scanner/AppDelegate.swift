@@ -158,7 +158,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
       "AutomaticallySuspendInBackground": false,
       "BindToLocalhost": false,
       "BonjourName": "Fitsme Server",
-      "ConnectedStateCoalescingInterval": 2.0,
       "Port": 9321,
       "ServerName": "Fitsme Scanner",
     ]
@@ -252,7 +251,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     AudioServicesPlaySystemSound(1113)
 
     return GCDWebServerStreamedResponse(
-      contentType: "text/plain",
+      contentType: "application/octet-stream",
       asyncStreamBlock: { block in
         self.outQueue.sync { self.onStreamBlock(block: block) }
       })

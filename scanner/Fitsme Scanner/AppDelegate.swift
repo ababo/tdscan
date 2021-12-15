@@ -613,7 +613,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     intrinsicMatrix[4] *= pixelScale
     intrinsicMatrix[5] *= pixelScale
 
-    let center = intrinsicMatrix[2]
+    let center = (intrinsicMatrix[2], intrinsicMatrix[5])
 
     let numPixels = width * height
     var xy = [Double](repeating: 0, count: numPixels * 2)
@@ -624,8 +624,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
       for j in 0..<width {
         let off = i * width + j
         let base = off * 2
-        xy[base] = Double(j) - center
-        xy[base + 1] = Double(i) - center
+        xy[base] = Double(j) - center.0
+        xy[base + 1] = Double(i) - center.1
         scale[off] = sqrt(xy[base] * xy[base] + xy[base + 1] * xy[base + 1])
         if scale[off] > maxRadius {
           maxRadius = scale[off]
@@ -648,8 +648,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var undistortMapX = [Double](repeating: 0, count: numPixels)
     var undistortMapY = [Double](repeating: 0, count: numPixels)
     for i in 0..<scale.count {
-      undistortMapX[i] = scale[i] * xy[i * 2] + center
-      undistortMapY[i] = scale[i] * xy[i * 2 + 1] + center
+      undistortMapX[i] = scale[i] * xy[i * 2] + center.0
+      undistortMapY[i] = scale[i] * xy[i * 2 + 1] + center.1
     }
 
     return (undistortMapX, undistortMapY)

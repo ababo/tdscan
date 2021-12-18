@@ -53,6 +53,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     public let nof: Int
     public let at: TimeInterval
     public let imgrt: Int
+    public let undist: Bool
     public let trueDepth: Bool
 
     public var inFrameIndex = 0
@@ -66,7 +67,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     public init(
       eye: FmPoint3, ctr: FmPoint3, vel: Float, fps: Double, name: String,
-      nof: Int, at: TimeInterval, imgrt: Int, trueDepth: Bool
+      nof: Int, at: TimeInterval, imgrt: Int, undist: Bool, trueDepth: Bool
     ) {
       self.eye = eye
       self.ctr = ctr
@@ -76,6 +77,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
       self.nof = nof
       self.at = at
       self.imgrt = imgrt
+      self.undist = undist
       self.trueDepth = trueDepth
     }
 
@@ -220,12 +222,14 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     let nof = UInt(request.query?["nof"] ?? "1")
     let at = TimeInterval(request.query?["at"] ?? String(uts))
     let imgrt = UInt(request.query?["imgrt"] ?? "1")
+    let undist = Bool(request.query?["undist"] ?? "false")
 
     let numFrontFmts = ARFaceTrackingConfiguration.supportedVideoFormats.count
     let numBackFmts = ARWorldTrackingConfiguration.supportedVideoFormats.count
     if eye == nil || eye!.count != 3 || ctr.count != 3 || vel == nil
       || fmt == nil || fmt! >= numFrontFmts + numBackFmts || fps == nil
       || fps! < 0 || nof == nil || at == nil || at! < uts || imgrt == nil
+      || undist == nil
     {
       print("Bad '/scan' request arguments")
       return GCDWebServerResponse(
@@ -238,7 +242,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
       ctr: FmPoint3(x: ctr[0], y: ctr[1], z: ctr[2]),
       vel: vel!, fps: fps!, name: name, nof: Int(nof!),
       at: at! - uts + uptime, imgrt: Int(imgrt!),
-      trueDepth: fmt! < numFrontFmts)
+      undist: undist!, trueDepth: fmt! < numFrontFmts)
 
     if !setScanIfNone(scan: scan) {
       print("Refused '/scan' request, busy handling previous request")
@@ -293,7 +297,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     if frame.image != nil {
       var img: UIImage
       if scan!.trueDepth {
-        undistortImage(frame: &frame, scan: &scan!)
+        if scan!.undist {
+          undistortImage(frame: &frame, scan: &scan!)
+        }
 
         let orientation: UIImage.Orientation =
           UIDevice.current.orientation.isPortrait
@@ -311,7 +317,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     if scan!.trueDepth {
-      undistortDepths(frame: &frame, scan: &scan!)
+      if scan!.undist {
+        undistortDepths(frame: &frame, scan: &scan!)
+      }
 
       if UIDevice.current.orientation.isPortrait {
         var tmp = [Float32](repeating: 0, count: frame.depthWidth)

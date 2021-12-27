@@ -14,7 +14,10 @@ protocol UndistortElement {
 extension Float: UndistortElement {
   typealias Unpacked = Double
   func unpack() -> Unpacked { Double(self) }
-  static func pack(value: Unpacked) -> Self { Float(value) }
+  static func pack(value: Unpacked) -> Self {
+    // Reduce size of fm-file by limiting precision to 0.1mm.
+    Float((value * 10000.0).rounded() / 10000.0)
+  }
 }
 
 struct RGBA {

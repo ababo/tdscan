@@ -272,6 +272,10 @@ pub fn distance_between_point_clouds(
     a: &[PointNormal],
     b: &[PointNormal],
 ) -> Option<f64> {
+    if a.is_empty() || b.is_empty() {
+        return None;
+    }
+
     let mut kdtree = KdTree::new();
     for (i, p) in a.iter().enumerate() {
         kdtree.add(p.0.coords.as_ref(), i).unwrap();

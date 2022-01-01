@@ -45,6 +45,14 @@ pub struct BuildViewParams {
 
     #[structopt(flatten)]
     pub poisson: poisson::Params,
+
+    #[structopt(
+        help = "Number of Laplacian smoothing iterations",
+        long,
+        short = "s",
+        default_value = "0"
+    )]
+    pub num_smooth_iters: usize,
 }
 
 pub fn build_view(
@@ -55,7 +63,9 @@ pub fn build_view(
     info!("reading scans...");
     let (scans, scan_frames) = read_scans(reader, &params.scan)?;
 
-    params.point_cloud.validate(scans.keys().map(String::as_str))?;
+    params
+        .point_cloud
+        .validate(scans.keys().map(String::as_str))?;
 
     info!(
         "building point clouds from {} scans ({} frames)...",
@@ -82,6 +92,11 @@ pub fn build_view(
         ));
     }
     mesh.apply_bounds(&params.point_cloud);
+
+    if params.num_smooth_iters > 0 {
+        info!("smoothing mesh...");
+        mesh.smoothen(params.num_smooth_iters);
+    }
 
     info!(
         "writing mesh of {} vertices and {} faces...",
@@ -187,6 +202,45 @@ impl Mesh {
             j += 1;
         }
         self.triangles.truncate(j);
+    }
+
+    fn smoothen(&mut self, num_iters: usize) {
+        assert!(self.vertices.len() == self.normals.len());
+
+        let mut sums =
+            vec![(Vector3::zeros(), Vector3::zeros(), 0); self.vertices.len()];
+
+        for _ in 0..num_iters {
+            for sum in sums.iter_mut() {
+                *sum = (Vector3::zeros(), Vector3::zeros(), 0);
+            }
+
+            for triangle in self.triangles.iter() {
+                sums[triangle[0]].0 += self.vertices[triangle[1]].coords;
+                sums[triangle[0]].0 += self.vertices[triangle[2]].coords;
+                sums[triangle[0]].1 += self.normals[triangle[1]];
+                sums[triangle[0]].1 += self.normals[triangle[2]];
+                sums[triangle[0]].2 += 2;
+
+                sums[triangle[1]].0 += self.vertices[triangle[0]].coords;
+                sums[triangle[1]].0 += self.vertices[triangle[2]].coords;
+                sums[triangle[1]].1 += self.normals[triangle[0]];
+                sums[triangle[1]].1 += self.normals[triangle[2]];
+                sums[triangle[1]].2 += 2;
+
+                sums[triangle[2]].0 += self.vertices[triangle[0]].coords;
+                sums[triangle[2]].0 += self.vertices[triangle[1]].coords;
+                sums[triangle[2]].1 += self.normals[triangle[0]];
+                sums[triangle[2]].1 += self.normals[triangle[1]];
+                sums[triangle[2]].2 += 2;
+            }
+
+            #[allow(clippy::needless_range_loop)]
+            for i in 0..self.vertices.len() {
+                self.vertices[i].coords = sums[i].0 / sums[i].2 as f64;
+                self.normals[i] = sums[i].1 / sums[i].2 as f64;
+            }
+        }
     }
 }
 

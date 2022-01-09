@@ -27,8 +27,8 @@ pub struct ScanParams {
     pub camera_initial_directions: Vec<(String, CliArray<f32, 3>)>,
 
     #[structopt(
-        help = "Camera landscape angle to override with",
-        long = "camera-landscape-angle",
+        help = "Camera up angle to override with",
+        long = "camera-up-angle",
             number_of_values = 1,
             parse(try_from_str = parse_key_val),
             short = "l"

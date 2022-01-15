@@ -74,6 +74,8 @@ impl StdError for Error {
     }
 }
 
+// TODO: Replace this crutch with a proper fix.
+#[allow(clippy::non_send_fields_in_send_ty)]
 unsafe impl Send for Error {}
 unsafe impl Sync for Error {}
 

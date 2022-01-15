@@ -81,8 +81,8 @@ pub fn truncate_json_value(value: &mut JsonValue, max_len: usize) {
         }
         JsonValue::Array(arr) => {
             arr.truncate(max_len);
-            for mut e in arr {
-                truncate_json_value(&mut e, max_len);
+            for e in arr {
+                truncate_json_value(e, max_len);
             }
         }
         JsonValue::Object(obj) => {
@@ -91,8 +91,8 @@ pub fn truncate_json_value(value: &mut JsonValue, max_len: usize) {
                 obj.remove(k.as_str());
             }
 
-            for (_, mut v) in obj {
-                truncate_json_value(&mut v, max_len);
+            for (_, v) in obj {
+                truncate_json_value(v, max_len);
             }
         }
         _ => {}

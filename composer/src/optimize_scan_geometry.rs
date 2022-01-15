@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::result::Result as StdResult;
 
 use argmin::core::{
@@ -169,7 +169,7 @@ pub fn optimize_scan_geometry(
 
 struct GeometryOp<'a> {
     point_cloud_params: &'a PointCloudParams,
-    scans: &'a BTreeMap<String, fm::Scan>,
+    scans: &'a HashMap<String, fm::Scan>,
     scan_frames: &'a Vec<fm::ScanFrame>,
     optimized: Vec<String>,
     angle_range: f32,
@@ -180,7 +180,7 @@ impl<'a> GeometryOp<'a> {
     fn apply_params(
         &self,
         params: &[f32],
-    ) -> (BTreeMap<String, fm::Scan>, bool) {
+    ) -> (HashMap<String, fm::Scan>, bool) {
         let mut scans = self.scans.clone();
         let mut ok = true;
 

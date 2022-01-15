@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::f64::INFINITY;
 
 use kiddo::distance::squared_euclidean;
@@ -245,7 +245,7 @@ pub fn build_point_cloud(
 }
 
 pub fn build_frame_clouds(
-    scans: &BTreeMap<String, fm::Scan>,
+    scans: &HashMap<String, fm::Scan>,
     scan_frames: &[fm::ScanFrame],
     params: &PointCloudParams,
 ) -> Vec<Vec<PointNormal>> {

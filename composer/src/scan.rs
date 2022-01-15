@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 
 use structopt::StructOpt;
 
@@ -69,8 +69,8 @@ pub struct ScanParams {
 pub fn read_scans(
     reader: &mut dyn fm::Read,
     scan_params: &ScanParams,
-) -> Result<(BTreeMap<String, fm::Scan>, Vec<fm::ScanFrame>)> {
-    let mut scans = BTreeMap::<String, fm::Scan>::new();
+) -> Result<(HashMap<String, fm::Scan>, Vec<fm::ScanFrame>)> {
+    let mut scans = HashMap::<String, fm::Scan>::new();
     let mut frames = Vec::<fm::ScanFrame>::new();
     let mut last_time = 0;
 

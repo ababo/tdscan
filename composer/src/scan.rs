@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use structopt::StructOpt;
+use indexmap::IndexMap;
 
 use base::defs::{Error, ErrorKind::*, Result};
 use base::fm;
@@ -69,8 +70,8 @@ pub struct ScanParams {
 pub fn read_scans(
     reader: &mut dyn fm::Read,
     scan_params: &ScanParams,
-) -> Result<(HashMap<String, fm::Scan>, Vec<fm::ScanFrame>)> {
-    let mut scans = HashMap::<String, fm::Scan>::new();
+) -> Result<(IndexMap<String, fm::Scan>, Vec<fm::ScanFrame>)> {
+    let mut scans = IndexMap::<String, fm::Scan>::new();
     let mut frames = Vec::<fm::ScanFrame>::new();
     let mut last_time = 0;
 
@@ -254,7 +255,7 @@ pub fn downsample_scan_frames(
 mod test {
     use super::*;
 
-    use base::assert_eq_f32;
+    use base::assert_approx_eq;
 
     fn new_scan_frame(
         scan: &str,
@@ -282,7 +283,7 @@ mod test {
         assert_eq!(a.time, b.time);
         assert_eq!(a.depths.len(), b.depths.len());
         for i in 0..a.depths.len() {
-            assert_eq_f32!(a.depths[i], b.depths[i]);
+            assert_approx_eq!(a.depths[i], b.depths[i]);
         }
         assert_eq!(a.depth_confidences, b.depth_confidences);
     }

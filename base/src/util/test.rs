@@ -15,26 +15,28 @@ macro_rules! record_variant {
 }
 
 #[macro_export]
-macro_rules! assert_eq_f32 {
+macro_rules! assert_approx_eq {
     ($a:expr, $b:expr) => {{
-        assert!(($a - $b).abs() < 0.000001);
+        if ($a - $b).abs() >= 0.000001 {
+            panic!("assert_approx_eq!({}, {}) failed", $a, $b);
+        }
     }};
 }
 
 #[macro_export]
 macro_rules! assert_eq_point2 {
     ($a:expr, $b:expr) => {{
-        base::assert_eq_f32!($a.x, $b.x);
-        base::assert_eq_f32!($a.y, $b.y);
+        base::assert_approx_eq!($a.x, $b.x);
+        base::assert_approx_eq!($a.y, $b.y);
     }};
 }
 
 #[macro_export]
 macro_rules! assert_eq_point3 {
     ($a:expr, $b:expr) => {{
-        base::assert_eq_f32!($a.x, $b.x);
-        base::assert_eq_f32!($a.y, $b.y);
-        base::assert_eq_f32!($a.z, $b.z);
+        base::assert_approx_eq!($a.x, $b.x);
+        base::assert_approx_eq!($a.y, $b.y);
+        base::assert_approx_eq!($a.z, $b.z);
     }};
 }
 

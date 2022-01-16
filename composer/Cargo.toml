@@ -13,6 +13,7 @@ zip = "0.5"
 [dependencies]
 argmin = "0.4.7"
 base = { path = "../base" }
+indexmap = "1.8.0"
 kiddo = "0.1.7"
 log = "0.4"
 nalgebra = "0.29.0"

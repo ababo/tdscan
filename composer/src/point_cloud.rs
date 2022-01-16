@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::f64::INFINITY;
 
 use kiddo::distance::squared_euclidean;
@@ -6,6 +5,7 @@ use kiddo::KdTree;
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 use structopt::StructOpt;
+use indexmap::IndexMap;
 
 use crate::misc::select_random;
 use base::defs::{Error, ErrorKind::*, Result};
@@ -127,14 +127,16 @@ impl PointCloudParams {
 }
 
 pub type Point3 = nalgebra::Point3<f64>;
+pub type Matrix4 = nalgebra::Matrix4<f64>;
 pub type Vector3 = nalgebra::Vector3<f64>;
+pub type Vector4 = nalgebra::Vector4<f64>;
 type Quaternion = nalgebra::UnitQuaternion<f64>;
-type Matrix4 = nalgebra::Matrix4<f64>;
 
 fn fm_point3_to_point3(p: &fm::Point3) -> Point3 {
     Point3::new(p.x as f64, p.y as f64, p.z as f64)
 }
 
+#[derive(Clone, Copy)]
 pub struct PointNormal(pub Point3, pub Vector3);
 
 pub fn build_point_cloud(
@@ -192,9 +194,7 @@ pub fn build_point_cloud(
                 depth /= (1.0 + u * u + v * v).sqrt();
             }
 
-            let focus_to_object =
-                depth * nalgebra::Vector4::new(u, -v, -1.0, 0.0);
-
+            let focus_to_object = depth * Vector4::new(u, -v, -1.0, 0.0);
             let point = (view_rot * focus_to_object).xyz() + eye.coords;
             points.push(Point3::from(time_rot * point));
         }
@@ -245,7 +245,7 @@ pub fn build_point_cloud(
 }
 
 pub fn build_frame_clouds(
-    scans: &HashMap<String, fm::Scan>,
+    scans: &IndexMap<String, fm::Scan>,
     scan_frames: &[fm::ScanFrame],
     params: &PointCloudParams,
 ) -> Vec<Vec<PointNormal>> {
@@ -399,7 +399,7 @@ pub fn validate_point_bounds(
 mod test {
     use super::*;
 
-    use base::assert_eq_f32;
+    use base::assert_approx_eq;
 
     fn new_point_normal(x: f64, y: f64, z: f64) -> PointNormal {
         PointNormal(Point3::new(x, y, z), Vector3::new(0.0, 0.0, 0.0))
@@ -420,6 +420,6 @@ mod test {
             new_point_normal(10.0, 0.0, 0.0),
             new_point_normal(21.0, 0.0, 0.0),
         ];
-        assert_eq_f32!(distance_between_point_clouds(&a, &b).unwrap(), 1.0);
+        assert_approx_eq!(distance_between_point_clouds(&a, &b).unwrap(), 1.0);
     }
 }

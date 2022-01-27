@@ -50,6 +50,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
   class Scan {
     public let eye: FmPoint3
     public let ctr: FmPoint3
+    public let cua: Float
     public let vel: Float
     public let fps: Double
     public let name: String
@@ -69,11 +70,13 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     public var undistortDepthMap: ([Double], [Double])?
 
     public init(
-      eye: FmPoint3, ctr: FmPoint3, vel: Float, fps: Double, name: String,
-      nof: Int, at: TimeInterval, imgrt: Int, undist: Bool, trueDepth: Bool
+      eye: FmPoint3, ctr: FmPoint3, cua: Float, vel: Float, fps: Double,
+      name: String, nof: Int, at: TimeInterval, imgrt: Int, undist: Bool,
+      trueDepth: Bool
     ) {
       self.eye = eye
       self.ctr = ctr
+      self.cua = cua
       self.vel = vel
       self.fps = fps
       self.name = name
@@ -213,11 +216,27 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
       }
     }
 
+    let upAngle: Float
+    switch UIDevice.current.orientation {
+    case .portrait:
+      upAngle = -1.57079632679
+    case .portraitUpsideDown:
+      upAngle = 1.57079632679
+    case .landscapeLeft:
+      upAngle = 0
+    case .landscapeRight:
+      upAngle = 3.1415926536
+    default:
+      print("Failed to determine camera up angle")
+      upAngle = Float.nan
+    }
+
     let eye = request.query?["y"]?.split(separator: ",")
       .map(Float.init).compactMap { $0 }
     let ctr =
       request.query?["c"]?.split(separator: ",")
       .map(Float.init).compactMap { $0 } ?? [0.0, 0.0, 0.0]
+    let cua = Float(request.query?["cua"] ?? String(upAngle))
     let vel = Float(request.query?["vel"] ?? "")
     let fmt = UInt(request.query?["fmt"] ?? "0")
     let fps = Double(request.query?["fps"] ?? "0")
@@ -229,10 +248,10 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     let numFrontFmts = ARFaceTrackingConfiguration.supportedVideoFormats.count
     let numBackFmts = ARWorldTrackingConfiguration.supportedVideoFormats.count
-    if eye == nil || eye!.count != 3 || ctr.count != 3 || vel == nil
-      || fmt == nil || fmt! >= numFrontFmts + numBackFmts || fps == nil
-      || fps! < 0 || nof == nil || at == nil || at! < uts || imgrt == nil
-      || undist == nil
+    if eye == nil || eye!.count != 3 || ctr.count != 3 || cua == nil
+      || vel == nil || fmt == nil || fmt! >= numFrontFmts + numBackFmts
+      || fps == nil || fps! < 0 || nof == nil || at == nil || at! < uts
+      || imgrt == nil || undist == nil
     {
       print("Bad '/scan' request arguments")
       return GCDWebServerResponse(
@@ -243,7 +262,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     let scan = Scan(
       eye: FmPoint3(x: eye![0], y: eye![1], z: eye![2]),
       ctr: FmPoint3(x: ctr[0], y: ctr[1], z: ctr[2]),
-      vel: vel!, fps: fps!, name: name, nof: Int(nof!),
+      cua: cua!, vel: vel!, fps: fps!, name: name, nof: Int(nof!),
       at: at! - uts + uptime, imgrt: Int(imgrt!),
       undist: undist!, trueDepth: fmt! < numFrontFmts)
 
@@ -427,25 +446,11 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
       }
     }
 
-    let upAngle: Float
-    switch UIDevice.current.orientation {
-    case .portrait:
-      upAngle = -1.57079632679
-    case .portraitUpsideDown:
-      upAngle = 1.57079632679
-    case .landscapeLeft:
-      upAngle = 0
-    case .landscapeRight:
-      upAngle = 3.1415926536
-    default:
-      upAngle = Float.nan
-    }
-
     scan.name.cString(using: .utf8)!.withUnsafeBufferPointer { namePtr in
       var fmScan = FmScan(
         name: namePtr.baseAddress,
         camera_angle_of_view: angleOfView,
-        camera_up_angle: upAngle,
+        camera_up_angle: scan.cua,
         camera_angular_velocity: scan.vel,
         camera_initial_position: scan.eye,
         camera_initial_direction: scan.ctr,

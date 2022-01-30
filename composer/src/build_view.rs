@@ -1,12 +1,8 @@
-use std::collections::HashMap;
-
 use log::info;
 use structopt::StructOpt;
 
-use crate::point_cloud::{
-    build_frame_clouds, validate_point_bounds, Point3, PointCloudParams,
-    PointNormal, Vector3,
-};
+use crate::mesh::Mesh;
+use crate::point_cloud::{build_frame_clouds, PointCloudParams, PointNormal};
 use crate::poisson;
 use crate::scan::{read_scans, ScanParams};
 use base::defs::{Error, ErrorKind::*, Result};
@@ -53,6 +49,13 @@ pub struct BuildViewParams {
         default_value = "0"
     )]
     pub num_smooth_iters: usize,
+
+    #[structopt(
+        help = "Surface decimation ratio",
+        long,
+        default_value = "0.1"
+    )]
+    pub decimate_ratio: f64,
 }
 
 pub fn build_view(
@@ -98,10 +101,19 @@ pub fn build_view(
         mesh.smoothen(params.num_smooth_iters);
     }
 
+    if params.decimate_ratio > 0.0 && params.decimate_ratio < 1.0 {
+        info!(
+            "decimating mesh of {} vertices and {} faces...",
+            mesh.vertices.len(),
+            mesh.faces.len()
+        );
+        mesh = mesh.decimate(params.decimate_ratio);
+    }
+
     info!(
         "writing mesh of {} vertices and {} faces...",
         mesh.vertices.len(),
-        mesh.triangles.len()
+        mesh.faces.len()
     );
 
     use std::io::Write;
@@ -123,7 +135,7 @@ pub fn build_view(
         )
         .unwrap();
     }
-    for triangle in mesh.triangles {
+    for triangle in mesh.faces {
         file.write_all(
             format!(
                 "f {0}//{0} {1}//{1} {2}//{2}\n",
@@ -158,102 +170,5 @@ impl poisson::Cloud<f64> for Cloud {
 
     fn normal(&self, index: usize) -> [f64; 3] {
         *self.0[index].1.as_ref()
-    }
-}
-
-#[derive(Default)]
-struct Mesh {
-    vertices: Vec<Point3>,
-    normals: Vec<Vector3>,
-    triangles: Vec<[usize; 3]>,
-}
-
-impl Mesh {
-    fn apply_bounds(&mut self, params: &PointCloudParams) {
-        assert_eq!(self.vertices.len(), self.normals.len());
-        let mut mappings = HashMap::with_capacity(self.vertices.len());
-
-        let mut j = 0;
-        for i in 0..self.vertices.len() {
-            if validate_point_bounds(
-                &self.vertices[i],
-                params.min_z,
-                params.max_z,
-                params.max_z_distance,
-            ) {
-                mappings.insert(i, j);
-                self.vertices.swap(i, j);
-                self.normals.swap(i, j);
-                j += 1;
-            }
-        }
-        self.vertices.truncate(j);
-        self.normals.truncate(j);
-
-        let mut j = 0;
-        'next: for i in 0..self.triangles.len() {
-            for k in 0..self.triangles[i].len() {
-                if let Some(l) = mappings.get(&self.triangles[i][k]) {
-                    self.triangles[j][k] = *l;
-                } else {
-                    continue 'next;
-                }
-            }
-            j += 1;
-        }
-        self.triangles.truncate(j);
-    }
-
-    fn smoothen(&mut self, num_iters: usize) {
-        assert!(self.vertices.len() == self.normals.len());
-
-        let mut sums =
-            vec![(Vector3::zeros(), Vector3::zeros(), 0); self.vertices.len()];
-
-        for _ in 0..num_iters {
-            for sum in sums.iter_mut() {
-                *sum = (Vector3::zeros(), Vector3::zeros(), 0);
-            }
-
-            for triangle in self.triangles.iter() {
-                sums[triangle[0]].0 += self.vertices[triangle[1]].coords;
-                sums[triangle[0]].0 += self.vertices[triangle[2]].coords;
-                sums[triangle[0]].1 += self.normals[triangle[1]];
-                sums[triangle[0]].1 += self.normals[triangle[2]];
-                sums[triangle[0]].2 += 2;
-
-                sums[triangle[1]].0 += self.vertices[triangle[0]].coords;
-                sums[triangle[1]].0 += self.vertices[triangle[2]].coords;
-                sums[triangle[1]].1 += self.normals[triangle[0]];
-                sums[triangle[1]].1 += self.normals[triangle[2]];
-                sums[triangle[1]].2 += 2;
-
-                sums[triangle[2]].0 += self.vertices[triangle[0]].coords;
-                sums[triangle[2]].0 += self.vertices[triangle[1]].coords;
-                sums[triangle[2]].1 += self.normals[triangle[0]];
-                sums[triangle[2]].1 += self.normals[triangle[1]];
-                sums[triangle[2]].2 += 2;
-            }
-
-            #[allow(clippy::needless_range_loop)]
-            for i in 0..self.vertices.len() {
-                self.vertices[i].coords = sums[i].0 / sums[i].2 as f64;
-                self.normals[i] = sums[i].1 / sums[i].2 as f64;
-            }
-        }
-    }
-}
-
-impl poisson::Mesh<f64> for Mesh {
-    fn add_vertex(&mut self, vertex: &[f64; 3]) {
-        self.vertices.push(Point3::from(*vertex));
-    }
-
-    fn add_normal(&mut self, normal: &[f64; 3]) {
-        self.normals.push(Vector3::from(*normal));
-    }
-
-    fn add_triangle(&mut self, triangle: &[usize; 3]) {
-        self.triangles.push(*triangle);
     }
 }

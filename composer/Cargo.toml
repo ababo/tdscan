@@ -13,11 +13,13 @@ zip = "0.5"
 [dependencies]
 argmin = "0.4.7"
 base = { path = "../base" }
+derive_more = "0.99.17"
 indexmap = "1.8.0"
 kiddo = "0.1.7"
 log = "0.4"
 nalgebra = "0.29.0"
 num = "0.4"
+petgraph = "0.6.0"
 rand = "0.8.4"
 rlua = "0.17.0"
 serde = { version = "1.0", features = ["derive"] }

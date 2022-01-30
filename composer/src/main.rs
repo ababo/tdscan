@@ -2,6 +2,7 @@ mod build_view;
 mod combine;
 mod export_to_json;
 mod import_obj;
+mod mesh;
 mod misc;
 mod optimize_scan_geometry;
 mod point_cloud;

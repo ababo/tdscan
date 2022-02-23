@@ -5,6 +5,9 @@ use serde_json::Value as JsonValue;
 use base::defs::{Error, ErrorKind::*};
 use base::fm;
 
+use petgraph::unionfind::UnionFind;
+use std::collections::HashMap;
+
 pub fn lua_err_to_err(err: rlua::Error) -> Error {
     Error::with_source(
         LuaError,
@@ -97,4 +100,26 @@ pub fn truncate_json_value(value: &mut JsonValue, max_len: usize) {
         }
         _ => {}
     };
+}
+
+pub fn extract_biggest_partition_component(
+    partition: UnionFind<usize>,
+) -> Vec<usize> {
+    let labeling: Vec<usize> = partition.into_labeling();
+    let mut family = HashMap::<usize, Vec<usize>>::new();
+    for i in 0..labeling.len() {
+        let j = labeling[i];
+        family.entry(j).or_insert(vec![]);
+        family.get_mut(&j).unwrap().push(i);
+    }
+    let biggest_idx: usize =
+        family.iter().map(|(&i, j)| (j.len(), i)).max().unwrap().1;
+    family[&biggest_idx].clone()
+}
+
+pub fn vec_inv<T>(v: &Vec<T>) -> HashMap::<T, usize>
+where T: Copy, T: Eq, T: std::hash::Hash
+{
+    HashMap::<T, usize>::from_iter(
+        v.iter().enumerate().map(|(i, &j)| (j, i)))
 }

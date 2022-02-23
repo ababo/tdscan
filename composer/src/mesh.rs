@@ -9,7 +9,12 @@ use crate::point_cloud::{
 };
 use crate::poisson;
 
-#[derive(Default)]
+use crate::misc;
+use std::io;
+use std::io::prelude::*;
+use std::fs::File;
+
+#[derive(Default,Clone)]
 pub struct Mesh {
     pub vertices: Vec<Point3>,
     pub normals: Vec<Vector3>,
@@ -107,6 +112,60 @@ impl Mesh {
 
     pub fn decimate(self, ratio: f64) -> Mesh {
         Decimator::execute(self, ratio)
+    }
+
+    pub fn fix_normals(&mut self) {
+        for vn in self.normals.iter_mut() {
+            vn.normalize_mut();
+        }
+    }
+
+    pub fn clean(&mut self) {
+        let mut partition = UnionFind::new(self.vertices.len());
+        for &[v0, v1, v2] in &self.faces {
+            partition.union(v0, v1);
+            partition.union(v0, v2);
+            partition.union(v1, v2);
+        }
+        
+        let vertices_idx = misc::extract_biggest_partition_component(partition);
+        let vertices_inv = misc::vec_inv(&vertices_idx);
+        
+        self.vertices =
+            vertices_idx.iter().map(|&i| self.vertices[i]).collect();
+        self.normals =
+            vertices_idx.iter().map(|&i| self.normals[i]).collect();
+        let mut faces: Vec<[usize; 3]> = vec![];
+        for [v0, v1, v2] in &self.faces {
+            let i0 = vertices_inv.get(v0);
+            let i1 = vertices_inv.get(v1);
+            let i2 = vertices_inv.get(v2);
+            if let (Some(&j0), Some(&j1), Some(&j2)) = (i0, i1, i2) {
+                faces.push([j0, j1, j2]);
+            }
+        }
+        self.faces = faces;
+    }
+
+    pub fn dbg_write_obj(&self, objpath: &str) {
+        let file = File::create(objpath).ok().unwrap();
+        let mut writer = io::BufWriter::new(file);
+        
+        for v in &self.vertices {
+            write!(&mut writer, "v {:.6} {:.6} {:.6}\n",
+                   v[0], v[1], v[2]).unwrap();
+        }
+        
+        for vn in &self.normals {
+            write!(&mut writer, "vn {:.4} {:.4} {:.4}\n",
+                   vn[0], vn[1], vn[2]).unwrap();
+            // using the same precision as blender
+        }
+        
+        for f in &self.faces {
+            write!(&mut writer, "f {} {} {}\n",
+                   f[0]+1, f[1]+1, f[2]+1).unwrap();
+        }
     }
 }
 

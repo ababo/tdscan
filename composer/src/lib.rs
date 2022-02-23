@@ -17,7 +17,7 @@ pub mod poisson;
 pub mod scan;
 pub mod select;
 
-//pub mod texturing;
+pub mod texturing;
 
 pub use base;
 pub use base::fm;

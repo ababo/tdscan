@@ -9,6 +9,8 @@ use base::defs::{Error, ErrorKind::*, Result};
 use base::fm;
 use base::util::cli;
 
+use crate::texturing::TexturedMesh;
+
 #[derive(StructOpt)]
 #[structopt(about = "Build element view from scan .fm file")]
 pub struct BuildViewCommand {
@@ -29,6 +31,14 @@ impl BuildViewCommand {
 
         build_view(reader.as_mut(), writer.as_mut(), &self.params)
     }
+}
+
+use indexmap::IndexMap;
+pub fn dbg_read_scans_by_cmd(
+    cmd: &BuildViewCommand
+) -> Result<(IndexMap<String, fm::Scan>, Vec<fm::ScanFrame>)> {
+    let mut reader = cmd.input.get()?;
+    read_scans(reader.as_mut(), &cmd.params.scan)
 }
 
 #[derive(StructOpt)]
@@ -56,6 +66,67 @@ pub struct BuildViewParams {
         default_value = "0.1"
     )]
     pub decimate_ratio: f64,
+}
+
+pub fn dbg_build_mesh_by_cmd(
+    cmd: &BuildViewCommand
+) -> Mesh {
+    let mut reader = cmd.input.get().unwrap();
+    let params: &BuildViewParams = &cmd.params;
+    
+    println!("reading scans...");
+    let (scans, scan_frames) = read_scans(reader.as_mut(), &params.scan).unwrap();
+
+    params
+        .point_cloud
+        .validate(scans.keys().map(String::as_str)).unwrap();
+
+    println!(
+        "building point clouds from {} scans ({} frames)...",
+        scans.len(),
+        scan_frames.len()
+    );
+    let cloud = Cloud(
+        build_frame_clouds(&scans, &scan_frames, &params.point_cloud)
+            .into_iter()
+            .flatten()
+            .collect(),
+    );
+
+    let mut mesh = Mesh::default();
+
+    println!(
+        "reconstructing mesh from cloud of {} points...",
+        cloud.0.len()
+    );
+    if !poisson::reconstruct(&params.poisson, &cloud, &mut mesh) {
+        println!("failed to reconstruct surface");
+    }
+    mesh.apply_bounds(&params.point_cloud);
+    mesh.fix_normals();
+    mesh.clean();
+
+    if params.num_smooth_iters > 0 {
+        println!("smoothing mesh...");
+        mesh.smoothen(params.num_smooth_iters);
+    }
+
+    if params.decimate_ratio > 0.0 && params.decimate_ratio < 1.0 {
+        println!(
+            "decimating mesh of {} vertices and {} faces...",
+            mesh.vertices.len(),
+            mesh.faces.len()
+        );
+        mesh = mesh.decimate(params.decimate_ratio);
+    }
+
+    println!(
+        "returning mesh of {} vertices and {} faces...",
+        mesh.vertices.len(),
+        mesh.faces.len()
+    );
+
+    mesh
 }
 
 pub fn build_view(
@@ -95,6 +166,8 @@ pub fn build_view(
         ));
     }
     mesh.apply_bounds(&params.point_cloud);
+    mesh.fix_normals();
+    mesh.clean();
 
     if params.num_smooth_iters > 0 {
         info!("smoothing mesh...");
@@ -111,49 +184,20 @@ pub fn build_view(
     }
 
     info!(
-        "writing mesh of {} vertices and {} faces...",
+        "texturing mesh of {} vertices and {} faces...",
         mesh.vertices.len(),
         mesh.faces.len()
     );
+    let tmesh = TexturedMesh::make(&scans, &scan_frames, mesh);
 
-    use std::io::Write;
-    let mut file =
-        std::fs::File::create("/Users/ababo/Desktop/foo.obj").unwrap();
-    for vertex in mesh.vertices {
-        file.write_all(
-            format!("v {} {} {}\n", vertex.x, vertex.y, vertex.z)
-                .into_bytes()
-                .as_slice(),
-        )
-        .unwrap();
-    }
-    for normal in mesh.normals {
-        file.write_all(
-            format!("vn {} {} {}\n", normal.x, normal.y, normal.z)
-                .into_bytes()
-                .as_slice(),
-        )
-        .unwrap();
-    }
-    for triangle in mesh.faces {
-        file.write_all(
-            format!(
-                "f {0}//{0} {1}//{1} {2}//{2}\n",
-                triangle[0] + 1,
-                triangle[1] + 1,
-                triangle[2] + 1
-            )
-            .into_bytes()
-            .as_slice(),
-        )
-        .unwrap();
-    }
+    info!("writing textured mesh...");
+    tmesh.write("foo.mtl", "foo.obj", "foo.png");
 
     info!("done");
     Ok(())
 }
 
-struct Cloud(Vec<PointNormal>);
+pub struct Cloud(Vec<PointNormal>);
 
 impl poisson::Cloud<f64> for Cloud {
     fn len(&self) -> usize {

@@ -1,3 +1,6 @@
+#[allow(unused_imports)]
+use composer;
+
 mod build_view;
 mod combine;
 mod export_to_json;

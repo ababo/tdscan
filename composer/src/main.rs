@@ -12,7 +12,7 @@ mod point_cloud;
 mod poisson;
 mod scan;
 mod select;
-mod texturing;
+mod texture;
 
 use log::error;
 use simplelog::{

@@ -10,11 +10,11 @@ use crate::point_cloud::{
 use crate::poisson;
 
 use crate::misc;
+use std::fs::File;
 use std::io;
 use std::io::prelude::*;
-use std::fs::File;
 
-#[derive(Default,Clone)]
+#[derive(Default, Clone)]
 pub struct Mesh {
     pub vertices: Vec<Point3>,
     pub normals: Vec<Vector3>,
@@ -127,14 +127,13 @@ impl Mesh {
             partition.union(v0, v2);
             partition.union(v1, v2);
         }
-        
+
         let vertices_idx = misc::extract_biggest_partition_component(partition);
         let vertices_inv = misc::vec_inv(&vertices_idx);
-        
+
         self.vertices =
             vertices_idx.iter().map(|&i| self.vertices[i]).collect();
-        self.normals =
-            vertices_idx.iter().map(|&i| self.normals[i]).collect();
+        self.normals = vertices_idx.iter().map(|&i| self.normals[i]).collect();
         let mut faces: Vec<[usize; 3]> = vec![];
         for [v0, v1, v2] in &self.faces {
             let i0 = vertices_inv.get(v0);
@@ -150,21 +149,21 @@ impl Mesh {
     pub fn dbg_write_obj(&self, objpath: &str) {
         let file = File::create(objpath).ok().unwrap();
         let mut writer = io::BufWriter::new(file);
-        
+
         for v in &self.vertices {
-            write!(&mut writer, "v {:.6} {:.6} {:.6}\n",
-                   v[0], v[1], v[2]).unwrap();
+            writeln!(&mut writer, "v {:.6} {:.6} {:.6}", v[0], v[1], v[2])
+                .unwrap();
         }
-        
+
         for vn in &self.normals {
-            write!(&mut writer, "vn {:.4} {:.4} {:.4}\n",
-                   vn[0], vn[1], vn[2]).unwrap();
-            // using the same precision as blender
+            writeln!(&mut writer, "vn {:.4} {:.4} {:.4}", vn[0], vn[1], vn[2])
+                .unwrap();
+            // Using the same precision as Blender.
         }
-        
+
         for f in &self.faces {
-            write!(&mut writer, "f {} {} {}\n",
-                   f[0]+1, f[1]+1, f[2]+1).unwrap();
+            writeln!(&mut writer, "f {} {} {}", f[0] + 1, f[1] + 1, f[2] + 1)
+                .unwrap();
         }
     }
 }

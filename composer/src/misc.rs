@@ -107,9 +107,8 @@ pub fn extract_biggest_partition_component(
 ) -> Vec<usize> {
     let labeling: Vec<usize> = partition.into_labeling();
     let mut family = HashMap::<usize, Vec<usize>>::new();
-    for i in 0..labeling.len() {
-        let j = labeling[i];
-        family.entry(j).or_insert(vec![]);
+    for (i, &j) in labeling.iter().enumerate() {
+        family.entry(j).or_insert_with(Vec::new);
         family.get_mut(&j).unwrap().push(i);
     }
     let biggest_idx: usize =
@@ -117,9 +116,11 @@ pub fn extract_biggest_partition_component(
     family[&biggest_idx].clone()
 }
 
-pub fn vec_inv<T>(v: &Vec<T>) -> HashMap::<T, usize>
-where T: Copy, T: Eq, T: std::hash::Hash
+pub fn vec_inv<T>(v: &[T]) -> HashMap<T, usize>
+where
+    T: Copy,
+    T: Eq,
+    T: std::hash::Hash,
 {
-    HashMap::<T, usize>::from_iter(
-        v.iter().enumerate().map(|(i, &j)| (j, i)))
+    HashMap::<T, usize>::from_iter(v.iter().enumerate().map(|(i, &j)| (j, i)))
 }

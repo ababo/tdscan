@@ -17,7 +17,7 @@ pub mod poisson;
 pub mod scan;
 pub mod select;
 
-pub mod texturing;
+pub mod texture;
 
 pub use base;
 pub use base::fm;
@@ -28,4 +28,3 @@ pub use petgraph;
 pub use simplelog;
 pub use structopt;
 pub use log;*/
-

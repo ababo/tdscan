@@ -9,7 +9,7 @@ use base::defs::{Error, ErrorKind::*, Result};
 use base::fm;
 use base::util::cli;
 
-use crate::texturing::TexturedMesh;
+use crate::texture::TexturedMesh;
 
 #[derive(StructOpt)]
 #[structopt(about = "Build element view from scan .fm file")]
@@ -35,7 +35,7 @@ impl BuildViewCommand {
 
 use indexmap::IndexMap;
 pub fn dbg_read_scans_by_cmd(
-    cmd: &BuildViewCommand
+    cmd: &BuildViewCommand,
 ) -> Result<(IndexMap<String, fm::Scan>, Vec<fm::ScanFrame>)> {
     let mut reader = cmd.input.get()?;
     read_scans(reader.as_mut(), &cmd.params.scan)
@@ -68,18 +68,18 @@ pub struct BuildViewParams {
     pub decimate_ratio: f64,
 }
 
-pub fn dbg_build_mesh_by_cmd(
-    cmd: &BuildViewCommand
-) -> Mesh {
+pub fn dbg_build_mesh_by_cmd(cmd: &BuildViewCommand) -> Mesh {
     let mut reader = cmd.input.get().unwrap();
     let params: &BuildViewParams = &cmd.params;
-    
+
     println!("reading scans...");
-    let (scans, scan_frames) = read_scans(reader.as_mut(), &params.scan).unwrap();
+    let (scans, scan_frames) =
+        read_scans(reader.as_mut(), &params.scan).unwrap();
 
     params
         .point_cloud
-        .validate(scans.keys().map(String::as_str)).unwrap();
+        .validate(scans.keys().map(String::as_str))
+        .unwrap();
 
     println!(
         "building point clouds from {} scans ({} frames)...",

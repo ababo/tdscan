@@ -13,7 +13,7 @@ pub mod mesh;
 pub mod misc;
 pub mod optimize_scan_geometry;
 pub mod point_cloud;
-pub mod poisson;
+mod poisson;
 pub mod scan;
 pub mod select;
 

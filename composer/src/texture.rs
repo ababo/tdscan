@@ -18,8 +18,8 @@ use input_selection::{
 
 pub struct TexturedMesh {
     pub mesh: Mesh,
-    pub uv_coords: Vec<UV>,
-    pub uv_idxs: Vec<[UVIdx; 3]>,
+    pub uv_coords: Vec<Vector2>,
+    pub uv_idxs: Vec<[usize; 3]>,
     pub image: RgbImage,
 }
 

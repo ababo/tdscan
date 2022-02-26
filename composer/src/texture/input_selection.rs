@@ -53,7 +53,7 @@ pub fn project_like_camera(
             let j = (w + depth_width / 2.0) / depth_width;
 
             ProjectedPoint {
-                point: Point2::new(i, j),
+                point: Vector2::new(i, j),
                 depth,
             }
         })

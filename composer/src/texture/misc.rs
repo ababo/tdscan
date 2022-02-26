@@ -48,14 +48,6 @@ pub use base::fm;
 //pub use crate::misc::vec_inv;
 
 
-//pub type VertexIdx = usize;
-//pub type FaceIdx = usize;
-//pub type Edge = [VertexIdx; 2];
-
-pub type UV = Vector2;
-pub type UVIdx = usize;
-//pub type FrameIdx = usize;
-
 pub type Vector3 = nalgebra::Vector3<f64>;
 pub type Point3 = nalgebra::Point3<f64>;
 pub type Quaternion = nalgebra::UnitQuaternion<f64>;
@@ -64,13 +56,10 @@ pub type Matrix4 = nalgebra::Matrix4<f64>;
 pub type Vector2 = nalgebra::Vector2<f64>;
 //pub type Matrix2 = nalgebra::Matrix2<f64>;
 
-pub type Point2 = nalgebra::Vector2<f64>;
 pub struct ProjectedPoint {
-    pub point: Point2,
+    pub point: Vector2,
     pub depth: f64,
 }
-
-
 
 
 pub fn fm_point3_to_point3(p: &fm::Point3) -> Point3 {

@@ -146,6 +146,7 @@ impl Mesh {
         self.faces = faces;
     }
 
+    #[allow(dead_code)]
     pub fn dbg_write_obj(&self, objpath: &str) {
         let file = File::create(objpath).ok().unwrap();
         let mut writer = io::BufWriter::new(file);

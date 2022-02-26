@@ -34,6 +34,7 @@ impl BuildViewCommand {
 }
 
 use indexmap::IndexMap;
+#[allow(dead_code)]
 pub fn dbg_read_scans_by_cmd(
     cmd: &BuildViewCommand,
 ) -> Result<(IndexMap<String, fm::Scan>, Vec<fm::ScanFrame>)> {
@@ -68,6 +69,7 @@ pub struct BuildViewParams {
     pub decimate_ratio: f64,
 }
 
+#[allow(dead_code)]
 pub fn dbg_build_mesh_by_cmd(cmd: &BuildViewCommand) -> Mesh {
     let mut reader = cmd.input.get().unwrap();
     let params: &BuildViewParams = &cmd.params;

@@ -10,6 +10,10 @@ pub mod input_selection;
 pub mod misc;
 use misc::*;
 
+use input_selection::{
+    project_like_camera,
+};
+
 //use log::info;
 
 pub struct TexturedMesh {
@@ -21,11 +25,14 @@ pub struct TexturedMesh {
 
 impl TexturedMesh {
     pub fn make(
-        _scans: &IndexMap<String, fm::Scan>,
-        _scan_frames: &[fm::ScanFrame],
+        scans: &IndexMap<String, fm::Scan>,
+        scan_frames: &[fm::ScanFrame],
         _mesh: Mesh,
     ) -> TexturedMesh {
-        unreachable!()
+
+        project_like_camera(&scans[""], &scan_frames[0], &[]);
+        
+        unimplemented!()
     }
 
     pub fn write(

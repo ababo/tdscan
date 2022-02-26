@@ -1,5 +1,4 @@
-#[allow(unused_imports)]
-use composer;
+pub use composer;
 
 mod build_view;
 mod combine;

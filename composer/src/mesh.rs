@@ -4,15 +4,11 @@ use std::collections::{BinaryHeap, HashMap, HashSet};
 use derive_more::{Add, AddAssign};
 use petgraph::unionfind::UnionFind;
 
+use crate::misc;
 use crate::point_cloud::{
     validate_point_bounds, Matrix4, Point3, PointCloudParams, Vector3, Vector4,
 };
 use crate::poisson;
-
-use crate::misc;
-use std::fs::File;
-use std::io;
-use std::io::prelude::*;
 
 #[derive(Default, Clone)]
 pub struct Mesh {
@@ -114,12 +110,7 @@ impl Mesh {
         Decimator::execute(self, ratio)
     }
 
-    pub fn fix_normals(&mut self) {
-        for vn in self.normals.iter_mut() {
-            vn.normalize_mut();
-        }
-    }
-
+    // This method removes scattered, detached noise particles from the mesh.
     pub fn clean(&mut self) {
         let mut partition = UnionFind::new(self.vertices.len());
         for &[v0, v1, v2] in &self.faces {
@@ -144,28 +135,6 @@ impl Mesh {
             }
         }
         self.faces = faces;
-    }
-
-    #[allow(dead_code)]
-    pub fn dbg_write_obj(&self, objpath: &str) {
-        let file = File::create(objpath).ok().unwrap();
-        let mut writer = io::BufWriter::new(file);
-
-        for v in &self.vertices {
-            writeln!(&mut writer, "v {:.6} {:.6} {:.6}", v[0], v[1], v[2])
-                .unwrap();
-        }
-
-        for vn in &self.normals {
-            writeln!(&mut writer, "vn {:.4} {:.4} {:.4}", vn[0], vn[1], vn[2])
-                .unwrap();
-            // Using the same precision as Blender.
-        }
-
-        for f in &self.faces {
-            writeln!(&mut writer, "f {} {} {}", f[0] + 1, f[1] + 1, f[2] + 1)
-                .unwrap();
-        }
     }
 }
 

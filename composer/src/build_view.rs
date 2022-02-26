@@ -1,15 +1,16 @@
 use log::info;
 use structopt::StructOpt;
+use indexmap::IndexMap;
 
+use crate::export_obj::write_textured_mesh;
 use crate::mesh::Mesh;
 use crate::point_cloud::{build_frame_clouds, PointCloudParams, PointNormal};
 use crate::poisson;
 use crate::scan::{read_scans, ScanParams};
+use crate::texture::TexturedMesh;
 use base::defs::{Error, ErrorKind::*, Result};
 use base::fm;
 use base::util::cli;
-
-use crate::texture::TexturedMesh;
 
 #[derive(StructOpt)]
 #[structopt(about = "Build element view from scan .fm file")]
@@ -33,7 +34,6 @@ impl BuildViewCommand {
     }
 }
 
-use indexmap::IndexMap;
 #[allow(dead_code)]
 pub fn dbg_read_scans_by_cmd(
     cmd: &BuildViewCommand,
@@ -105,7 +105,9 @@ pub fn dbg_build_mesh_by_cmd(cmd: &BuildViewCommand) -> Mesh {
         println!("failed to reconstruct surface");
     }
     mesh.apply_bounds(&params.point_cloud);
-    mesh.fix_normals();
+    for vn in mesh.normals.iter_mut() {
+        vn.normalize_mut();
+    }
     mesh.clean();
 
     if params.num_smooth_iters > 0 {
@@ -168,7 +170,9 @@ pub fn build_view(
         ));
     }
     mesh.apply_bounds(&params.point_cloud);
-    mesh.fix_normals();
+    for vn in mesh.normals.iter_mut() {
+        vn.normalize_mut();
+    }
     mesh.clean();
 
     if params.num_smooth_iters > 0 {
@@ -193,7 +197,7 @@ pub fn build_view(
     let tmesh = TexturedMesh::make(&scans, &scan_frames, mesh);
 
     info!("writing textured mesh...");
-    tmesh.write("foo.mtl", "foo.obj", "foo.png");
+    write_textured_mesh(&tmesh, "foo.mtl", "foo.obj", "foo.png");
 
     info!("done");
     Ok(())

@@ -1,12 +1,13 @@
+use std::collections::HashMap;
+use std::hash::Hash;
+
+use petgraph::unionfind::UnionFind;
 use rand::Rng;
 use rlua::Value as LuaValue;
 use serde_json::Value as JsonValue;
 
 use base::defs::{Error, ErrorKind::*};
 use base::fm;
-
-use petgraph::unionfind::UnionFind;
-use std::collections::HashMap;
 
 pub fn lua_err_to_err(err: rlua::Error) -> Error {
     Error::with_source(
@@ -105,22 +106,20 @@ pub fn truncate_json_value(value: &mut JsonValue, max_len: usize) {
 pub fn extract_biggest_partition_component(
     partition: UnionFind<usize>,
 ) -> Vec<usize> {
-    let labeling: Vec<usize> = partition.into_labeling();
+    let labeling = partition.into_labeling();
     let mut family = HashMap::<usize, Vec<usize>>::new();
     for (i, &j) in labeling.iter().enumerate() {
         family.entry(j).or_insert_with(Vec::new);
         family.get_mut(&j).unwrap().push(i);
     }
-    let biggest_idx: usize =
+    let biggest_idx =
         family.iter().map(|(&i, j)| (j.len(), i)).max().unwrap().1;
     family[&biggest_idx].clone()
 }
 
 pub fn vec_inv<T>(v: &[T]) -> HashMap<T, usize>
 where
-    T: Copy,
-    T: Eq,
-    T: std::hash::Hash,
+    T: Copy+Eq+Hash
 {
-    HashMap::<T, usize>::from_iter(v.iter().enumerate().map(|(i, &j)| (j, i)))
+    HashMap::from_iter(v.iter().enumerate().map(|(i, &j)| (j, i)))
 }

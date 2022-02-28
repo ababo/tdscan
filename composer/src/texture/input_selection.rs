@@ -1,4 +1,10 @@
-use crate::texture::misc::*;
+use indexmap::IndexMap;
+use kiddo::distance::squared_euclidean;
+use kiddo::KdTree;
+
+use crate::mesh::Mesh;
+use crate::texture::*;
+use base::fm;
 
 pub fn project_like_camera(
     scan: &fm::Scan,
@@ -7,10 +13,11 @@ pub fn project_like_camera(
 ) -> Vec<ProjectedPoint> {
     let tan = (scan.camera_angle_of_view as f64 / 2.0).tan();
 
-    let eye =
-        fm_point3_to_point3(&scan.camera_initial_position.unwrap_or_default());
-    let dir =
-        fm_point3_to_point3(&scan.camera_initial_direction.unwrap_or_default());
+    let eye = scan.camera_initial_position.unwrap_or_default();
+    let eye = Point3::new(eye.x as f64, eye.y as f64, eye.z as f64);
+    let dir = scan.camera_initial_direction.unwrap_or_default();
+    let dir = Point3::new(dir.x as f64, dir.y as f64, dir.z as f64);
+
     let up_rot = Quaternion::from_axis_angle(
         &Vector3::z_axis(),
         scan.camera_up_angle as f64,
@@ -177,7 +184,7 @@ pub fn make_frame_metrics(
     frame: &fm::ScanFrame,
     mesh: &Mesh,
 ) -> Option<(Vec<Metrics>, Vec<Metrics>)> {
-    let image = try_load_frame_image(frame)?;
+    let image = load_frame_image(frame)?;
 
     let vertices_proj = project_like_camera(scan, frame, &mesh.vertices);
 
@@ -185,8 +192,8 @@ pub fn make_frame_metrics(
         frame.time as f64 / 1E9 * scan.camera_angular_velocity as f64;
     let time_rot =
         Quaternion::from_axis_angle(&Vector3::z_axis(), camera_angle);
-    let eye =
-        fm_point3_to_point3(&scan.camera_initial_position.unwrap_or_default());
+    let eye = scan.camera_initial_position.unwrap_or_default();
+    let eye = Point3::new(eye.x as f64, eye.y as f64, eye.z as f64);
     let camera = time_rot * eye;
 
     let occlusions = compute_occlusion_for_all_vertices(&vertices_proj, mesh);

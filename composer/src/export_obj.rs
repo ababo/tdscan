@@ -1,3 +1,5 @@
+// TODO: Refactor and implement a corresponding command.
+
 use std::fs::File;
 use std::io;
 use std::io::prelude::*;
@@ -12,8 +14,7 @@ pub fn dbg_write_obj(mesh: &Mesh, objpath: &str) {
     let mut writer = io::BufWriter::new(file);
 
     for v in &mesh.vertices {
-        writeln!(&mut writer, "v {:.6} {:.6} {:.6}", v[0], v[1], v[2])
-            .unwrap();
+        writeln!(&mut writer, "v {:.6} {:.6} {:.6}", v[0], v[1], v[2]).unwrap();
     }
 
     for vn in &mesh.normals {
@@ -64,8 +65,7 @@ pub fn write_textured_mesh(
     let mut writer = io::BufWriter::new(file);
     writeln!(&mut writer, "mtllib {mtlpath_local}").unwrap();
     for v in &tmesh.mesh.vertices {
-        writeln!(&mut writer, "v {:.6} {:.6} {:.6}", v[0], v[1], v[2])
-            .unwrap();
+        writeln!(&mut writer, "v {:.6} {:.6} {:.6}", v[0], v[1], v[2]).unwrap();
     }
     writeln!(&mut writer, "usemtl Default_OBJ\ns 1").unwrap();
     for vt in &tmesh.uv_coords {
@@ -76,7 +76,7 @@ pub fn write_textured_mesh(
             vt[1],
             1.0 - vt[0]
         )
-            .unwrap();
+        .unwrap();
     }
     for vn in &tmesh.mesh.normals {
         writeln!(
@@ -85,7 +85,7 @@ pub fn write_textured_mesh(
             "vn {:.4} {:.4} {:.4}",
             vn[0], vn[1], vn[2]
         )
-            .unwrap();
+        .unwrap();
     }
     for (f, t) in tmesh.mesh.faces.iter().zip(tmesh.uv_idxs.iter()) {
         writeln!(
@@ -103,7 +103,7 @@ pub fn write_textured_mesh(
             t[2] + 1,
             f[2] + 1,
         )
-            .unwrap();
+        .unwrap();
     }
 
     // Write PNG.

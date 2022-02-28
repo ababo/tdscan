@@ -21,6 +21,21 @@ impl TexturedMesh {
             make_all_frame_metrics(scans, scan_frames, &mesh);
         let _chosen_cameras = select_cameras(&face_metrics, &mesh);
 
+        let topo = BasicMeshTopology::make(&mesh);
+        let local_patches: Vec<LocalPatch> = choose_uv_patches(&mesh, &topo)
+            .iter()
+            .map(|(chunk, major)| {
+                LocalPatch::calculate_from(chunk, *major, &mesh)
+            })
+            .collect();
+
+        // (Dummy calls to avoid compiler warnings for now.)
+        local_patches[0]
+            .to_global_coords(Rectangle { pos: [0.0, 0.0], size: [0.0, 0.0] });
+        BarycentricCoordinateSystem::try_new([Vector2::new(0.0, 0.0); 3])
+            .unwrap()
+            .apply(Vector3::new(0.0, 0.0, 0.0));
+
         unimplemented!()
     }
 }

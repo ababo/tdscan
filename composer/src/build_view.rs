@@ -1,6 +1,5 @@
 use log::info;
 use structopt::StructOpt;
-use indexmap::IndexMap;
 
 use crate::export_obj::write_textured_mesh;
 use crate::mesh::Mesh;
@@ -34,14 +33,6 @@ impl BuildViewCommand {
     }
 }
 
-#[allow(dead_code)]
-pub fn dbg_read_scans_by_cmd(
-    cmd: &BuildViewCommand,
-) -> Result<(IndexMap<String, fm::Scan>, Vec<fm::ScanFrame>)> {
-    let mut reader = cmd.input.get()?;
-    read_scans(reader.as_mut(), &cmd.params.scan)
-}
-
 #[derive(StructOpt)]
 pub struct BuildViewParams {
     #[structopt(flatten)]
@@ -67,70 +58,6 @@ pub struct BuildViewParams {
         default_value = "0.1"
     )]
     pub decimate_ratio: f64,
-}
-
-#[allow(dead_code)]
-pub fn dbg_build_mesh_by_cmd(cmd: &BuildViewCommand) -> Mesh {
-    let mut reader = cmd.input.get().unwrap();
-    let params: &BuildViewParams = &cmd.params;
-
-    println!("reading scans...");
-    let (scans, scan_frames) =
-        read_scans(reader.as_mut(), &params.scan).unwrap();
-
-    params
-        .point_cloud
-        .validate(scans.keys().map(String::as_str))
-        .unwrap();
-
-    println!(
-        "building point clouds from {} scans ({} frames)...",
-        scans.len(),
-        scan_frames.len()
-    );
-    let cloud = Cloud(
-        build_frame_clouds(&scans, &scan_frames, &params.point_cloud)
-            .into_iter()
-            .flatten()
-            .collect(),
-    );
-
-    let mut mesh = Mesh::default();
-
-    println!(
-        "reconstructing mesh from cloud of {} points...",
-        cloud.0.len()
-    );
-    if !poisson::reconstruct(&params.poisson, &cloud, &mut mesh) {
-        println!("failed to reconstruct surface");
-    }
-    mesh.apply_bounds(&params.point_cloud);
-    for vn in mesh.normals.iter_mut() {
-        vn.normalize_mut();
-    }
-    mesh.clean();
-
-    if params.num_smooth_iters > 0 {
-        println!("smoothing mesh...");
-        mesh.smoothen(params.num_smooth_iters);
-    }
-
-    if params.decimate_ratio > 0.0 && params.decimate_ratio < 1.0 {
-        println!(
-            "decimating mesh of {} vertices and {} faces...",
-            mesh.vertices.len(),
-            mesh.faces.len()
-        );
-        mesh = mesh.decimate(params.decimate_ratio);
-    }
-
-    println!(
-        "returning mesh of {} vertices and {} faces...",
-        mesh.vertices.len(),
-        mesh.faces.len()
-    );
-
-    mesh
 }
 
 pub fn build_view(

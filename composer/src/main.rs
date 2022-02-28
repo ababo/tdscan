@@ -1,8 +1,6 @@
-pub use composer;
-
 mod build_view;
 mod combine;
-pub mod export_obj;
+mod export_obj;
 mod export_to_json;
 mod import_obj;
 mod mesh;

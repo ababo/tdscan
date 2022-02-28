@@ -1,11 +1,4 @@
 pub mod input_selection;
-//pub mod input_patching;
-
-//pub mod color_correction;
-
-//pub mod output_baking;
-//pub mod output_packing;
-//pub mod output_patching;
 
 pub mod misc;
 use misc::*;
@@ -13,8 +6,6 @@ use misc::*;
 use input_selection::{
     project_like_camera,
 };
-
-//use log::info;
 
 pub struct TexturedMesh {
     pub mesh: Mesh,
@@ -34,6 +25,4 @@ impl TexturedMesh {
         
         unimplemented!()
     }
-
-    
 }

@@ -162,7 +162,7 @@ type Comparator<T> = fn(&T, &T) -> Ordering;
 pub fn extremum<T: Copy+PartialOrd+Sub<Output = T>, I: Iterator<Item = T>>(
     it: I,
     f: fn(I, Comparator<T>) -> Option<T>,
-) -> I::Item {
+) -> T {
     f(it, |p, q| p.partial_cmp(q).unwrap()).unwrap()
 }
 

@@ -11,6 +11,10 @@ pub struct TexturedMesh {
     pub image: RgbImage,
 }
 
+// Spacing between patches in the final texture.
+// Measured as a fraction of the total texture size, e.g. 0.005 = 0.5%.
+const PATCH_SPACING: f64 = 0.005;
+
 impl TexturedMesh {
     pub fn new(
         scans: &IndexMap<String, fm::Scan>,
@@ -28,10 +32,17 @@ impl TexturedMesh {
                 LocalPatch::calculate_from(chunk, *major, &mesh)
             })
             .collect();
+        let local_patch_sizes: Vec<[f64; 2]> =
+            local_patches.iter().map(|patch| patch.size).collect();
+        let (rectangle_placements_vec, _scale) =
+            pack_rectangles_with_automatic_stretching(
+                &local_patch_sizes,
+                PATCH_SPACING,
+            );
+        let _uv_coords_tri =
+            globalize_uv(&local_patches, &rectangle_placements_vec, &mesh);
 
-        // (Dummy calls to avoid compiler warnings for now.)
-        local_patches[0]
-            .to_global_coords(Rectangle { pos: [0.0, 0.0], size: [0.0, 0.0] });
+        // Dummy calls to avoid compiler warnings for now.
         BarycentricCoordinateSystem::new([Vector2::new(0.0, 0.0); 3])
             .unwrap()
             .apply(Vector3::new(0.0, 0.0, 0.0));

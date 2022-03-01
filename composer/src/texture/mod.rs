@@ -1,4 +1,5 @@
 mod input_selection;
+mod output_packing;
 mod output_patching;
 mod textured_mesh;
 
@@ -13,6 +14,7 @@ use nalgebra::{ArrayStorage, Const, Matrix, Matrix3, SVD, vector};
 use crate::mesh::Mesh;
 pub use crate::texture::{
     input_selection::*,
+    output_packing::*,
     output_patching::*,
     textured_mesh::*,
 };
@@ -154,20 +156,20 @@ pub struct Rectangle<T> {
     pub size: [T; 2],
 }
 
+type Comparator<T> = fn(&T, &T) -> std::cmp::Ordering;
+
+pub fn extremum<T: Copy+PartialOrd+Sub<Output = T>, I: Iterator<Item = T>>(
+    it: I,
+    f: fn(I, Comparator<T>) -> Option<T>,
+) -> I::Item {
+    f(it, |p, q| p.partial_cmp(q).unwrap()).unwrap()
+}
+
 impl<T> Rectangle<T> {
     pub fn bounding(ijs: &[[T; 2]]) -> Rectangle<T>
     where
         T: Copy+PartialOrd+Sub<Output = T>
-    {
-        type Comparator<T> = fn(&T, &T) -> std::cmp::Ordering;
-
-        fn extremum<T: Copy+PartialOrd+Sub<Output = T>, I: Iterator<Item = T>>(
-            it: I,
-            f: fn(I, Comparator<T>) -> Option<T>,
-        ) -> I::Item {
-            f(it, |p, q| p.partial_cmp(q).unwrap()).unwrap()
-        }
-        
+    {    
         let ijs_coord = |k: usize| ijs.iter().map(move |ij| ij[k]);
         
         let imin = extremum(ijs_coord(0), Iterator::min_by);
@@ -226,4 +228,29 @@ pub fn ordered(e: [usize; 2]) -> [usize; 2] {
     } else {
         [e[1], e[0]]
     }
+}
+
+// Assuming f(bounds[0]) fails (typically), and f(bounds[1]) succeeds.
+// The bounds are allowed to come in any order.
+pub fn bisect<T>(
+    f: impl Fn(f64) -> Option<T>,
+    bounds: [f64; 2],
+    rtol: f64,
+) -> (f64, T) {
+    let tol = rtol * f64::max(bounds[0].abs(), bounds[1].abs());
+
+    let [mut fails, mut succeeds] = bounds;
+    let mut best_result = f(bounds[1]).unwrap();
+
+    while (fails - succeeds).abs() > tol {
+        let next = (fails + succeeds) / 2.0;
+        if let Some(new_best_result) = f(next) {
+            best_result = new_best_result;
+            succeeds = next;
+        } else {
+            fails = next;
+        }
+    }
+
+    (succeeds, best_result)
 }

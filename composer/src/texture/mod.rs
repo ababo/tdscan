@@ -3,6 +3,7 @@ mod output_packing;
 mod output_patching;
 mod textured_mesh;
 
+use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::io::Cursor;
 use std::ops::Sub;
@@ -156,7 +157,7 @@ pub struct Rectangle<T> {
     pub size: [T; 2],
 }
 
-type Comparator<T> = fn(&T, &T) -> std::cmp::Ordering;
+type Comparator<T> = fn(&T, &T) -> Ordering;
 
 pub fn extremum<T: Copy+PartialOrd+Sub<Output = T>, I: Iterator<Item = T>>(
     it: I,

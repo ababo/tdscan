@@ -2,24 +2,20 @@ mod input_selection;
 mod output_patching;
 mod textured_mesh;
 
-use std::collections::HashMap;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::io::Cursor;
 use std::ops::Sub;
 
 use image::io::Reader as ImageReader;
 use image::RgbImage;
-use nalgebra::ArrayStorage;
-use nalgebra::Const;
-use nalgebra::Matrix;
-use nalgebra::Matrix3;
-use nalgebra::SVD;
-use nalgebra::vector;
+use nalgebra::{ArrayStorage, Const, Matrix, Matrix3, SVD, vector};
 
 use crate::mesh::Mesh;
-pub use crate::texture::input_selection::*;
-pub use crate::texture::output_patching::*;
-pub use crate::texture::textured_mesh::*;
+pub use crate::texture::{
+    input_selection::*,
+    output_patching::*,
+    textured_mesh::*,
+};
 use base::fm;
 
 pub type Vector3 = nalgebra::Vector3<f64>;
@@ -85,7 +81,7 @@ pub struct BasicMeshTopology {
 }
 
 impl BasicMeshTopology {
-    pub fn make(mesh: &Mesh) -> BasicMeshTopology {
+    pub fn new(mesh: &Mesh) -> BasicMeshTopology {
         let mut faces_around_vertex = vec![HashSet::new(); mesh.vertices.len()];
         for (f_idx, &f) in mesh.faces.iter().enumerate() {
             for v in f {
@@ -125,7 +121,7 @@ pub struct BarycentricCoordinateSystem {
 }
 
 impl BarycentricCoordinateSystem {
-    pub fn try_new(vs: [Vector2; 3]) -> Option<Self> {
+    pub fn new(vs: [Vector2; 3]) -> Option<Self> {
         let m22 = Matrix2::from_columns(&[vs[1] - vs[0], vs[2] - vs[0]]);
         let n22 = m22.qr();
         if n22.is_invertible() {
@@ -142,7 +138,7 @@ impl BarycentricCoordinateSystem {
         Vector3::new(1.0 - l1 - l2, l1, l2)
     }
 
-    // (Assuming the input 'u' sums to 1.0.)
+    // Assuming the input 'u' sums to 1.0.
     pub fn apply(&self, u: Vector3) -> Vector2 {
         u[0] * self.vs[0] + u[1] * self.vs[1] + u[2] * self.vs[2]
     }
@@ -152,7 +148,7 @@ pub fn all_nonneg(v: Vector3) -> bool {
     v.iter().all(|&c| c >= 0.0)
 }
 
-#[derive(Debug, Hash, PartialEq, Eq, Clone, Ord, PartialOrd, Copy)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Rectangle<T> {
     pub pos: [T; 2],
     pub size: [T; 2],
@@ -161,30 +157,24 @@ pub struct Rectangle<T> {
 impl<T> Rectangle<T> {
     pub fn bounding(ijs: &[[T; 2]]) -> Rectangle<T>
     where
-        T: PartialOrd,
-        T: Copy,
-        T: Sub<Output = T>,
+        T: Copy+PartialOrd+Sub<Output = T>
     {
-        let imin = ijs
-            .iter()
-            .map(|ij| ij[0])
-            .min_by(|p, q| p.partial_cmp(q).unwrap())
-            .unwrap();
-        let imax = ijs
-            .iter()
-            .map(|ij| ij[0])
-            .max_by(|p, q| p.partial_cmp(q).unwrap())
-            .unwrap();
-        let jmin = ijs
-            .iter()
-            .map(|ij| ij[1])
-            .min_by(|p, q| p.partial_cmp(q).unwrap())
-            .unwrap();
-        let jmax = ijs
-            .iter()
-            .map(|ij| ij[1])
-            .max_by(|p, q| p.partial_cmp(q).unwrap())
-            .unwrap();
+        type Comparator<T> = fn(&T, &T) -> std::cmp::Ordering;
+
+        fn extremum<T: Copy+PartialOrd+Sub<Output = T>, I: Iterator<Item = T>>(
+            it: I,
+            f: fn(I, Comparator<T>) -> Option<T>,
+        ) -> I::Item {
+            f(it, |p, q| p.partial_cmp(q).unwrap()).unwrap()
+        }
+        
+        let ijs_coord = |k: usize| ijs.iter().map(move |ij| ij[k]);
+        
+        let imin = extremum(ijs_coord(0), Iterator::min_by);
+        let imax = extremum(ijs_coord(0), Iterator::max_by);
+        let jmin = extremum(ijs_coord(1), Iterator::min_by);
+        let jmax = extremum(ijs_coord(1), Iterator::max_by);
+        
         Rectangle {
             pos: [imin, jmin],
             size: [imax - imin, jmax - jmin],
@@ -193,11 +183,11 @@ impl<T> Rectangle<T> {
 }
 
 pub fn dominant_vector<const D: usize>(vs: &[Vector<D>]) -> Vector<D> {
-    // : OMatrix<f64, nalgebra::Const<D>, Dynamic>
+    // This has type OMatrix<f64, nalgebra::Const<D>, Dynamic>.
     let mat = Matrix::from_columns(vs);
     let svd = nalgebra::SVD::new(mat, true, false);
     let u = svd.u.unwrap();
-    Vector::<D>::from(u.column(0))
+    Vector::from(u.column(0))
 }
 
 pub fn complement(u0: Vector3) -> (Vector3, Vector3) {

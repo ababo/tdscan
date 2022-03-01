@@ -7,10 +7,13 @@ use crate::misc::*;
 use crate::mesh::Mesh;
 use crate::texture::*;
 
+// The following angle describes the maximal allowed deviation between a
+// mesh face normal and the direction of projection. The particular value
+// is the same one that Blender uses by default. Measured in radians.
 const ANGLE_LIMIT: f64 = (PI / 180.0) * 66.0;
 
 fn vertex_aligned(vertex_idx: usize, major_axis: Vector3, mesh: &Mesh) -> bool {
-    // (Assuming the major axis is normalized.)
+    // Assuming the major axis is normalized.
     mesh.normals[vertex_idx].dot(&major_axis) > ANGLE_LIMIT.cos()
 }
 
@@ -41,7 +44,7 @@ fn face_normal(face_idx: usize, mesh: &Mesh) -> Vector3 {
 }
 
 fn get_major_axis(faces_mask: &[bool], mesh: &Mesh) -> Vector3 {
-    // (The mask must have at least one nonzero entry.)
+    // The mask must have at least one nonzero entry.
     let normals: Vec<Vector3> = (0..mesh.faces.len())
         .filter(|&i| faces_mask[i])
         .map(|i| face_normal(i, mesh))
@@ -56,7 +59,7 @@ fn get_major_axis(faces_mask: &[bool], mesh: &Mesh) -> Vector3 {
 }
 
 pub fn project_chunk_with_depths(
-    chunk: &[usize],  // List of face indices.
+    faces_idx: &[usize],
     major_axis: Vector3,
     mesh: &Mesh,
 ) -> Vec<[ProjectedPoint; 3]> {
@@ -69,17 +72,13 @@ pub fn project_chunk_with_depths(
     // Project orthogonally (not perspective!), and keep depth data.
     let f =
         |v: usize| split_point2_depth(uvw_basis * mesh.vertices[v].coords);
-    let chunk_uvws = chunk
+    faces_idx
         .iter()
         .map(|&i| mesh.faces[i])
         .map(|[v0, v1, v2]| [f(v0), f(v1), f(v2)])
-        .collect();
-
-    // (Skipping axis-aligning rotation.)
-
-    // (Skipping normalization to [0,1]x[0,1] UV box.)
-
-    chunk_uvws
+        .collect()
+    // Skipping axis-aligning rotation.
+    // Skipping normalization to [0,1]x[0,1] UV box.
 }
 
 fn visible_faces(
@@ -89,24 +88,27 @@ fn visible_faces(
 ) -> Vec<bool> {
     let faces_idx = mask_to_idxs(faces_mask);
     let uvws = project_chunk_with_depths(&faces_idx, major_axis, mesh);
-    let uvs: Vec<[Vector2; 3]> = uvws // UV coordinates.
+    let uvs: Vec<[Vector2; 3]> = uvws
         .iter()
         .map(|[pd0, pd1, pd2]| [pd0.point, pd1.point, pd2.point])
         .collect();
-    let ws: Vec<[f64; 3]> = uvws // Depth values.
+    let depths: Vec<[f64; 3]> = uvws
         .iter()
         .map(|[pd0, pd1, pd2]| [pd0.depth, pd1.depth, pd2.depth])
         .collect();
 
     let mut faces_mask = faces_mask.to_owned();
     for (i_idx, &_i) in faces_idx.iter().enumerate() {
-        if let Some(bcs) = BarycentricCoordinateSystem::try_new(uvs[i_idx]) {
-            let wsi = Vector3::new(ws[i_idx][0], ws[i_idx][1], ws[i_idx][2]);
+        if let Some(bcs) = BarycentricCoordinateSystem::new(uvs[i_idx]) {
+            let di = Vector3::new(
+                depths[i_idx][0], depths[i_idx][1], depths[i_idx][2]);
             for (j_idx, &j) in faces_idx.iter().enumerate() {
                 for k in 0..3 {
                     let bary = bcs.infer(uvs[j_idx][k]);
-                    let depth = bary.dot(&wsi);
-                    if all_nonneg(bary) && depth + 1e-3 < ws[j_idx][k] {
+                    let depth = bary.dot(&di);
+                    // This tolerance (1mm) should probably be lowered later.
+                    const TOL: f64 = 1e-3;
+                    if all_nonneg(bary) && depth + TOL < depths[j_idx][k] {
                         faces_mask[j] = false;
                     }
                 }
@@ -201,9 +203,6 @@ fn get_big_chunk(
     // Remember the faces that were projected, to avoid duplication.
     let mut faces_mask_remaining = faces_mask.to_owned();
     for &k in &biggest {
-        if !(faces_mask_remaining[k]) {
-            println!("emitting face {k} again");
-        }
         faces_mask_remaining[k] = false;
     }
 
@@ -215,16 +214,16 @@ pub fn choose_uv_patches(
     topo: &BasicMeshTopology,
 ) -> Vec<(Vec<usize>, Vector3)> {
     let mut faces_mask = vec![true; mesh.faces.len()];
-    // (^ To make it faster, maybe replace this mask by a set of indices.)
+    // ^ To make it faster, maybe replace this mask by a set of indices.
     let mut result = vec![];
 
     while faces_mask.iter().map(|&b| b as usize).sum::<usize>() > 0 {
-        let (chunk, major_axis, faces_mask_remaining) =
+        let (faces_idx_taken, major_axis, faces_mask_remaining) =
             get_big_chunk(&faces_mask, mesh, topo);
 
         faces_mask = faces_mask_remaining;
 
-        result.push((chunk, major_axis));
+        result.push((faces_idx_taken, major_axis));
     }
 
     result
@@ -251,11 +250,11 @@ pub struct LocalPatch {
 
 impl LocalPatch {
     pub fn calculate_from(
-        chunk: &[usize],
+        faces_idx: &[usize],
         major_axis: Vector3,
         mesh: &Mesh,
     ) -> LocalPatch {
-        // (Similar to project_chunk_with_depths -> Vec<[ProjectedPoint; 3]>.)
+        // Similar to project_chunk_with_depths -> Vec<[ProjectedPoint; 3]>.
 
         // Fix the orientation (not really necessary, but is nice).
         let (_, ev) = complement(major_axis);
@@ -264,7 +263,7 @@ impl LocalPatch {
 
         // Project orthogonally (not perspective!).
         let f = |v: usize| uv_basis * mesh.vertices[v].coords;
-        let chunk_uvs: Vec<[Vector2; 3]> = chunk
+        let uvs: Vec<[Vector2; 3]> = faces_idx
             .iter()
             .map(|&i| mesh.faces[i])
             .map(|[v0, v1, v2]| [f(v0), f(v1), f(v2)])
@@ -272,15 +271,15 @@ impl LocalPatch {
 
         // Rotate to align with axes
         // (not really necessary either, but may reduce file size).
-        let avg = average_uv3(&chunk_uvs);
+        let avg = average_uv3(&uvs);
         let f = |uv: &Vector2| uv - avg;
         let ev = dominant_vector(
-            &chunk_uvs.iter().flatten().map(f).collect::<Vec<_>>(),
+            &uvs.iter().flatten().map(f).collect::<Vec<_>>(),
         );
         let eu = Vector2::new(ev[1], -ev[0]);
         let uv_basis = Matrix2::from_columns(&[eu, ev]).transpose();
         let f = |uv| uv_basis * uv;
-        let chunk_uvs: Vec<[Vector2; 3]> = chunk_uvs
+        let uvs: Vec<[Vector2; 3]> = uvs
             .iter()
             .map(|[uv0, uv1, uv2]| [f(uv0), f(uv1), f(uv2)])
             .collect();
@@ -288,7 +287,7 @@ impl LocalPatch {
         // Normalize to [0,1]x[0,1].
         let f = |uv: &Vector2| [uv[0], uv[1]];
         let uv_rect = Rectangle::<f64>::bounding(
-            &chunk_uvs.iter().flatten().map(f).collect::<Vec<_>>(),
+            &uvs.iter().flatten().map(f).collect::<Vec<_>>(),
         );
         let [u_min, v_min] = uv_rect.pos;
         let [u_size, v_size] = uv_rect.size;
@@ -296,14 +295,14 @@ impl LocalPatch {
         let f = |uv: Vector2| {
             Vector2::new((uv[0] - u_min) / u_size, (uv[1] - v_min) / v_size)
         };
-        let uvs: Vec<[Vector2; 3]> = chunk_uvs
+        let uvs: Vec<[Vector2; 3]> = uvs
             .iter()
             .map(|&[uv0, uv1, uv2]| [f(uv0), f(uv1), f(uv2)])
             .collect();
         let size = [u_size, v_size];
 
         LocalPatch {
-            chunk: chunk.to_owned(),
+            chunk: faces_idx.to_owned(),
             uvs,
             size,
         }

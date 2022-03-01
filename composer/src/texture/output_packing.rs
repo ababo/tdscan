@@ -7,6 +7,9 @@ use rectangle_pack::{
 
 use crate::texture::{*, output_patching::LocalPatch};
 
+// Since `rectangle_pack` uses u32 rather than f64 as coordinate type,
+// an accuracy parameter (neither too small nor too big (in case of overflow))
+// needs to be chosen for the conversion between these two types.
 const ACCURACY: f64 = 1e6;
 
 pub fn pack_rectangles_with_automatic_stretching(
@@ -33,21 +36,21 @@ pub fn pack_rectangles_with_automatic_stretching(
     (rectangles, scale)
 }
 
-pub fn try_pack_rectangles_with_given_stretching(
+fn apply2<T: Clone, U: Clone>(
+    v: &[[T; 2]],
+    f: &dyn Fn(T) -> U
+) -> Vec<[U; 2]> {
+    v.iter().map(|[a, b]| [f(a.clone()), f(b.clone())]).collect()
+}
+
+fn try_pack_rectangles_with_given_stretching(
     sizes: &[[f64; 2]],
     spacing: f64,
     scale: f64,
 ) -> Option<Vec<Rectangle<f64>>> {
-    let f2 = |x| spacing + x * scale + spacing;
-    let sizes_transformed: Vec<[f64; 2]> =
-        sizes.iter().map(|&[a, b]| [f2(a), f2(b)]).collect();
-    let positions_scaled: Vec<[f64; 2]> =
-        try_pack_rectangles(&sizes_transformed)?;
-    let f1 = |r| spacing + r;
-    let positions: Vec<[f64; 2]> = positions_scaled
-        .iter()
-        .map(|&[a, b]| [f1(a), f1(b)])
-        .collect();
+    let sizes_transformed = apply2(sizes, &|x| spacing + x * scale + spacing);
+    let positions = try_pack_rectangles(&sizes_transformed)?;
+    let positions_spaced = apply2(&positions, &|r| spacing + r);
 
     let mut rectangles = vec![];
     let f0 = |x| x * scale;
@@ -56,7 +59,7 @@ pub fn try_pack_rectangles_with_given_stretching(
             let [a, b] = sizes[i];
             [f0(a), f0(b)]
         };
-        let pos = positions[i];
+        let pos = positions_spaced[i];
         rectangles.push(Rectangle { pos, size });
     }
 
@@ -66,15 +69,10 @@ pub fn try_pack_rectangles_with_given_stretching(
 fn try_pack_rectangles(sizes: &[[f64; 2]]) -> Option<Vec<[f64; 2]>> {
     // Try to pack into unit box [0,1]x[0,1].
     let f = |x| (x * ACCURACY) as u32;
-    let sizes_discrete: Vec<[u32; 2]> =
-        sizes.iter().map(|&[a, b]| [f(a), f(b)]).collect();
+    let sizes_discrete = apply2(sizes, &f);
     let positions_discrete =
         try_pack_rectangles_u32(&sizes_discrete, [f(1.0), f(1.0)])?;
-    let f = |x| (x as f64) / ACCURACY;
-    let positions = positions_discrete
-        .iter()
-        .map(|&[a, b]| [f(a), f(b)])
-        .collect();
+    let positions = apply2(&positions_discrete, &|x| (x as f64) / ACCURACY);
     Some(positions)
 }
 

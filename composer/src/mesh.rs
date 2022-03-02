@@ -125,7 +125,7 @@ impl Mesh {
         self.vertices =
             vertices_idx.iter().map(|&i| self.vertices[i]).collect();
         self.normals = vertices_idx.iter().map(|&i| self.normals[i]).collect();
-        let mut faces: Vec<[usize; 3]> = vec![];
+        let mut faces = vec![];
         for [v0, v1, v2] in &self.faces {
             let i0 = vertices_inv.get(v0);
             let i1 = vertices_inv.get(v1);

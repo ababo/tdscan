@@ -15,15 +15,21 @@ pub struct TexturedMesh {
 // Measured as a fraction of the total texture size, e.g. 0.005 = 0.5%.
 const PATCH_SPACING: f64 = 0.005;
 
+// Amount of colored pixels added around each patch to avoid rendering issues.
+pub const GUTTER_SIZE: usize = 3;
+
+// Output texture image resolution.
+pub const IMAGE_RES: usize = 4096;
+
 impl TexturedMesh {
     pub fn new(
         scans: &IndexMap<String, fm::Scan>,
         scan_frames: &[fm::ScanFrame],
         mesh: Mesh,
     ) -> TexturedMesh {
-        let (_vertex_metrics, face_metrics) =
+        let (vertex_metrics, face_metrics) =
             make_all_frame_metrics(scans, scan_frames, &mesh);
-        let _chosen_cameras = select_cameras(&face_metrics, &mesh);
+        let chosen_cameras = select_cameras(&face_metrics, &mesh);
 
         let topo = BasicMeshTopology::new(&mesh);
         let local_patches: Vec<LocalPatch> = choose_uv_patches(&mesh, &topo)
@@ -39,14 +45,26 @@ impl TexturedMesh {
                 &local_patch_sizes,
                 PATCH_SPACING,
             );
-        let _uv_coords_tri =
+        let uv_coords_tri =
             globalize_uv(&local_patches, &rectangle_placements_vec, &mesh);
+        let (uv_coords, uv_idxs_tri) = compress_uv_coords(&uv_coords_tri);
 
-        // Dummy calls to avoid compiler warnings for now.
-        BarycentricCoordinateSystem::new([Vector2::new(0.0, 0.0); 3])
-            .unwrap()
-            .apply(Vector3::new(0.0, 0.0, 0.0));
+        let images = load_all_frame_images(scan_frames);
+        let (mut buffer, mut emask) = bake_texture(
+            &mesh,
+            &images,
+            &chosen_cameras,
+            &vertex_metrics,
+            &uv_coords_tri,
+            IMAGE_RES,
+        );
+        extrapolate_gutter(&mut buffer, &mut emask, GUTTER_SIZE);
 
-        unimplemented!()
+        TexturedMesh {
+            mesh,
+            uv_coords,
+            uv_idxs: uv_idxs_tri,
+            image: buffer,
+        }
     }
 }

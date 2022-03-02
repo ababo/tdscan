@@ -1,4 +1,5 @@
 mod input_selection;
+mod output_baking;
 mod output_packing;
 mod output_patching;
 mod textured_mesh;
@@ -9,12 +10,13 @@ use std::io::Cursor;
 use std::ops::Sub;
 
 use image::io::Reader as ImageReader;
-use image::RgbImage;
+use image::{Rgb, RgbImage};
 use nalgebra::{ArrayStorage, Const, Matrix, Matrix3, SVD, vector};
 
 use crate::mesh::Mesh;
 pub use crate::texture::{
     input_selection::*,
+    output_baking::*,
     output_packing::*,
     output_patching::*,
     textured_mesh::*,
@@ -62,6 +64,12 @@ pub fn load_frame_image(frame: &fm::ScanFrame) -> Option<image::RgbImage> {
     Some(img.into_rgb8())
 }
 
+pub fn load_all_frame_images(
+    sfs: &[fm::ScanFrame],
+) -> Vec<Option<image::RgbImage>> {
+    sfs.iter().map(load_frame_image).collect()
+}
+
 pub fn split_option<T, U>(otu: Option<(T, U)>) -> (Option<T>, Option<U>) {
     if let Some((t, u)) = otu {
         (Some(t), Some(u))
@@ -74,6 +82,20 @@ pub fn get_pixel_ij_as_vector3(i: u32, j: u32, image: &RgbImage) -> Vector3 {
     let (x, y) = (j, i); // Beware: Transposing indices.
     let p = image.get_pixel(x, y);
     Vector3::new(p[0] as f64, p[1] as f64, p[2] as f64)
+}
+
+pub fn set_pixel_ij_as_vector3(
+    i: u32,
+    j: u32,
+    color: Vector3,
+    image: &mut RgbImage,
+) {
+    let (x, y) = (j, i); // Beware: Transposing indices.
+    let [r, g, b] = color.as_ref();
+    let r1 = r.clamp(0.0, 255.0).round() as u8;
+    let g1 = g.clamp(0.0, 255.0).round() as u8;
+    let b1 = b.clamp(0.0, 255.0).round() as u8;
+    image.put_pixel(x, y, Rgb([r1, g1, b1]));
 }
 
 #[derive(Debug, Clone)]
@@ -254,4 +276,19 @@ pub fn bisect<T>(
     }
 
     (succeeds, best_result)
+}
+
+pub fn uv_to_ij(uv: Vector2, img: &RgbImage) -> Vector2 {
+    let (dimx, dimy) = img.dimensions(); // Beware that x comes before y here.
+    let [u, v] = uv.as_ref();
+    Vector2::new(
+        dimy as f64 * u.clamp(0.0, 1.0),
+        dimx as f64 * v.clamp(0.0, 1.0),
+    )
+}
+
+pub fn ij_to_uv(ij: Vector2, img: &RgbImage) -> Vector2 {
+    let (dimx, dimy) = img.dimensions(); // Beware that x comes before y here.
+    let [i, j] = ij.as_ref();
+    Vector2::new(i / dimy as f64, j / dimx as f64)
 }

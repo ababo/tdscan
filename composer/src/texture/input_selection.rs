@@ -215,8 +215,8 @@ pub fn make_frame_metrics(
                 && pixel[1] <= 0.99,
             is_occluded: occlusions[i],
             is_green: evaluate_green_screen_predicate(pixel, &image),
-            ramp_penalty: 0.0, // TODO (Used for limiting camera to
-                               //       "its" part of the mesh.)
+            ramp_penalty: 0.0, // TODO: Used for limiting camera to
+                               //       "its" part of the mesh.
         });
     }
     let mut face_metrics = vec![];

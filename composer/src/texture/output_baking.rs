@@ -83,13 +83,8 @@ pub fn bake_texture(
         let uvs1 = uv_coords_tri[face_idx];
 
         // Copy triangle.
-        if copy_triangle(img0, uvs0, &mut buffer, uvs1, &mut emask).is_none() {
-            //println!("face {face_idx} does not contain any pixels");
-            //dbg_no_pixels += 1;
-        }
+        copy_triangle(img0, uvs0, &mut buffer, uvs1, &mut emask);
     }
-
-    //println!("baking finished. {dbg_no_pixels} faces contained no pixels");
 
     (buffer, emask)
 }
@@ -110,18 +105,13 @@ pub fn compress_uv_coords(
     let mut uv_idxs: Vec<[usize; 3]> = vec![];
 
     for uvs in uv_coords {
-        //for i in 0..uv_coords.len() {
         let mut idxs = [0, 0, 0];
         for j in 0..3 {
-            let uv = up1(uvs[j]); //uv_coords[i][j]);
+            let uv = up1(uvs[j]);
             if let Vacant(e) = uv_unique.entry(uv) {
                 e.insert(uv_ordered.len());
                 uv_ordered.push(down1(uv));
             }
-            /*if !uv_unique.contains_key(&uv) {
-                uv_unique.insert(uv, uv_unique.len());
-                uv_ordered.push(down1(uv));
-            }*/
             idxs[j] = uv_unique[&uv];
         }
         uv_idxs.push(idxs);

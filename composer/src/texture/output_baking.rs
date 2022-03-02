@@ -56,7 +56,7 @@ pub fn bake_texture(
     let mut buffer = RgbImage::new(image_res as u32, image_res as u32);
     let mut emask = vec![vec![true; image_res]; image_res];
 
-    //let mut dbg_no_pixels = 0;
+    // TODO: Impute missing data instead of showing this color.
     let dbg_dummy_image_source_magenta: RgbImage =
         dbg_dummy_image_source(Rgb([255, 0, 255]));
 

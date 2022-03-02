@@ -1,3 +1,5 @@
+use std::collections::hash_map::Entry::Vacant;
+
 use image::{Rgb, RgbImage};
 
 use crate::texture::{*, input_selection::{FrameMetrics, Metrics}};
@@ -19,7 +21,7 @@ fn copy_triangle(
     let bcs0 = BarycentricCoordinateSystem::new([ij00, ij01, ij02])?;
     let bcs1 = BarycentricCoordinateSystem::new([ij10, ij11, ij12])?;
     let g = |ij: Vector2| [ij[0] as u32, ij[1] as u32];
-    let rect1 = Rectangle::<u32>::bounding(&[g(ij10), g(ij11), g(ij12)]);
+    let rect1 = Rectangle::bounding(&[g(ij10), g(ij11), g(ij12)]);
     let mut dbg_any = false;
     for i1 in rect1.pos[0]..=rect1.pos[0] + rect1.size[0] {
         for j1 in rect1.pos[1]..=rect1.pos[1] + rect1.size[1] {
@@ -57,12 +59,12 @@ pub fn bake_texture(
     let mut emask = vec![vec![true; image_res]; image_res];
 
     // TODO: Impute missing data instead of showing this color.
-    let dbg_dummy_image_source_magenta: RgbImage =
+    let dbg_dummy_image_source_magenta =
         dbg_dummy_image_source(Rgb([255, 0, 255]));
 
     for face_idx in 0..mesh.faces.len() {
-        let img0: &RgbImage;
-        let uvs0: [Vector2; 3];
+        let img0;
+        let uvs0;
         if let Some(frame_idx) = chosen_cameras[face_idx] {
             // Load image source.
             img0 = images[frame_idx].as_ref().unwrap();
@@ -89,8 +91,6 @@ pub fn bake_texture(
     (buffer, emask)
 }
 
-use std::collections::hash_map::Entry::Vacant;
-
 pub fn compress_uv_coords(
     uv_coords: &[[Vector2; 3]]
 ) -> (Vec<Vector2>, Vec<[usize; 3]>) {
@@ -100,9 +100,9 @@ pub fn compress_uv_coords(
     let down0 = |x| x as f64 * EPS;
     let down1 = |uv: [u64; 2]| Vector2::new(down0(uv[0]), down0(uv[1]));
 
-    let mut uv_unique: HashMap<[u64; 2], usize> = HashMap::new();
-    let mut uv_ordered: Vec<Vector2> = vec![];
-    let mut uv_idxs: Vec<[usize; 3]> = vec![];
+    let mut uv_unique = HashMap::new();
+    let mut uv_ordered = vec![];
+    let mut uv_idxs = vec![];
 
     for uvs in uv_coords {
         let mut idxs = [0, 0, 0];

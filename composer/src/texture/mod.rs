@@ -65,9 +65,9 @@ pub fn load_frame_image(frame: &fm::ScanFrame) -> Option<image::RgbImage> {
 }
 
 pub fn load_all_frame_images(
-    sfs: &[fm::ScanFrame],
+    frames: &[fm::ScanFrame],
 ) -> Vec<Option<image::RgbImage>> {
-    sfs.iter().map(load_frame_image).collect()
+    frames.iter().map(load_frame_image).collect()
 }
 
 pub fn split_option<T, U>(otu: Option<(T, U)>) -> (Option<T>, Option<U>) {

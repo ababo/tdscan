@@ -1,6 +1,7 @@
 use std::collections::hash_map::Entry::Vacant;
 
 use image::{Rgb, RgbImage};
+use nalgebra::{Dim, Dynamic, OMatrix};
 
 use crate::texture::{*, input_selection::{FrameMetrics, Metrics}};
 
@@ -33,7 +34,7 @@ fn copy_triangle(
 
             if all_nonneg(bary) && i1 < img1.height() && j1 < img1.width() {
                 set_pixel_ij_as_vector3(i1, j1, color, img1);
-                emask[i1 as usize][j1 as usize] = false;
+                emask[(i1 as usize, j1 as usize)] = false;
                 dbg_any = true;
             }
         }
@@ -45,7 +46,9 @@ fn copy_triangle(
     }
 }
 
-pub type EmptinessMask = Vec<Vec<bool>>; // Rectangular, image-shaped grid.
+// Rectangular, image-shaped grid of booleans, that represents whether
+// any given pixel has not been written to yet during baking.
+pub type EmptinessMask = OMatrix<bool, Dynamic, Dynamic>;
 
 pub fn bake_texture(
     mesh: &Mesh,
@@ -56,7 +59,8 @@ pub fn bake_texture(
     image_res: usize,
 ) -> (RgbImage, EmptinessMask) {
     let mut buffer = RgbImage::new(image_res as u32, image_res as u32);
-    let mut emask = vec![vec![true; image_res]; image_res];
+    let dim = Dim::from_usize(image_res);
+    let mut emask = EmptinessMask::from_element_generic(dim, dim, true);
 
     // TODO: Impute missing data instead of showing this color.
     let dbg_dummy_image_source_magenta =
@@ -129,25 +133,24 @@ pub fn extrapolate_gutter(
         for (i, j, i1, j1) in resolve_gutter_source(emask) {
             // Beware that the image is indexed as (j, i).
             buffer[(j, i)] = buffer[(j1, i1)];
-            emask[i as usize][j as usize] = false;
+            emask[(i as usize, j as usize)] = false;
         }
     }
 }
 
 fn resolve_gutter_source(emask: &EmptinessMask) -> Vec<(u32, u32, u32, u32)> {
     let mut idxs = vec![];
-    let height = emask.len() as u32;
+    let (height, width) = emask.shape();
     for i in 0..height as i32 {
-        let width = emask[i as usize].len() as u32;
         for j in 0..width as i32 {
-            if emask[i as usize][j as usize] {
+            if emask[(i as usize, j as usize)] {
                 for (i1, j1) in [(i - 1, j), (i + 1, j), (i, j - 1), (i, j + 1)]
                 {
                     if 0 <= i1
-                        && (i1 as u32) < height
+                        && (i1 as usize) < height
                         && 0 <= j1
-                        && (j1 as u32) < width
-                        && !emask[i1 as usize][j1 as usize]
+                        && (j1 as usize) < width
+                        && !emask[(i1 as usize, j1 as usize)]
                     {
                         idxs.push((i as u32, j as u32, i1 as u32, j1 as u32));
                     }

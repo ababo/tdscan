@@ -6,7 +6,7 @@ use crate::mesh::Mesh;
 use crate::point_cloud::{build_frame_clouds, PointCloudParams, PointNormal};
 use crate::poisson;
 use crate::scan::{read_scans, ScanParams};
-use crate::texture::TexturedMesh;
+use crate::texture::{TexturedMesh, TextureParams};
 use base::defs::{Error, ErrorKind::*, Result};
 use base::fm;
 use base::util::cli;
@@ -58,6 +58,9 @@ pub struct BuildViewParams {
         default_value = "0.1"
     )]
     pub decimate_ratio: f64,
+
+    #[structopt(flatten)]
+    pub texture: TextureParams,
 }
 
 pub fn build_view(
@@ -121,7 +124,7 @@ pub fn build_view(
         mesh.vertices.len(),
         mesh.faces.len()
     );
-    let tmesh = TexturedMesh::new(&scans, &scan_frames, mesh);
+    let tmesh = TexturedMesh::new(&scans, &scan_frames, mesh, &params.texture);
 
     info!("writing textured mesh...");
     write_textured_mesh(&tmesh, "foo.mtl", "foo.obj", "foo.png");

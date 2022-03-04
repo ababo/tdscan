@@ -1,8 +1,36 @@
 use indexmap::IndexMap;
+use structopt::StructOpt;
 
 use crate::mesh::Mesh;
 use crate::texture::*;
 use base::fm;
+
+#[derive(Clone, StructOpt)]
+pub struct TextureParams {
+    #[structopt(
+        help = "Spacing between patches in the final texture",
+        long,
+        default_value = "0.005"
+    )]
+    // Measured as a fraction of the total texture size, e.g. 0.005 = 0.5%.
+    pub patch_spacing: f64,
+
+    #[structopt(
+        help = "Amount of colored pixels added around each texturing patch \
+                to avoid rendering issues",
+        long,
+        default_value = "3"
+    )]
+    pub gutter_size: usize,
+
+    #[structopt(
+        help = "Output texture image resolution",
+        long,
+        default_value = "4096"
+    )]
+    pub image_res: usize,
+    
+}
 
 pub struct TexturedMesh {
     pub mesh: Mesh,
@@ -11,21 +39,12 @@ pub struct TexturedMesh {
     pub image: RgbImage,
 }
 
-// Spacing between patches in the final texture.
-// Measured as a fraction of the total texture size, e.g. 0.005 = 0.5%.
-const PATCH_SPACING: f64 = 0.005;
-
-// Amount of colored pixels added around each patch to avoid rendering issues.
-pub const GUTTER_SIZE: usize = 3;
-
-// Output texture image resolution.
-pub const IMAGE_RES: usize = 4096;
-
 impl TexturedMesh {
     pub fn new(
         scans: &IndexMap<String, fm::Scan>,
         scan_frames: &[fm::ScanFrame],
         mesh: Mesh,
+        params: &TextureParams,
     ) -> TexturedMesh {
         let (vertex_metrics, face_metrics) =
             make_all_frame_metrics(scans, scan_frames, &mesh);
@@ -43,7 +62,7 @@ impl TexturedMesh {
         let (rectangle_placements_vec, _scale) =
             pack_rectangles_with_automatic_stretching(
                 &local_patch_sizes,
-                PATCH_SPACING,
+                params.patch_spacing,
             );
         let uv_coords_tri =
             globalize_uv(&local_patches, &rectangle_placements_vec, &mesh);
@@ -56,9 +75,9 @@ impl TexturedMesh {
             &chosen_cameras,
             &vertex_metrics,
             &uv_coords_tri,
-            IMAGE_RES,
+            params.image_res,
         );
-        extrapolate_gutter(&mut buffer, &mut emask, GUTTER_SIZE);
+        extrapolate_gutter(&mut buffer, &mut emask, params.gutter_size);
 
         TexturedMesh {
             mesh,

@@ -16,8 +16,7 @@ pub struct TextureParams {
     pub patch_spacing: f64,
 
     #[structopt(
-        help = "Amount of colored pixels added around each texturing patch \
-                to avoid rendering issues",
+        help = "Amount of colored pixels added around each texturing patch"
         long,
         default_value = "3"
     )]

@@ -74,7 +74,7 @@ pub struct Metrics {
     pub dot_product: f64,
     pub within_bounds: bool,
     pub is_occluded: bool,
-    pub is_green: bool,
+    pub is_background: bool,
     pub ramp_penalty: f64,
 }
 
@@ -88,7 +88,7 @@ fn summarize_metrics(ms: &[Metrics]) -> Metrics {
             / ms.len() as f64,
         within_bounds: ms.iter().all(|m| m.within_bounds),
         is_occluded: ms.iter().any(|m| m.is_occluded),
-        is_green: ms.iter().any(|m| m.is_green),
+        is_background: ms.iter().any(|m| m.is_background),
         ramp_penalty: ms.iter().map(|m| m.ramp_penalty).sum::<f64>(),
     }
 }
@@ -172,7 +172,7 @@ fn compute_occlusion_for_all_vertices(
     occluded
 }
 
-fn evaluate_green_screen_predicate(pixel: Vector2, image: &RgbImage) -> bool {
+fn evaluate_background_predicate(pixel: Vector2, image: &RgbImage) -> bool {
     let &[red, green, _blue] = sample_pixel(pixel, image).as_ref();
     green > red - 10.0 && green > 20.0 // This could be made configurable too.
 }
@@ -212,7 +212,7 @@ pub fn make_frame_metrics(
                 && 0.01 <= pixel[1]
                 && pixel[1] <= 0.99,
             is_occluded: occlusions[i],
-            is_green: evaluate_green_screen_predicate(pixel, &image),
+            is_background: evaluate_background_predicate(pixel, &image),
             // TODO: Used for limiting camera to "its" part of the mesh.
             ramp_penalty: 0.0,
         });
@@ -250,7 +250,7 @@ fn build_costs_for_single_frame(
         for face_idx in 0..mesh.faces.len() {
             let met: Metrics = mets[face_idx];
             let mut cost = f64::INFINITY;
-            if met.within_bounds && !met.is_occluded && !met.is_green {
+            if met.within_bounds && !met.is_occluded && !met.is_background {
                 cost = 1.0 / met.dot_product + met.ramp_penalty;
             }
             costs[face_idx] = cost;

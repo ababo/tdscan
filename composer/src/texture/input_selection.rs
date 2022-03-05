@@ -67,8 +67,6 @@ pub fn project_like_camera(
         .collect()
 }
 
-const COST_LIMIT: f64 = 10.0;
-
 #[derive(Debug, Copy, Clone)]
 pub struct Metrics {
     pub pixel: Vector2,
@@ -82,7 +80,7 @@ pub struct Metrics {
 
 pub type FrameMetrics = Option<Vec<Metrics>>; // Either by vertex, or by face.
 
-fn summarize_metrics(ms: Vec<Metrics>) -> Metrics {
+fn summarize_metrics(ms: &[Metrics]) -> Metrics {
     Metrics {
         pixel: ms.iter().map(|m| m.pixel).sum::<Vector2>() / ms.len() as f64,
         depth: ms.iter().map(|m| m.depth).sum::<f64>() / ms.len() as f64,
@@ -215,16 +213,14 @@ pub fn make_frame_metrics(
                 && pixel[1] <= 0.99,
             is_occluded: occlusions[i],
             is_green: evaluate_green_screen_predicate(pixel, &image),
-            ramp_penalty: 0.0, // TODO: Used for limiting camera to
-                               //       "its" part of the mesh.
+            // TODO: Used for limiting camera to "its" part of the mesh.
+            ramp_penalty: 0.0,
         });
     }
-    let mut face_metrics = vec![];
-    for &[v0, v1, v2] in &mesh.faces {
-        let ms =
-            vec![vertex_metrics[v0], vertex_metrics[v1], vertex_metrics[v2]];
-        face_metrics.push(summarize_metrics(ms));
-    }
+    let face_metrics = mesh.faces.iter().map(|&[v0, v1, v2]| {
+        let ms = [vertex_metrics[v0], vertex_metrics[v1], vertex_metrics[v2]];
+        summarize_metrics(&ms)
+    }).collect();
     Some((vertex_metrics, face_metrics))
 }
 
@@ -266,13 +262,14 @@ fn build_costs_for_single_frame(
 pub fn select_cameras(
     metrics: &[FrameMetrics],
     mesh: &Mesh,
+    selection_cost_limit: f64,
 ) -> Vec<Option<usize>> {
     let mut chosen = vec![None; mesh.faces.len()];
     let mut costs = vec![f64::INFINITY; mesh.faces.len()];
     for frame_idx in 0..metrics.len() {
         let alt_costs = build_costs_for_single_frame(frame_idx, metrics, mesh);
         for face_idx in 0..mesh.faces.len() {
-            if alt_costs[face_idx] > COST_LIMIT {
+            if alt_costs[face_idx] > selection_cost_limit {
                 continue; // Skip option which is too expensive to be sensible.
             }
             if costs[face_idx] > alt_costs[face_idx] {

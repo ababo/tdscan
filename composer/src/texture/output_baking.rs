@@ -6,35 +6,41 @@ use nalgebra::{Dim, Dynamic, OMatrix};
 use crate::texture::{*, input_selection::{FrameMetrics, Metrics}};
 
 fn copy_triangle(
-    img0: &RgbImage,
-    uvs0: [Vector2; 3], // Desired coordinate system: [i,j] normalized to [0,1].
-    img1: &mut RgbImage,
-    uvs1: [Vector2; 3],
-    emask: &mut EmptinessMask,
+    image0: &RgbImage,
+    uv_coords0: [Vector2; 3],
+    image1: &mut RgbImage,
+    uv_coords1: [Vector2; 3],
+    emptiness_mask: &mut EmptinessMask,
 ) -> Option<()> {
-    let ij00 = uv_to_ij(uvs0[0], img0);
-    let ij01 = uv_to_ij(uvs0[1], img0);
-    let ij02 = uv_to_ij(uvs0[2], img0);
-    let ij10 = uv_to_ij(uvs1[0], img1);
-    let ij11 = uv_to_ij(uvs1[1], img1);
-    let ij12 = uv_to_ij(uvs1[2], img1);
+    // Rescale coordinates 0 <= [u,v] <= 1 to 0 <= [i,j] <= [h,w].
+    let ij00 = uv_to_ij(uv_coords0[0], image0);
+    let ij01 = uv_to_ij(uv_coords0[1], image0);
+    let ij02 = uv_to_ij(uv_coords0[2], image0);
+    let ij10 = uv_to_ij(uv_coords1[0], image1);
+    let ij11 = uv_to_ij(uv_coords1[1], image1);
+    let ij12 = uv_to_ij(uv_coords1[2], image1);
 
+    // Create local coordinate systems in both source and target images.
     let bcs0 = BarycentricCoordinateSystem::new([ij00, ij01, ij02])?;
     let bcs1 = BarycentricCoordinateSystem::new([ij10, ij11, ij12])?;
+
+    // Create a bounding box for the triangle in the target image.
     let g = |ij: Vector2| [ij[0] as u32, ij[1] as u32];
     let rect1 = Rectangle::bounding(&[g(ij10), g(ij11), g(ij12)]);
+
+    // Iterate over pixels inside the bounding box and fetch color values.
     let mut dbg_any = false;
     for i1 in rect1.pos[0]..=rect1.pos[0] + rect1.size[0] {
         for j1 in rect1.pos[1]..=rect1.pos[1] + rect1.size[1] {
             let ij1 = Vector2::new(i1 as f64, j1 as f64);
             let bary = bcs1.infer(ij1);
             let ij0 = bcs0.apply(bary);
-            let uv0 = ij_to_uv(ij0, img0);
-            let color = sample_pixel(uv0, img0);
+            let uv0 = ij_to_uv(ij0, image0);
+            let color = sample_pixel(uv0, image0);
 
-            if all_nonneg(bary) && i1 < img1.height() && j1 < img1.width() {
-                set_pixel_ij_as_vector3(i1, j1, color, img1);
-                emask[(i1 as usize, j1 as usize)] = false;
+            if all_nonneg(bary) && i1 < image1.height() && j1 < image1.width() {
+                set_pixel_ij_as_vector3(i1, j1, color, image1);
+                emptiness_mask[(i1 as usize, j1 as usize)] = false;
                 dbg_any = true;
             }
         }

@@ -16,7 +16,7 @@ pub struct TextureParams {
     pub patch_spacing: f64,
 
     #[structopt(
-        help = "Amount of colored pixels added around each texturing patch"
+        help = "Amount of colored pixels added around each texturing patch",
         long,
         default_value = "3"
     )]
@@ -28,7 +28,13 @@ pub struct TextureParams {
         default_value = "4096"
     )]
     pub image_res: usize,
-    
+
+    #[structopt(
+        help = "Threshold beyond which a mesh face is deemed not visible",
+        long,
+        default_value = "10.0"
+    )]
+    pub selection_cost_limit: f64,
 }
 
 pub struct TexturedMesh {
@@ -47,7 +53,8 @@ impl TexturedMesh {
     ) -> TexturedMesh {
         let (vertex_metrics, face_metrics) =
             make_all_frame_metrics(scans, scan_frames, &mesh);
-        let chosen_cameras = select_cameras(&face_metrics, &mesh);
+        let chosen_cameras =
+            select_cameras(&face_metrics, &mesh, params.selection_cost_limit);
 
         let topo = BasicMeshTopology::new(&mesh);
         let local_patches: Vec<LocalPatch> = choose_uv_patches(&mesh, &topo)

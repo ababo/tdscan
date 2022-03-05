@@ -5,29 +5,7 @@ use std::io;
 use std::io::prelude::*;
 use std::path::Path;
 
-use crate::mesh::Mesh;
 use crate::texture::TexturedMesh;
-
-#[allow(dead_code)]
-pub fn dbg_write_obj(mesh: &Mesh, objpath: &str) {
-    let file = File::create(objpath).ok().unwrap();
-    let mut writer = io::BufWriter::new(file);
-
-    for v in &mesh.vertices {
-        writeln!(&mut writer, "v {:.6} {:.6} {:.6}", v[0], v[1], v[2]).unwrap();
-    }
-
-    for vn in &mesh.normals {
-        writeln!(&mut writer, "vn {:.4} {:.4} {:.4}", vn[0], vn[1], vn[2])
-            .unwrap();
-        // Using the same precision as Blender.
-    }
-
-    for f in &mesh.faces {
-        writeln!(&mut writer, "f {} {} {}", f[0] + 1, f[1] + 1, f[2] + 1)
-            .unwrap();
-    }
-}
 
 pub fn write_textured_mesh(
     tmesh: &TexturedMesh,

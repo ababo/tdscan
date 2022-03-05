@@ -4,7 +4,9 @@ use kiddo::KdTree;
 use rlua::Lua;
 
 use crate::mesh::Mesh;
+use crate::misc::lua_err_to_err;
 use crate::texture::*;
+use base::defs::Result;
 use base::fm;
 
 pub fn project_like_camera(
@@ -178,15 +180,15 @@ fn evaluate_background_predicate(
     image: &RgbImage,
     lua: &Lua,
     predicate: &str,
-) -> bool {
+) -> Result<bool> {
     let &[red, green, blue] = sample_pixel(pixel, image).as_ref();
     
     lua.context(|ctx| {
-        ctx.globals().set("red", red)?;
-        ctx.globals().set("green", green)?;
-        ctx.globals().set("blue", blue)?;
+        ctx.globals().set("r", red)?;
+        ctx.globals().set("g", green)?;
+        ctx.globals().set("b", blue)?;
         ctx.load(predicate).eval()
-    }).unwrap()  // TODO: How to handle syntax error?
+    }).map_err(lua_err_to_err)
 }
 
 pub fn make_frame_metrics(
@@ -194,8 +196,12 @@ pub fn make_frame_metrics(
     frame: &fm::ScanFrame,
     mesh: &Mesh,
     background_predicate: &str,
-) -> Option<(Vec<Metrics>, Vec<Metrics>)> {
-    let image = load_frame_image(frame)?;
+) -> Result<Option<(Vec<Metrics>, Vec<Metrics>)>> {
+    let image_attempt = load_frame_image(frame);
+    if image_attempt.is_none() {
+        return Ok(None);
+    }
+    let image = image_attempt.unwrap();
 
     let vertices_proj = project_like_camera(scan, frame, &mesh.vertices);
 
@@ -231,7 +237,7 @@ pub fn make_frame_metrics(
                 &image,
                 &lua,
                 background_predicate
-            ),
+            )?,
             // TODO: Used for limiting camera to "its" part of the mesh.
             ramp_penalty: 0.0,
         });
@@ -240,7 +246,7 @@ pub fn make_frame_metrics(
         let ms = [vertex_metrics[v0], vertex_metrics[v1], vertex_metrics[v2]];
         summarize_metrics(&ms)
     }).collect();
-    Some((vertex_metrics, face_metrics))
+    Ok(Some((vertex_metrics, face_metrics)))
 }
 
 pub fn make_all_frame_metrics(
@@ -248,7 +254,7 @@ pub fn make_all_frame_metrics(
     scan_frames: &[fm::ScanFrame],
     mesh: &Mesh,
     background_predicate: &str,
-) -> (Vec<FrameMetrics>, Vec<FrameMetrics>) {
+) -> Result<(Vec<FrameMetrics>, Vec<FrameMetrics>)> {
     let mut vertex_metrics = vec![];
     let mut face_metrics = vec![];
     for frame in scan_frames {
@@ -258,11 +264,11 @@ pub fn make_all_frame_metrics(
             frame,
             mesh,
             background_predicate
-        ));
+        )?);
         vertex_metrics.push(vm);
         face_metrics.push(fm);
     }
-    (vertex_metrics, face_metrics)
+    Ok((vertex_metrics, face_metrics))
 }
 
 fn build_costs_for_single_frame(

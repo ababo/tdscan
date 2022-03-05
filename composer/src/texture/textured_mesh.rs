@@ -4,6 +4,7 @@ use structopt::StructOpt;
 use crate::mesh::Mesh;
 use crate::texture::*;
 use base::fm;
+use base::defs::Result;
 
 #[derive(Clone, StructOpt)]
 pub struct TextureParams {
@@ -39,7 +40,7 @@ pub struct TextureParams {
     #[structopt(
         help = "Lua predicate expression for background detection",
         long,
-        default_value = "green > red - 10.0 and green > 20.0"
+        default_value = "g > r - 10 and g > 20"
     )]
     background_predicate: String,
 }
@@ -57,13 +58,13 @@ impl TexturedMesh {
         scan_frames: &[fm::ScanFrame],
         mesh: Mesh,
         params: &TextureParams,
-    ) -> TexturedMesh {
+    ) -> Result<TexturedMesh> {
         let (vertex_metrics, face_metrics) = make_all_frame_metrics(
             scans,
             scan_frames,
             &mesh,
             &params.background_predicate
-        );
+        )?;
         let chosen_cameras =
             select_cameras(&face_metrics, &mesh, params.selection_cost_limit);
 
@@ -96,11 +97,11 @@ impl TexturedMesh {
         );
         extrapolate_gutter(&mut buffer, &mut emask, params.gutter_size);
 
-        TexturedMesh {
+        Ok(TexturedMesh {
             mesh,
             uv_coords,
             uv_idxs: uv_idxs_tri,
             image: buffer,
-        }
+        })
     }
 }

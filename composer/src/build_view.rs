@@ -124,7 +124,7 @@ pub fn build_view(
         mesh.vertices.len(),
         mesh.faces.len()
     );
-    let tmesh = TexturedMesh::new(&scans, &scan_frames, mesh, &params.texture);
+    let tmesh = TexturedMesh::new(&scans, &scan_frames, mesh, &params.texture)?;
 
     info!("writing textured mesh...");
     write_textured_mesh(&tmesh, "foo.mtl", "foo.obj", "foo.png");

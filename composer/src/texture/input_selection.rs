@@ -1,6 +1,7 @@
 use indexmap::IndexMap;
 use kiddo::distance::squared_euclidean;
 use kiddo::KdTree;
+use rlua::Lua;
 
 use crate::mesh::Mesh;
 use crate::texture::*;
@@ -172,15 +173,27 @@ fn compute_occlusion_for_all_vertices(
     occluded
 }
 
-fn evaluate_background_predicate(pixel: Vector2, image: &RgbImage) -> bool {
-    let &[red, green, _blue] = sample_pixel(pixel, image).as_ref();
-    green > red - 10.0 && green > 20.0 // This could be made configurable too.
+fn evaluate_background_predicate(
+    pixel: Vector2,
+    image: &RgbImage,
+    lua: &Lua,
+    predicate: &str,
+) -> bool {
+    let &[red, green, blue] = sample_pixel(pixel, image).as_ref();
+    
+    lua.context(|ctx| {
+        ctx.globals().set("red", red)?;
+        ctx.globals().set("green", green)?;
+        ctx.globals().set("blue", blue)?;
+        ctx.load(predicate).eval()
+    }).unwrap()  // TODO: How to handle syntax error?
 }
 
 pub fn make_frame_metrics(
     scan: &fm::Scan,
     frame: &fm::ScanFrame,
     mesh: &Mesh,
+    background_predicate: &str,
 ) -> Option<(Vec<Metrics>, Vec<Metrics>)> {
     let image = load_frame_image(frame)?;
 
@@ -197,6 +210,7 @@ pub fn make_frame_metrics(
     let occlusions = compute_occlusion_for_all_vertices(&vertices_proj, mesh);
 
     let mut vertex_metrics = vec![];
+    let lua = Lua::new();
     for i in 0..mesh.vertices.len() {
         let ProjectedPoint {
             point: pixel,
@@ -212,7 +226,12 @@ pub fn make_frame_metrics(
                 && 0.01 <= pixel[1]
                 && pixel[1] <= 0.99,
             is_occluded: occlusions[i],
-            is_background: evaluate_background_predicate(pixel, &image),
+            is_background: evaluate_background_predicate(
+                pixel,
+                &image,
+                &lua,
+                background_predicate
+            ),
             // TODO: Used for limiting camera to "its" part of the mesh.
             ramp_penalty: 0.0,
         });
@@ -228,12 +247,18 @@ pub fn make_all_frame_metrics(
     scans: &IndexMap<String, fm::Scan>,
     scan_frames: &[fm::ScanFrame],
     mesh: &Mesh,
+    background_predicate: &str,
 ) -> (Vec<FrameMetrics>, Vec<FrameMetrics>) {
     let mut vertex_metrics = vec![];
     let mut face_metrics = vec![];
     for frame in scan_frames {
         let scan = scans.get(&frame.scan).unwrap();
-        let (vm, fm) = split_option(make_frame_metrics(scan, frame, mesh));
+        let (vm, fm) = split_option(make_frame_metrics(
+            scan,
+            frame,
+            mesh,
+            background_predicate
+        ));
         vertex_metrics.push(vm);
         face_metrics.push(fm);
     }

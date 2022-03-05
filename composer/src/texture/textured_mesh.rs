@@ -27,7 +27,7 @@ pub struct TextureParams {
         long,
         default_value = "4096"
     )]
-    pub image_res: usize,
+    pub image_resolution: usize,
 
     #[structopt(
         help = "Threshold beyond which a mesh face is deemed not visible",
@@ -35,6 +35,13 @@ pub struct TextureParams {
         default_value = "10.0"
     )]
     pub selection_cost_limit: f64,
+
+    #[structopt(
+        help = "Lua predicate expression for background detection",
+        long,
+        default_value = "green > red - 10.0 and green > 20.0"
+    )]
+    background_predicate: String,
 }
 
 pub struct TexturedMesh {
@@ -51,8 +58,12 @@ impl TexturedMesh {
         mesh: Mesh,
         params: &TextureParams,
     ) -> TexturedMesh {
-        let (vertex_metrics, face_metrics) =
-            make_all_frame_metrics(scans, scan_frames, &mesh);
+        let (vertex_metrics, face_metrics) = make_all_frame_metrics(
+            scans,
+            scan_frames,
+            &mesh,
+            &params.background_predicate
+        );
         let chosen_cameras =
             select_cameras(&face_metrics, &mesh, params.selection_cost_limit);
 
@@ -81,7 +92,7 @@ impl TexturedMesh {
             &chosen_cameras,
             &vertex_metrics,
             &uv_coords_tri,
-            params.image_res,
+            params.image_resolution,
         );
         extrapolate_gutter(&mut buffer, &mut emask, params.gutter_size);
 

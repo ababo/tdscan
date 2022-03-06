@@ -1,3 +1,7 @@
+use std::collections::HashMap;
+use std::hash::Hash;
+
+use petgraph::unionfind::UnionFind;
 use rand::Rng;
 use rlua::Value as LuaValue;
 use serde_json::Value as JsonValue;
@@ -97,4 +101,25 @@ pub fn truncate_json_value(value: &mut JsonValue, max_len: usize) {
         }
         _ => {}
     };
+}
+
+pub fn extract_biggest_partition_component(
+    partition: UnionFind<usize>,
+) -> Vec<usize> {
+    let labeling = partition.into_labeling();
+    let mut family = HashMap::<usize, Vec<usize>>::new();
+    for (i, &j) in labeling.iter().enumerate() {
+        family.entry(j).or_insert_with(Vec::new);
+        family.get_mut(&j).unwrap().push(i);
+    }
+    let biggest_idx =
+        family.iter().map(|(&i, j)| (j.len(), i)).max().unwrap().1;
+    family[&biggest_idx].clone()
+}
+
+pub fn vec_inv<T>(v: &[T]) -> HashMap<T, usize>
+where
+    T: Copy+Eq+Hash
+{
+    HashMap::from_iter(v.iter().enumerate().map(|(i, &j)| (j, i)))
 }

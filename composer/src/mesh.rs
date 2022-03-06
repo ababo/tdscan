@@ -4,12 +4,13 @@ use std::collections::{BinaryHeap, HashMap, HashSet};
 use derive_more::{Add, AddAssign};
 use petgraph::unionfind::UnionFind;
 
+use crate::misc;
 use crate::point_cloud::{
     validate_point_bounds, Matrix4, Point3, PointCloudParams, Vector3, Vector4,
 };
 use crate::poisson;
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Mesh {
     pub vertices: Vec<Point3>,
     pub normals: Vec<Vector3>,
@@ -107,6 +108,33 @@ impl Mesh {
 
     pub fn decimate(self, ratio: f64) -> Mesh {
         Decimator::execute(self, ratio)
+    }
+
+    // This method removes scattered, detached noise particles from the mesh.
+    pub fn clean(&mut self) {
+        let mut partition = UnionFind::new(self.vertices.len());
+        for &[v0, v1, v2] in &self.faces {
+            partition.union(v0, v1);
+            partition.union(v0, v2);
+            partition.union(v1, v2);
+        }
+
+        let vertices_idx = misc::extract_biggest_partition_component(partition);
+        let vertices_inv = misc::vec_inv(&vertices_idx);
+
+        self.vertices =
+            vertices_idx.iter().map(|&i| self.vertices[i]).collect();
+        self.normals = vertices_idx.iter().map(|&i| self.normals[i]).collect();
+        let mut faces = vec![];
+        for [v0, v1, v2] in &self.faces {
+            let i0 = vertices_inv.get(v0);
+            let i1 = vertices_inv.get(v1);
+            let i2 = vertices_inv.get(v2);
+            if let (Some(&j0), Some(&j1), Some(&j2)) = (i0, i1, i2) {
+                faces.push([j0, j1, j2]);
+            }
+        }
+        self.faces = faces;
     }
 }
 

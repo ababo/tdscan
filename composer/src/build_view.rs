@@ -1,10 +1,12 @@
 use log::info;
 use structopt::StructOpt;
 
+use crate::export_obj::write_textured_mesh;
 use crate::mesh::Mesh;
 use crate::point_cloud::{build_frame_clouds, PointCloudParams, PointNormal};
 use crate::poisson;
 use crate::scan::{read_scans, ScanParams};
+use crate::texture::{TexturedMesh, TextureParams};
 use base::defs::{Error, ErrorKind::*, Result};
 use base::fm;
 use base::util::cli;
@@ -56,6 +58,9 @@ pub struct BuildViewParams {
         default_value = "0.1"
     )]
     pub decimate_ratio: f64,
+
+    #[structopt(flatten)]
+    pub texture: TextureParams,
 }
 
 pub fn build_view(
@@ -95,6 +100,10 @@ pub fn build_view(
         ));
     }
     mesh.apply_bounds(&params.point_cloud);
+    for vn in mesh.normals.iter_mut() {
+        vn.normalize_mut();
+    }
+    mesh.clean();
 
     if params.num_smooth_iters > 0 {
         info!("smoothing mesh...");
@@ -111,49 +120,20 @@ pub fn build_view(
     }
 
     info!(
-        "writing mesh of {} vertices and {} faces...",
+        "texturing mesh of {} vertices and {} faces...",
         mesh.vertices.len(),
         mesh.faces.len()
     );
+    let tmesh = TexturedMesh::new(&scans, &scan_frames, mesh, &params.texture)?;
 
-    use std::io::Write;
-    let mut file =
-        std::fs::File::create("/Users/ababo/Desktop/foo.obj").unwrap();
-    for vertex in mesh.vertices {
-        file.write_all(
-            format!("v {} {} {}\n", vertex.x, vertex.y, vertex.z)
-                .into_bytes()
-                .as_slice(),
-        )
-        .unwrap();
-    }
-    for normal in mesh.normals {
-        file.write_all(
-            format!("vn {} {} {}\n", normal.x, normal.y, normal.z)
-                .into_bytes()
-                .as_slice(),
-        )
-        .unwrap();
-    }
-    for triangle in mesh.faces {
-        file.write_all(
-            format!(
-                "f {0}//{0} {1}//{1} {2}//{2}\n",
-                triangle[0] + 1,
-                triangle[1] + 1,
-                triangle[2] + 1
-            )
-            .into_bytes()
-            .as_slice(),
-        )
-        .unwrap();
-    }
+    info!("writing textured mesh...");
+    write_textured_mesh(&tmesh, "foo.mtl", "foo.obj", "foo.png");
 
     info!("done");
     Ok(())
 }
 
-struct Cloud(Vec<PointNormal>);
+pub struct Cloud(Vec<PointNormal>);
 
 impl poisson::Cloud<f64> for Cloud {
     fn len(&self) -> usize {

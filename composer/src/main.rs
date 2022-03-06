@@ -1,5 +1,6 @@
 mod build_view;
 mod combine;
+mod export_obj;
 mod export_to_json;
 mod import_obj;
 mod mesh;
@@ -9,6 +10,7 @@ mod point_cloud;
 mod poisson;
 mod scan;
 mod select;
+mod texture;
 
 use log::error;
 use simplelog::{

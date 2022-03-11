@@ -247,6 +247,8 @@ where
     Ok(grad)
 }
 
+const PENALTY_SCORE: f32 = 1.0;
+
 struct FrameOp<'a> {
     point_cloud_params: &'a PointCloudParams,
     scans: &'a IndexMap<String, fm::Scan>,
@@ -281,7 +283,7 @@ impl<'a> ArgminOp for FrameOp<'a> {
                 sum += dist;
                 num += 1;
             } else {
-                return Err(ArgminError::msg("no points remain"));
+                return Ok(PENALTY_SCORE);
             }
         }
 
@@ -438,7 +440,7 @@ impl ArgminOp for ScanOp {
                 sum += dist;
                 num += 1;
             } else {
-                return Err(ArgminError::msg("no points remain"));
+                return Ok(PENALTY_SCORE);
             }
         }
 

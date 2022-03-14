@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use log::info;
 use structopt::StructOpt;
 
@@ -6,7 +8,7 @@ use crate::mesh::Mesh;
 use crate::point_cloud::{build_frame_clouds, PointCloudParams, PointNormal};
 use crate::poisson;
 use crate::scan::{read_scans, ScanParams};
-use crate::texture::{TexturedMesh, TextureParams};
+use crate::texture::{TextureParams, TexturedMesh};
 use base::defs::{Error, ErrorKind::*, Result};
 use base::fm;
 use base::util::cli;
@@ -29,7 +31,12 @@ impl BuildViewCommand {
         let mut reader = self.input.get()?;
         let mut writer = self.output.get()?;
 
-        build_view(reader.as_mut(), writer.as_mut(), &self.params)
+        build_view(
+            reader.as_mut(),
+            writer.as_mut(),
+            &self.params,
+            &self.output.path,
+        )
     }
 }
 
@@ -67,6 +74,7 @@ pub fn build_view(
     reader: &mut dyn fm::Read,
     _writer: &mut dyn fm::Write,
     params: &BuildViewParams,
+    output_path: &Option<PathBuf>,
 ) -> Result<()> {
     info!("reading scans...");
     let (scans, scan_frames) = read_scans(reader, &params.scan)?;
@@ -127,7 +135,14 @@ pub fn build_view(
     let tmesh = TexturedMesh::new(&scans, &scan_frames, mesh, &params.texture)?;
 
     info!("writing textured mesh...");
-    write_textured_mesh(&tmesh, "foo.mtl", "foo.obj", "foo.png");
+    let f = |s| {
+        if let Some(p) = output_path {
+            String::from(p.as_path().join(s).to_str().unwrap())
+        } else {
+            String::from(s)
+        }
+    };
+    write_textured_mesh(&tmesh, &f("foo.mtl"), &f("foo.obj"), &f("foo.png"));
 
     info!("done");
     Ok(())

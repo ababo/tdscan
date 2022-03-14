@@ -10,10 +10,12 @@ use crate::texture::TexturedMesh;
 pub fn write_textured_mesh(
     tmesh: &TexturedMesh,
     //base_path: &str,
-    mtlpath: &str,
-    objpath: &str,
-    texpath: &str,
 ) {
+    // Ugly for now.
+    let f = |s| [env!("HOME"), "Desktop", s].join("/");
+    let mtlpath: &str = &f("foo.mtl");
+    let objpath: &str = &f("foo.obj");
+    let texpath: &str = &f("foo.png");
     //let mtlpath = format!("{base_path}.mtl");
     //let objpath = format!("{base_path}.obj");
     //let texpath = format!("{base_path}.png");

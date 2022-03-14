@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 use log::info;
 use structopt::StructOpt;
 
@@ -31,12 +29,7 @@ impl BuildViewCommand {
         let mut reader = self.input.get()?;
         let mut writer = self.output.get()?;
 
-        build_view(
-            reader.as_mut(),
-            writer.as_mut(),
-            &self.params,
-            &self.output.path,
-        )
+        build_view(reader.as_mut(), writer.as_mut(), &self.params)
     }
 }
 
@@ -74,7 +67,6 @@ pub fn build_view(
     reader: &mut dyn fm::Read,
     _writer: &mut dyn fm::Write,
     params: &BuildViewParams,
-    output_path: &Option<PathBuf>,
 ) -> Result<()> {
     info!("reading scans...");
     let (scans, scan_frames) = read_scans(reader, &params.scan)?;
@@ -135,14 +127,7 @@ pub fn build_view(
     let tmesh = TexturedMesh::new(&scans, &scan_frames, mesh, &params.texture)?;
 
     info!("writing textured mesh...");
-    let f = |s| {
-        if let Some(p) = output_path {
-            String::from(p.as_path().join(s).to_str().unwrap())
-        } else {
-            String::from(s)
-        }
-    };
-    write_textured_mesh(&tmesh, &f("foo.mtl"), &f("foo.obj"), &f("foo.png"));
+    write_textured_mesh(&tmesh);
 
     info!("done");
     Ok(())

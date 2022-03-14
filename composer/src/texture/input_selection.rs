@@ -324,7 +324,11 @@ pub fn evaluate_background_predicate(
     let diff3 = sample_pixel(pixel, image) - background_color;
 
     // Remove the grayscale component from the color difference vector.
-    let diff2 = Vector2::new(diff3[0] - diff3[1], diff3[0] - diff3[2]);
+    let s = (1.0 + f64::sqrt(3.0)) / 2.0;
+    let orthonormal_basis = Matrix3x2::new(1.0, -s, s - 1.0, 1.0, s - 1.0, -s)
+        .transpose()
+        / f64::sqrt(3.0);
+    let diff2 = orthonormal_basis * diff3;
 
     diff2.norm() < background_deviation
 }

@@ -29,6 +29,7 @@ pub type Quaternion = nalgebra::UnitQuaternion<f64>;
 pub type Matrix4 = nalgebra::Matrix4<f64>;
 pub type Vector2 = nalgebra::Vector2<f64>;
 pub type Matrix2 = nalgebra::Matrix2<f64>;
+pub type Matrix3x2 = nalgebra::Matrix3x2<f64>;
 pub type Vector<const D: usize> =
     nalgebra::Vector<f64, Const<D>, ArrayStorage<f64, D, 1>>;
 

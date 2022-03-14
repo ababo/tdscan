@@ -172,17 +172,17 @@ fn compute_occlusion_for_all_vertices(
     occluded
 }
 
-pub struct VertexAndFaceMetricsOfSingleFrame {
+struct VertexAndFaceMetricsOfSingleFrame {
     pub vertex_metrics: Vec<Metrics>,
-    pub face_metrics: Vec<Metrics>
+    pub face_metrics: Vec<Metrics>,
 }
 
-pub fn make_frame_metrics(
+fn make_frame_metrics(
     scan: &fm::Scan,
     frame: &fm::ScanFrame,
     mesh: &Mesh,
     background_color: Vector3,
-    background_deviation: f64
+    background_deviation: f64,
 ) -> Option<VertexAndFaceMetricsOfSingleFrame> {
     let image = load_frame_image(frame)?;
 
@@ -223,16 +223,24 @@ pub fn make_frame_metrics(
             ramp_penalty: 0.0,
         });
     }
-    let face_metrics = mesh.faces.iter().map(|&[v0, v1, v2]| {
-        let ms = [vertex_metrics[v0], vertex_metrics[v1], vertex_metrics[v2]];
-        summarize_metrics(&ms)
-    }).collect();
-    Some(VertexAndFaceMetricsOfSingleFrame { vertex_metrics, face_metrics })
+    let face_metrics = mesh
+        .faces
+        .iter()
+        .map(|&[v0, v1, v2]| {
+            let ms =
+                [vertex_metrics[v0], vertex_metrics[v1], vertex_metrics[v2]];
+            summarize_metrics(&ms)
+        })
+        .collect();
+    Some(VertexAndFaceMetricsOfSingleFrame {
+        vertex_metrics,
+        face_metrics,
+    })
 }
 
 pub struct VertexAndFaceMetricsOfAllFrames {
     pub vertex_metrics: Vec<FrameMetrics>,
-    pub face_metrics: Vec<FrameMetrics>
+    pub face_metrics: Vec<FrameMetrics>,
 }
 
 pub fn make_all_frame_metrics(
@@ -240,28 +248,30 @@ pub fn make_all_frame_metrics(
     scan_frames: &[fm::ScanFrame],
     mesh: &Mesh,
     background_color: Vector3,
-    background_deviation: f64
+    background_deviation: f64,
 ) -> VertexAndFaceMetricsOfAllFrames {
     let mut vertex_metrics = vec![];
     let mut face_metrics = vec![];
     for frame in scan_frames {
         let scan = scans.get(&frame.scan).unwrap();
-        let (vm, fm) =
-            if let Some(m) = make_frame_metrics(
-                scan,
-                frame,
-                mesh,
-                background_color,
-                background_deviation
-            ) {
-                (Some(m.vertex_metrics), Some(m.face_metrics))
-            } else {
-                (None, None)
-            };
+        let (vm, fm) = if let Some(m) = make_frame_metrics(
+            scan,
+            frame,
+            mesh,
+            background_color,
+            background_deviation,
+        ) {
+            (Some(m.vertex_metrics), Some(m.face_metrics))
+        } else {
+            (None, None)
+        };
         vertex_metrics.push(vm);
         face_metrics.push(fm);
     }
-    VertexAndFaceMetricsOfAllFrames { vertex_metrics, face_metrics }
+    VertexAndFaceMetricsOfAllFrames {
+        vertex_metrics,
+        face_metrics,
+    }
 }
 
 fn build_costs_for_single_frame(
@@ -309,7 +319,7 @@ pub fn evaluate_background_predicate(
     pixel: Vector2,
     image: &RgbImage,
     background_color: Vector3,
-    background_deviation: f64
+    background_deviation: f64,
 ) -> bool {
     let diff3 = sample_pixel(pixel, image) - background_color;
 

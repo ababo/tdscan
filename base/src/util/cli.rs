@@ -67,7 +67,7 @@ where
 
 #[derive(StructOpt)]
 pub struct FmInput {
-    #[structopt(help = "Input .fm file (STDIN if omitted)", name="in-file")]
+    #[structopt(help = "Input .fm file (STDIN if omitted)", name = "in-file")]
     pub path: Option<PathBuf>,
 }
 
@@ -85,7 +85,10 @@ impl FmInput {
 
 #[derive(StructOpt)]
 pub struct FmInputs {
-    #[structopt(help = "Input .fm files (STDIN if omitted)", name="in-files")]
+    #[structopt(
+        help = "Input .fm files (STDIN if omitted)",
+        name = "in-files"
+    )]
     pub paths: Vec<PathBuf>,
 }
 
@@ -188,9 +191,10 @@ pub fn parse_color(s: &str) -> Result<[u8; 3]> {
         let desc = format!("malformed color string '{}'", s);
         Error::new(MalformedData, desc)
     };
-    if !(s.len() == 7 && s.starts_with('#')) {
+    if s.len() != 7 || !s.starts_with('#') {
         return Err(malformed_err());
     }
-    let f = |k| u8::from_str_radix(&s[k..k+2], 16).map_err(|_| malformed_err());
+    let f =
+        |k| u8::from_str_radix(&s[k..k + 2], 16).map_err(|_| malformed_err());
     Ok([f(1)?, f(3)?, f(5)?])
 }

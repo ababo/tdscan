@@ -182,3 +182,15 @@ macro_rules! define_raw_output {
         }
     };
 }
+
+pub fn parse_color(s: &str) -> Result<[u8; 3]> {
+    let malformed_err = || {
+        let desc = format!("malformed color string '{}'", s);
+        Error::new(MalformedData, desc)
+    };
+    if !(s.len() == 7 && s.starts_with('#')) {
+        return Err(malformed_err());
+    }
+    let f = |k| u8::from_str_radix(&s[k..k+2], 16).map_err(|_| malformed_err());
+    Ok([f(1)?, f(3)?, f(5)?])
+}

@@ -5,6 +5,7 @@ use crate::mesh::Mesh;
 use crate::texture::*;
 use base::fm;
 use base::defs::Result;
+use base::util::cli::parse_color;
 
 #[derive(Clone, StructOpt)]
 pub struct TextureParams {
@@ -37,8 +38,25 @@ pub struct TextureParams {
     )]
     pub selection_cost_limit: f64,
 
-    #[structopt(flatten)]
-    pub background_predicate: BackgroundPredicate,
+    #[structopt(
+        help = "Mean color for background detection",
+        long,
+        parse(try_from_str = parse_color_into_vector3),
+        default_value = "#277C35"
+    )]
+    pub background_color: Vector3,
+
+    #[structopt(
+        help = "Allowed color deviation for background detection",
+        long,
+        default_value = "50"
+    )]
+    pub background_deviation: f64
+}
+
+fn parse_color_into_vector3(src: &str) -> Result<Vector3> {
+    let [r, g, b] = parse_color(src)?;
+    Ok(Vector3::new(r as f64, g as f64, b as f64))
 }
 
 pub struct TexturedMesh {
@@ -55,12 +73,14 @@ impl TexturedMesh {
         mesh: Mesh,
         params: &TextureParams,
     ) -> Result<TexturedMesh> {
-        let (vertex_metrics, face_metrics) = make_all_frame_metrics(
-            scans,
-            scan_frames,
-            &mesh,
-            &params.background_predicate
-        );
+        let VertexAndFaceMetricsOfAllFrames { vertex_metrics, face_metrics } =
+            make_all_frame_metrics(
+                scans,
+                scan_frames,
+                &mesh,
+                params.background_color,
+                params.background_deviation
+            );
         let chosen_cameras =
             select_cameras(&face_metrics, &mesh, params.selection_cost_limit);
 

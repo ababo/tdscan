@@ -70,14 +70,6 @@ pub fn load_all_frame_images(
     frames.iter().map(load_frame_image).collect()
 }
 
-pub fn split_option<T, U>(otu: Option<(T, U)>) -> (Option<T>, Option<U>) {
-    if let Some((t, u)) = otu {
-        (Some(t), Some(u))
-    } else {
-        (None, None)
-    }
-}
-
 pub fn get_pixel_ij_as_vector3(i: u32, j: u32, image: &RgbImage) -> Vector3 {
     let (x, y) = (j, i); // Beware: Transposing indices.
     let p = image.get_pixel(x, y);

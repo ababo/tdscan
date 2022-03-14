@@ -1,7 +1,6 @@
 use indexmap::IndexMap;
 use kiddo::distance::squared_euclidean;
 use kiddo::KdTree;
-use structopt::StructOpt;
 
 use crate::mesh::Mesh;
 use crate::texture::*;
@@ -68,7 +67,7 @@ pub fn project_like_camera(
         .collect()
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Clone, Copy, Debug)]
 pub struct Metrics {
     pub pixel: Vector2,
     pub depth: f64,
@@ -173,12 +172,18 @@ fn compute_occlusion_for_all_vertices(
     occluded
 }
 
+pub struct VertexAndFaceMetricsOfSingleFrame {
+    pub vertex_metrics: Vec<Metrics>,
+    pub face_metrics: Vec<Metrics>
+}
+
 pub fn make_frame_metrics(
     scan: &fm::Scan,
     frame: &fm::ScanFrame,
     mesh: &Mesh,
-    background_predicate: &BackgroundPredicate,
-) -> Option<(Vec<Metrics>, Vec<Metrics>)> {
+    background_color: Vector3,
+    background_deviation: f64
+) -> Option<VertexAndFaceMetricsOfSingleFrame> {
     let image = load_frame_image(frame)?;
 
     let vertices_proj = project_like_camera(scan, frame, &mesh.vertices);
@@ -209,8 +214,12 @@ pub fn make_frame_metrics(
                 && 0.01 <= pixel[1]
                 && pixel[1] <= 0.99,
             is_occluded: occlusions[i],
-            is_background: background_predicate.evaluate(pixel, &image),
-            // TODO: Used for limiting camera to "its" part of the mesh.
+            is_background: evaluate_background_predicate(
+                pixel,
+                &image,
+                background_color,
+                background_deviation,
+            ),
             ramp_penalty: 0.0,
         });
     }
@@ -218,29 +227,41 @@ pub fn make_frame_metrics(
         let ms = [vertex_metrics[v0], vertex_metrics[v1], vertex_metrics[v2]];
         summarize_metrics(&ms)
     }).collect();
-    Some((vertex_metrics, face_metrics))
+    Some(VertexAndFaceMetricsOfSingleFrame { vertex_metrics, face_metrics })
+}
+
+pub struct VertexAndFaceMetricsOfAllFrames {
+    pub vertex_metrics: Vec<FrameMetrics>,
+    pub face_metrics: Vec<FrameMetrics>
 }
 
 pub fn make_all_frame_metrics(
     scans: &IndexMap<String, fm::Scan>,
     scan_frames: &[fm::ScanFrame],
     mesh: &Mesh,
-    background_predicate: &BackgroundPredicate,
-) -> (Vec<FrameMetrics>, Vec<FrameMetrics>) {
+    background_color: Vector3,
+    background_deviation: f64
+) -> VertexAndFaceMetricsOfAllFrames {
     let mut vertex_metrics = vec![];
     let mut face_metrics = vec![];
     for frame in scan_frames {
         let scan = scans.get(&frame.scan).unwrap();
-        let (vm, fm) = split_option(make_frame_metrics(
-            scan,
-            frame,
-            mesh,
-            background_predicate
-        ));
+        let (vm, fm) =
+            if let Some(m) = make_frame_metrics(
+                scan,
+                frame,
+                mesh,
+                background_color,
+                background_deviation
+            ) {
+                (Some(m.vertex_metrics), Some(m.face_metrics))
+            } else {
+                (None, None)
+            };
         vertex_metrics.push(vm);
         face_metrics.push(fm);
     }
-    (vertex_metrics, face_metrics)
+    VertexAndFaceMetricsOfAllFrames { vertex_metrics, face_metrics }
 }
 
 fn build_costs_for_single_frame(
@@ -284,42 +305,16 @@ pub fn select_cameras(
     chosen
 }
 
-#[derive(Debug, Copy, Clone, StructOpt)]
-pub struct BackgroundPredicate {
-    #[structopt(
-        help = "Mean color for background detection",
-        long,
-        parse(from_str = BackgroundPredicate::parse_color),
-        default_value = "#277C35"
-    )]
-    pub background_color: Vector3,
+pub fn evaluate_background_predicate(
+    pixel: Vector2,
+    image: &RgbImage,
+    background_color: Vector3,
+    background_deviation: f64
+) -> bool {
+    let diff3 = sample_pixel(pixel, image) - background_color;
 
-    #[structopt(
-        help = "Allowed color deviation for background detection",
-        long,
-        default_value = "50"
-    )]
-    pub background_deviation: f64
-}
+    // Remove the grayscale component from the color difference vector.
+    let diff2 = Vector2::new(diff3[0] - diff3[1], diff3[0] - diff3[2]);
 
-impl BackgroundPredicate {
-    pub fn parse_color(src: &str) -> Vector3 {
-        assert!(src.len() == 7 && src.starts_with('#'),
-                "Invalid color string!");
-        let f = |k| u8::from_str_radix(&src[k..k+2], 16).unwrap() as f64;
-        Vector3::new(f(1), f(3), f(5))
-    }
-    
-    pub fn evaluate(
-        &self,
-        pixel: Vector2,
-        image: &RgbImage
-    ) -> bool {
-        let diff3 = sample_pixel(pixel, image) - self.background_color;
-
-        // Remove the grayscale component from the color difference vector.
-        let diff2 = Vector2::new(diff3[0] - diff3[1], diff3[0] - diff3[2]);
-
-        diff2.norm() < self.background_deviation
-    }
+    diff2.norm() < background_deviation
 }

@@ -292,14 +292,14 @@ pub struct BackgroundPredicate {
         parse(from_str = BackgroundPredicate::parse_color),
         default_value = "#277C35"
     )]
-    pub color: Vector3,
+    pub background_color: Vector3,
 
     #[structopt(
         help = "Allowed color deviation for background detection",
         long,
         default_value = "50"
     )]
-    pub deviation: f64
+    pub background_deviation: f64
 }
 
 impl BackgroundPredicate {
@@ -315,11 +315,11 @@ impl BackgroundPredicate {
         pixel: Vector2,
         image: &RgbImage
     ) -> bool {
-        let diff3 = sample_pixel(pixel, image) - self.color;
+        let diff3 = sample_pixel(pixel, image) - self.background_color;
 
         // Remove the grayscale component from the color difference vector.
         let diff2 = Vector2::new(diff3[0] - diff3[1], diff3[0] - diff3[2]);
 
-        diff2.norm() < self.deviation
+        diff2.norm() < self.background_deviation
     }
 }

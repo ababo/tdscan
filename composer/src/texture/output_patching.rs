@@ -151,30 +151,26 @@ fn get_big_chunk_helper(
     for (i, b) in faces_mask_subset.iter_mut().enumerate() {
         *b &= face_aligned(i, major_axis, mesh)
     }
-
-    let biggest: Vec<usize>;
+    
     if faces_mask_subset.iter().map(|&b| b as usize).sum::<usize>() > 0 {
         let (partition, carrier) =
             partition_faces(&faces_mask_subset, mesh, topo);
-        biggest = extract_biggest_partition_component(partition)
+        extract_biggest_partition_component(partition)
             .iter()
             .map(|&i| carrier[i])
-            .collect();
+            .collect()
     } else {
         // This happens toward the end when there are just
         // a few scattered faces left to choose from.
         let lone = faces_mask.iter().position(|&b| b).unwrap();
-        biggest = vec![lone];
+        vec![lone]
     }
-    
-    biggest
 }
 
 fn average_normal(faces_idx: &[usize], mesh: &Mesh) -> Vector3 {
     faces_idx
         .iter()
-        .map(|&i| mesh.faces[i])
-        .flatten()
+        .flat_map(|&i| mesh.faces[i])
         .map(|i| mesh.normals[i])
         .sum::<Vector3>()
         .normalize()

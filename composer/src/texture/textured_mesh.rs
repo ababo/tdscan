@@ -37,12 +37,8 @@ pub struct TextureParams {
     )]
     pub selection_cost_limit: f64,
 
-    #[structopt(
-        help = "Lua predicate expression for background detection",
-        long,
-        default_value = "g > r - 10 and g > 20"
-    )]
-    background_predicate: String,
+    #[structopt(flatten)]
+    pub background_predicate: BackgroundPredicate,
 }
 
 pub struct TexturedMesh {
@@ -64,7 +60,7 @@ impl TexturedMesh {
             scan_frames,
             &mesh,
             &params.background_predicate
-        )?;
+        );
         let chosen_cameras =
             select_cameras(&face_metrics, &mesh, params.selection_cost_limit);
 

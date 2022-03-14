@@ -1,12 +1,10 @@
 use indexmap::IndexMap;
 use kiddo::distance::squared_euclidean;
 use kiddo::KdTree;
-use rlua::Lua;
+use structopt::StructOpt;
 
 use crate::mesh::Mesh;
-use crate::misc::lua_err_to_err;
 use crate::texture::*;
-use base::defs::Result;
 use base::fm;
 
 pub fn project_like_camera(
@@ -175,33 +173,13 @@ fn compute_occlusion_for_all_vertices(
     occluded
 }
 
-fn evaluate_background_predicate(
-    pixel: Vector2,
-    image: &RgbImage,
-    lua: &Lua,
-    predicate: &str,
-) -> Result<bool> {
-    let &[red, green, blue] = sample_pixel(pixel, image).as_ref();
-    
-    lua.context(|ctx| {
-        ctx.globals().set("r", red)?;
-        ctx.globals().set("g", green)?;
-        ctx.globals().set("b", blue)?;
-        ctx.load(predicate).eval()
-    }).map_err(lua_err_to_err)
-}
-
 pub fn make_frame_metrics(
     scan: &fm::Scan,
     frame: &fm::ScanFrame,
     mesh: &Mesh,
-    background_predicate: &str,
-) -> Result<Option<(Vec<Metrics>, Vec<Metrics>)>> {
-    let image_attempt = load_frame_image(frame);
-    if image_attempt.is_none() {
-        return Ok(None);
-    }
-    let image = image_attempt.unwrap();
+    background_predicate: &BackgroundPredicate,
+) -> Option<(Vec<Metrics>, Vec<Metrics>)> {
+    let image = load_frame_image(frame)?;
 
     let vertices_proj = project_like_camera(scan, frame, &mesh.vertices);
 
@@ -216,7 +194,6 @@ pub fn make_frame_metrics(
     let occlusions = compute_occlusion_for_all_vertices(&vertices_proj, mesh);
 
     let mut vertex_metrics = vec![];
-    let lua = Lua::new();
     for i in 0..mesh.vertices.len() {
         let ProjectedPoint {
             point: pixel,
@@ -232,12 +209,7 @@ pub fn make_frame_metrics(
                 && 0.01 <= pixel[1]
                 && pixel[1] <= 0.99,
             is_occluded: occlusions[i],
-            is_background: evaluate_background_predicate(
-                pixel,
-                &image,
-                &lua,
-                background_predicate
-            )?,
+            is_background: background_predicate.evaluate(pixel, &image),
             // TODO: Used for limiting camera to "its" part of the mesh.
             ramp_penalty: 0.0,
         });
@@ -246,15 +218,15 @@ pub fn make_frame_metrics(
         let ms = [vertex_metrics[v0], vertex_metrics[v1], vertex_metrics[v2]];
         summarize_metrics(&ms)
     }).collect();
-    Ok(Some((vertex_metrics, face_metrics)))
+    Some((vertex_metrics, face_metrics))
 }
 
 pub fn make_all_frame_metrics(
     scans: &IndexMap<String, fm::Scan>,
     scan_frames: &[fm::ScanFrame],
     mesh: &Mesh,
-    background_predicate: &str,
-) -> Result<(Vec<FrameMetrics>, Vec<FrameMetrics>)> {
+    background_predicate: &BackgroundPredicate,
+) -> (Vec<FrameMetrics>, Vec<FrameMetrics>) {
     let mut vertex_metrics = vec![];
     let mut face_metrics = vec![];
     for frame in scan_frames {
@@ -264,11 +236,11 @@ pub fn make_all_frame_metrics(
             frame,
             mesh,
             background_predicate
-        )?);
+        ));
         vertex_metrics.push(vm);
         face_metrics.push(fm);
     }
-    Ok((vertex_metrics, face_metrics))
+    (vertex_metrics, face_metrics)
 }
 
 fn build_costs_for_single_frame(
@@ -310,4 +282,44 @@ pub fn select_cameras(
         }
     }
     chosen
+}
+
+#[derive(Debug, Copy, Clone, StructOpt)]
+pub struct BackgroundPredicate {
+    #[structopt(
+        help = "Mean color for background detection",
+        long,
+        parse(from_str = BackgroundPredicate::parse_color),
+        default_value = "#277C35"
+    )]
+    pub color: Vector3,
+
+    #[structopt(
+        help = "Allowed color deviation for background detection",
+        long,
+        default_value = "50"
+    )]
+    pub deviation: f64
+}
+
+impl BackgroundPredicate {
+    pub fn parse_color(src: &str) -> Vector3 {
+        assert!(src.len() == 7 && src.starts_with('#'),
+                "Invalid color string!");
+        let f = |k| u8::from_str_radix(&src[k..k+2], 16).unwrap() as f64;
+        Vector3::new(f(1), f(3), f(5))
+    }
+    
+    pub fn evaluate(
+        &self,
+        pixel: Vector2,
+        image: &RgbImage
+    ) -> bool {
+        let diff3 = sample_pixel(pixel, image) - self.color;
+
+        // Remove the grayscale component from the color difference vector.
+        let diff2 = Vector2::new(diff3[0] - diff3[1], diff3[0] - diff3[2]);
+
+        diff2.norm() < self.deviation
+    }
 }

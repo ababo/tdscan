@@ -214,7 +214,7 @@ fn make_frame_metrics(
                 && 0.01 <= pixel[1]
                 && pixel[1] <= 0.99,
             is_occluded: occlusions[i],
-            is_background: evaluate_background_predicate(
+            is_background: detect_background(
                 pixel,
                 &image,
                 background_color,
@@ -315,7 +315,7 @@ pub fn select_cameras(
     chosen
 }
 
-pub fn evaluate_background_predicate(
+fn detect_background(
     pixel: Vector2,
     image: &RgbImage,
     background_color: Vector3,

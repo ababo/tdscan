@@ -29,6 +29,7 @@ pub type Quaternion = nalgebra::UnitQuaternion<f64>;
 pub type Matrix4 = nalgebra::Matrix4<f64>;
 pub type Vector2 = nalgebra::Vector2<f64>;
 pub type Matrix2 = nalgebra::Matrix2<f64>;
+pub type Matrix3x2 = nalgebra::Matrix3x2<f64>;
 pub type Vector<const D: usize> =
     nalgebra::Vector<f64, Const<D>, ArrayStorage<f64, D, 1>>;
 
@@ -68,14 +69,6 @@ pub fn load_all_frame_images(
     frames: &[fm::ScanFrame],
 ) -> Vec<Option<image::RgbImage>> {
     frames.iter().map(load_frame_image).collect()
-}
-
-pub fn split_option<T, U>(otu: Option<(T, U)>) -> (Option<T>, Option<U>) {
-    if let Some((t, u)) = otu {
-        (Some(t), Some(u))
-    } else {
-        (None, None)
-    }
 }
 
 pub fn get_pixel_ij_as_vector3(i: u32, j: u32, image: &RgbImage) -> Vector3 {

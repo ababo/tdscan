@@ -7,16 +7,11 @@ use std::path::Path;
 
 use crate::texture::TexturedMesh;
 
-pub fn write_textured_mesh(
-    tmesh: &TexturedMesh,
-    //base_path: &str,
-    mtlpath: &str,
-    objpath: &str,
-    texpath: &str,
-) {
-    //let mtlpath = format!("{base_path}.mtl");
-    //let objpath = format!("{base_path}.obj");
-    //let texpath = format!("{base_path}.png");
+pub fn write_textured_mesh(tmesh: &TexturedMesh) {
+    let f = |s| [env!("HOME"), "Desktop", s].join("/");
+    let mtlpath: &str = &f("foo.mtl");
+    let objpath: &str = &f("foo.obj");
+    let texpath: &str = &f("foo.png");
     let mtlpath_local =
         Path::new(mtlpath).file_name().unwrap().to_str().unwrap();
     let _objpath_local =

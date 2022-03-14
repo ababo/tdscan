@@ -1,12 +1,9 @@
 use indexmap::IndexMap;
 use kiddo::distance::squared_euclidean;
 use kiddo::KdTree;
-use rlua::Lua;
 
 use crate::mesh::Mesh;
-use crate::misc::lua_err_to_err;
 use crate::texture::*;
-use base::defs::Result;
 use base::fm;
 
 pub fn project_like_camera(
@@ -70,7 +67,7 @@ pub fn project_like_camera(
         .collect()
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Clone, Copy, Debug)]
 pub struct Metrics {
     pub pixel: Vector2,
     pub depth: f64,
@@ -175,33 +172,19 @@ fn compute_occlusion_for_all_vertices(
     occluded
 }
 
-fn evaluate_background_predicate(
-    pixel: Vector2,
-    image: &RgbImage,
-    lua: &Lua,
-    predicate: &str,
-) -> Result<bool> {
-    let &[red, green, blue] = sample_pixel(pixel, image).as_ref();
-    
-    lua.context(|ctx| {
-        ctx.globals().set("r", red)?;
-        ctx.globals().set("g", green)?;
-        ctx.globals().set("b", blue)?;
-        ctx.load(predicate).eval()
-    }).map_err(lua_err_to_err)
+struct VertexAndFaceMetricsOfSingleFrame {
+    pub vertex_metrics: Vec<Metrics>,
+    pub face_metrics: Vec<Metrics>,
 }
 
-pub fn make_frame_metrics(
+fn make_frame_metrics(
     scan: &fm::Scan,
     frame: &fm::ScanFrame,
     mesh: &Mesh,
-    background_predicate: &str,
-) -> Result<Option<(Vec<Metrics>, Vec<Metrics>)>> {
-    let image_attempt = load_frame_image(frame);
-    if image_attempt.is_none() {
-        return Ok(None);
-    }
-    let image = image_attempt.unwrap();
+    background_color: Vector3,
+    background_deviation: f64,
+) -> Option<VertexAndFaceMetricsOfSingleFrame> {
+    let image = load_frame_image(frame)?;
 
     let vertices_proj = project_like_camera(scan, frame, &mesh.vertices);
 
@@ -216,7 +199,6 @@ pub fn make_frame_metrics(
     let occlusions = compute_occlusion_for_all_vertices(&vertices_proj, mesh);
 
     let mut vertex_metrics = vec![];
-    let lua = Lua::new();
     for i in 0..mesh.vertices.len() {
         let ProjectedPoint {
             point: pixel,
@@ -232,43 +214,64 @@ pub fn make_frame_metrics(
                 && 0.01 <= pixel[1]
                 && pixel[1] <= 0.99,
             is_occluded: occlusions[i],
-            is_background: evaluate_background_predicate(
+            is_background: detect_background(
                 pixel,
                 &image,
-                &lua,
-                background_predicate
-            )?,
-            // TODO: Used for limiting camera to "its" part of the mesh.
+                background_color,
+                background_deviation,
+            ),
             ramp_penalty: 0.0,
         });
     }
-    let face_metrics = mesh.faces.iter().map(|&[v0, v1, v2]| {
-        let ms = [vertex_metrics[v0], vertex_metrics[v1], vertex_metrics[v2]];
-        summarize_metrics(&ms)
-    }).collect();
-    Ok(Some((vertex_metrics, face_metrics)))
+    let face_metrics = mesh
+        .faces
+        .iter()
+        .map(|&[v0, v1, v2]| {
+            let ms =
+                [vertex_metrics[v0], vertex_metrics[v1], vertex_metrics[v2]];
+            summarize_metrics(&ms)
+        })
+        .collect();
+    Some(VertexAndFaceMetricsOfSingleFrame {
+        vertex_metrics,
+        face_metrics,
+    })
+}
+
+pub struct VertexAndFaceMetricsOfAllFrames {
+    pub vertex_metrics: Vec<FrameMetrics>,
+    pub face_metrics: Vec<FrameMetrics>,
 }
 
 pub fn make_all_frame_metrics(
     scans: &IndexMap<String, fm::Scan>,
     scan_frames: &[fm::ScanFrame],
     mesh: &Mesh,
-    background_predicate: &str,
-) -> Result<(Vec<FrameMetrics>, Vec<FrameMetrics>)> {
+    background_color: Vector3,
+    background_deviation: f64,
+) -> VertexAndFaceMetricsOfAllFrames {
     let mut vertex_metrics = vec![];
     let mut face_metrics = vec![];
     for frame in scan_frames {
         let scan = scans.get(&frame.scan).unwrap();
-        let (vm, fm) = split_option(make_frame_metrics(
+        let (vm, fm) = if let Some(m) = make_frame_metrics(
             scan,
             frame,
             mesh,
-            background_predicate
-        )?);
+            background_color,
+            background_deviation,
+        ) {
+            (Some(m.vertex_metrics), Some(m.face_metrics))
+        } else {
+            (None, None)
+        };
         vertex_metrics.push(vm);
         face_metrics.push(fm);
     }
-    Ok((vertex_metrics, face_metrics))
+    VertexAndFaceMetricsOfAllFrames {
+        vertex_metrics,
+        face_metrics,
+    }
 }
 
 fn build_costs_for_single_frame(
@@ -310,4 +313,22 @@ pub fn select_cameras(
         }
     }
     chosen
+}
+
+fn detect_background(
+    pixel: Vector2,
+    image: &RgbImage,
+    background_color: Vector3,
+    background_deviation: f64,
+) -> bool {
+    let diff3 = sample_pixel(pixel, image) - background_color;
+
+    // Remove the grayscale component from the color difference vector.
+    let s = (1.0 + f64::sqrt(3.0)) / 2.0;
+    let orthonormal_basis = Matrix3x2::new(1.0, -s, s - 1.0, 1.0, s - 1.0, -s)
+        .transpose()
+        / f64::sqrt(3.0);
+    let diff2 = orthonormal_basis * diff3;
+
+    diff2.norm() < background_deviation
 }

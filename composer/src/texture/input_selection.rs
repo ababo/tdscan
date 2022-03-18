@@ -274,23 +274,29 @@ pub fn make_all_frame_metrics(
     }
 }
 
+pub fn build_cost_for_single_face(metrics: &Metrics) -> f64 {
+    if metrics.within_bounds
+        && !metrics.is_occluded
+        && !metrics.is_background
+        && metrics.depth > 0.0
+        && metrics.dot_product > 0.0
+    {
+        1.0 / metrics.dot_product + metrics.ramp_penalty
+    } else {
+        f64::INFINITY
+    }
+}
+
 fn build_costs_for_single_frame(
     frame_idx: usize,
     metrics: &[FrameMetrics],
     mesh: &Mesh,
 ) -> Vec<f64> {
-    let mut costs = vec![f64::INFINITY; mesh.faces.len()];
     if let Some(mets) = &metrics[frame_idx] {
-        for face_idx in 0..mesh.faces.len() {
-            let met: Metrics = mets[face_idx];
-            let mut cost = f64::INFINITY;
-            if met.within_bounds && !met.is_occluded && !met.is_background {
-                cost = 1.0 / met.dot_product + met.ramp_penalty;
-            }
-            costs[face_idx] = cost;
-        }
+        mets.iter().map(build_cost_for_single_face).collect()
+    } else {
+        vec![f64::INFINITY; mesh.faces.len()]
     }
-    costs
 }
 
 pub fn select_cameras(

@@ -37,6 +37,15 @@ pub struct ScanParams {
     pub camera_up_angles: Vec<(String, f32)>,
 
     #[structopt(
+        help = "Camera angles of view to override with",
+        long = "camera-angle-of-view",
+            number_of_values = 1,
+            parse(try_from_str = parse_key_val),
+            short = "v"
+    )]
+    pub camera_angles_of_view: Vec<(String, f32)>,
+
+    #[structopt(
         help = "Downsample factor",
         long = "downsample-factor",
             number_of_values = 1,
@@ -143,6 +152,14 @@ pub fn read_scans(
     for (name, angle) in scan_params.camera_up_angles.iter() {
         if let Some(scan) = scans.get_mut(name) {
             scan.camera_up_angle = *angle;
+        } else {
+            return unknown_scan_err(name);
+        }
+    }
+
+    for (name, angle) in scan_params.camera_angles_of_view.iter() {
+        if let Some(scan) = scans.get_mut(name) {
+            scan.camera_angle_of_view = *angle;
         } else {
             return unknown_scan_err(name);
         }

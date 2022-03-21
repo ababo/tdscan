@@ -1,11 +1,11 @@
 use std::collections::BTreeMap;
 
 use rectangle_pack::{
-    contains_smallest_box, pack_rects, volume_heuristic,
-    GroupedRectsToPlace, PackedLocation, RectToInsert, TargetBin,
+    contains_smallest_box, pack_rects, volume_heuristic, GroupedRectsToPlace,
+    PackedLocation, RectToInsert, TargetBin,
 };
 
-use crate::texture::{*, output_patching::LocalPatch};
+use crate::texture::{output_patching::LocalPatch, *};
 
 // Since `rectangle_pack` uses u32 rather than f64 as coordinate type,
 // an accuracy parameter (neither too small nor too big (in case of overflow))
@@ -36,11 +36,10 @@ pub fn pack_rectangles_with_automatic_stretching(
     (rectangles, scale)
 }
 
-fn apply2<T: Clone, U: Clone>(
-    v: &[[T; 2]],
-    f: &dyn Fn(T) -> U
-) -> Vec<[U; 2]> {
-    v.iter().map(|[a, b]| [f(a.clone()), f(b.clone())]).collect()
+fn apply2<T: Clone, U: Clone>(v: &[[T; 2]], f: &dyn Fn(T) -> U) -> Vec<[U; 2]> {
+    v.iter()
+        .map(|[a, b]| [f(a.clone()), f(b.clone())])
+        .collect()
 }
 
 fn try_pack_rectangles_with_given_stretching(

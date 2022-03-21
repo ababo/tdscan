@@ -52,6 +52,19 @@ pub struct TextureParams {
         default_value = "-1.0" // Disable background extraction by default.
     )]
     pub background_deviation: f64,
+
+    #[structopt(
+        help = "Number of steps of color correction",
+        long,
+        default_value = "10"
+    )]
+    pub color_correction_steps: usize,
+
+    #[structopt(
+        help = "Whether to apply a constant offset after color correction",
+        long
+    )]
+    pub color_correction_final_offset: bool,
 }
 
 fn parse_color_into_vector3(src: &str) -> Result<Vector3> {
@@ -105,6 +118,15 @@ impl TexturedMesh {
         let (uv_coords, uv_idxs_tri) = compress_uv_coords(&uv_coords_tri);
 
         let images = load_all_frame_images(scan_frames);
+        let color_correction = ColorCorrection::new(
+            &mesh,
+            &topo,
+            &vertex_metrics,
+            &chosen_cameras,
+            &images,
+            params.color_correction_steps,
+            params.color_correction_final_offset,
+        );
         let (mut buffer, mut emask) = bake_texture(
             &mesh,
             &images,
@@ -112,6 +134,7 @@ impl TexturedMesh {
             &vertex_metrics,
             &uv_coords_tri,
             params.image_resolution,
+            &color_correction,
         );
         extrapolate_gutter(&mut buffer, &mut emask, params.gutter_size);
 

@@ -3,8 +3,8 @@ use std::f64::consts::PI;
 use nalgebra::Matrix3;
 use petgraph::unionfind::UnionFind;
 
-use crate::misc::*;
 use crate::mesh::Mesh;
+use crate::misc::*;
 use crate::texture::*;
 
 // The following angle describes the maximal allowed deviation between a
@@ -70,8 +70,7 @@ pub fn project_chunk_with_depths(
     let uvw_basis = Matrix3::from_columns(&[eu, ev, -major_axis]).transpose();
 
     // Project orthogonally (not perspective!), and keep depth data.
-    let f =
-        |v: usize| split_point2_depth(uvw_basis * mesh.vertices[v].coords);
+    let f = |v: usize| split_point2_depth(uvw_basis * mesh.vertices[v].coords);
     faces_idx
         .iter()
         .map(|&i| mesh.faces[i])
@@ -101,7 +100,10 @@ fn visible_faces(
     for (i_idx, &_i) in faces_idx.iter().enumerate() {
         if let Some(bcs) = BarycentricCoordinateSystem::new(uvs[i_idx]) {
             let di = Vector3::new(
-                depths[i_idx][0], depths[i_idx][1], depths[i_idx][2]);
+                depths[i_idx][0],
+                depths[i_idx][1],
+                depths[i_idx][2],
+            );
             for (j_idx, &j) in faces_idx.iter().enumerate() {
                 for k in 0..3 {
                     let bary = bcs.infer(uvs[j_idx][k]);
@@ -151,7 +153,7 @@ fn get_big_chunk_helper(
     for (i, b) in faces_mask_subset.iter_mut().enumerate() {
         *b &= face_aligned(i, major_axis, mesh)
     }
-    
+
     if faces_mask_subset.iter().map(|&b| b as usize).sum::<usize>() > 0 {
         let (partition, carrier) =
             partition_faces(&faces_mask_subset, mesh, topo);
@@ -239,9 +241,9 @@ fn average_uv3(vec: &[[Vector2; 3]]) -> Vector2 {
 
 #[derive(Debug, PartialEq, Clone, PartialOrd)]
 pub struct LocalPatch {
-    pub chunk: Vec<usize>,       // Indices into the list of mesh faces.
-    pub size: [f64; 2],          // Actual physical size of patch, in meters.
-    pub uvs: Vec<[Vector2; 3]>,  // Coordinates normalized to [0,1]x[0,1].
+    pub chunk: Vec<usize>, // Indices into the list of mesh faces.
+    pub size: [f64; 2],    // Actual physical size of patch, in meters.
+    pub uvs: Vec<[Vector2; 3]>, // Coordinates normalized to [0,1]x[0,1].
 }
 
 impl LocalPatch {
@@ -269,9 +271,8 @@ impl LocalPatch {
         // (not really necessary either, but may reduce file size).
         let avg = average_uv3(&uvs);
         let f = |uv: &Vector2| uv - avg;
-        let ev = dominant_vector(
-            &uvs.iter().flatten().map(f).collect::<Vec<_>>(),
-        );
+        let ev =
+            dominant_vector(&uvs.iter().flatten().map(f).collect::<Vec<_>>());
         let eu = Vector2::new(ev[1], -ev[0]);
         let uv_basis = Matrix2::from_columns(&[eu, ev]).transpose();
         let f = |uv| uv_basis * uv;

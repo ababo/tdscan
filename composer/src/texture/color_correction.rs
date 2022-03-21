@@ -8,6 +8,8 @@ type CsrMatrix = nalgebra_sparse::csr::CsrMatrix<f64>;
 type DVector = nalgebra::DVector<f64>;
 type Matrix3 = nalgebra::Matrix3<f64>;
 
+const MINIMUM_TOLERATED_SIN_FOR_COTAN: f64 = 1e-12;
+
 fn face_vertex_cotan(
     vertex_idx: usize,
     other_idxs: [usize; 2],
@@ -19,7 +21,10 @@ fn face_vertex_cotan(
     let u = p - q1;
     let v = p - q2;
     let sin = u.cross(&v).norm();
-    let sin1 = f64::max(sin, 1e-12); // Avoid division by zero (rare).
+
+    // Avoid division by zero (rare).
+    let sin1 = f64::max(sin, MINIMUM_TOLERATED_SIN_FOR_COTAN);
+
     let cos = u.dot(&v).abs();
     cos / sin1
 }
@@ -59,8 +64,7 @@ fn build_face_vertex_to_vertex_correspondence(
 ) -> CsrMatrix {
     let mut coo = CooMatrix::new(mesh.faces.len() * 3, mesh.vertices.len());
     for vertex_idx in 0..mesh.vertices.len() {
-        let faces_nearby = &topo.faces_around_vertex[vertex_idx];
-        for &face_idx in faces_nearby {
+        for &face_idx in &topo.faces_around_vertex[vertex_idx] {
             let local_idx = mesh.faces[face_idx]
                 .iter()
                 .position(|&r| r == vertex_idx)
@@ -96,6 +100,36 @@ fn build_color_sample_array(
         .collect()
 }
 
+fn build_initial_guess_for_single_vertex(
+    mesh: &Mesh,
+    topo: &BasicMeshTopology,
+    chosen_cameras: &[Option<usize>],
+    color_samples: &[[Vector3; 3]],
+    color_idx: usize,
+    vertex_idx: usize,
+) -> f64 {
+    // Choose an initial guess at the solution, based on a simple color average.
+    let known_values: Vec<f64> = topo.faces_around_vertex[vertex_idx]
+        .iter()
+        .filter_map(|&face_idx| {
+            if chosen_cameras[face_idx].is_some() {
+                let local_idx = mesh.faces[face_idx]
+                    .iter()
+                    .position(|&r| r == vertex_idx)
+                    .unwrap();
+                Some(color_samples[face_idx][local_idx][color_idx])
+            } else {
+                None
+            }
+        })
+        .collect();
+    if !known_values.is_empty() {
+        known_values.iter().sum::<f64>() / known_values.len() as f64
+    } else {
+        0.0
+    }
+}
+
 fn build_initial_guess(
     mesh: &Mesh,
     topo: &BasicMeshTopology,
@@ -103,28 +137,17 @@ fn build_initial_guess(
     color_samples: &[[Vector3; 3]],
     color_idx: usize,
 ) -> DVector {
-    // Choose an initial guess at the solution, based on a simple color average.
     DVector::from_vec(
         (0..mesh.vertices.len())
             .map(|vertex_idx| {
-                let stats = &topo.faces_around_vertex[vertex_idx]
-                    .iter()
-                    .map(|&face_idx| {
-                        if chosen_cameras[face_idx].is_some() {
-                            let local_idx = mesh.faces[face_idx]
-                                .iter()
-                                .position(|&r| r == vertex_idx)
-                                .unwrap();
-                            Vector2::new(
-                                color_samples[face_idx][local_idx][color_idx],
-                                1.0,
-                            )
-                        } else {
-                            Vector2::new(0.0, 0.0)
-                        }
-                    })
-                    .sum::<Vector2>();
-                stats[0] / f64::max(stats[1], 1.0)
+                build_initial_guess_for_single_vertex(
+                    mesh,
+                    topo,
+                    chosen_cameras,
+                    color_samples,
+                    color_idx,
+                    vertex_idx,
+                )
             })
             .collect(),
     )

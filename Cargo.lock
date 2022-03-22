@@ -415,6 +415,7 @@ dependencies = [
  "kiddo",
  "log",
  "nalgebra",
+ "nalgebra-sparse",
  "num",
  "petgraph 0.6.0",
  "rand",
@@ -1048,6 +1049,16 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "nalgebra-sparse"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ff0fe967c37332d705e59a12a369c2e9906c42fe7627f3e7d02e874289f35ec3"
+dependencies = [
+ "nalgebra",
+ "num-traits",
 ]
 
 [[package]]

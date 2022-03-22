@@ -3,7 +3,10 @@ use std::collections::hash_map::Entry::Vacant;
 use image::{Rgb, RgbImage};
 use nalgebra::{Dim, Dynamic, OMatrix};
 
-use crate::texture::{*, input_selection::{FrameMetrics, Metrics}};
+use crate::texture::{
+    input_selection::{FrameMetrics, Metrics},
+    *,
+};
 
 fn copy_triangle(
     image0: &RgbImage,
@@ -11,6 +14,8 @@ fn copy_triangle(
     image1: &mut RgbImage,
     uv_coords1: [Vector2; 3],
     emptiness_mask: &mut EmptinessMask,
+    face_idx: usize,
+    color_correction: &ColorCorrection,
 ) -> Option<()> {
     // Rescale coordinates 0 <= [u,v] <= 1 to 0 <= [i,j] <= [h,w].
     let ij00 = uv_to_ij(uv_coords0[0], image0);
@@ -36,7 +41,10 @@ fn copy_triangle(
             let bary = bcs1.infer(ij1);
             let ij0 = bcs0.apply(bary);
             let uv0 = ij_to_uv(ij0, image0);
-            let color = sample_pixel(uv0, image0);
+
+            let sampled_color = sample_pixel(uv0, image0);
+            let offset = color_correction.sample_color_offset(face_idx, bary);
+            let color = sampled_color + offset;
 
             if all_nonneg(bary) && i1 < image1.height() && j1 < image1.width() {
                 set_pixel_ij_as_vector3(i1, j1, color, image1);
@@ -63,14 +71,13 @@ pub fn bake_texture(
     vertex_metrics: &[FrameMetrics],
     uv_coords_tri: &[[Vector2; 3]],
     image_res: usize,
+    color_correction: &ColorCorrection,
 ) -> (RgbImage, EmptinessMask) {
     let mut buffer = RgbImage::new(image_res as u32, image_res as u32);
     let dim = Dim::from_usize(image_res);
     let mut emask = EmptinessMask::from_element_generic(dim, dim, true);
 
-    // TODO: Impute missing data instead of showing this color.
-    let dbg_dummy_image_source_magenta =
-        dbg_dummy_image_source(Rgb([255, 0, 255]));
+    let dummy_image_source_black = dummy_image_source(Rgb([0, 0, 0]));
 
     for face_idx in 0..mesh.faces.len() {
         let img0;
@@ -80,29 +87,53 @@ pub fn bake_texture(
             img0 = images[frame_idx].as_ref().unwrap();
 
             // Define coordinates for image source.
-            let [v0, v1, v2] = mesh.faces[face_idx];
-            let frame_metrics = vertex_metrics[frame_idx].as_ref().unwrap();
-            let f = |v| (frame_metrics[v] as Metrics).pixel;
-            uvs0 = [f(v0), f(v1), f(v2)];
+            uvs0 = uv_coords_from_metrics(
+                face_idx,
+                frame_idx,
+                vertex_metrics,
+                mesh,
+            );
         } else {
-            img0 = &dbg_dummy_image_source_magenta;
-            uvs0 = [Vector2::new(0.0, 0.0),
-                    Vector2::new(1.0, 0.0),
-                    Vector2::new(0.0, 1.0)];
+            img0 = &dummy_image_source_black;
+            uvs0 = [
+                Vector2::new(0.0, 0.0),
+                Vector2::new(1.0, 0.0),
+                Vector2::new(0.0, 1.0),
+            ];
         }
 
         // Define coordinates for output buffer.
         let uvs1 = uv_coords_tri[face_idx];
 
         // Copy triangle.
-        copy_triangle(img0, uvs0, &mut buffer, uvs1, &mut emask);
+        copy_triangle(
+            img0,
+            uvs0,
+            &mut buffer,
+            uvs1,
+            &mut emask,
+            face_idx,
+            color_correction,
+        );
     }
 
     (buffer, emask)
 }
 
+pub fn uv_coords_from_metrics(
+    face_idx: usize,
+    frame_idx: usize,
+    vertex_metrics: &[FrameMetrics],
+    mesh: &Mesh,
+) -> [Vector2; 3] {
+    let [v0, v1, v2] = mesh.faces[face_idx];
+    let single_frame_metrics = vertex_metrics[frame_idx].as_ref().unwrap();
+    let f = |v| (single_frame_metrics[v] as Metrics).pixel;
+    [f(v0), f(v1), f(v2)]
+}
+
 pub fn compress_uv_coords(
-    uv_coords: &[[Vector2; 3]]
+    uv_coords: &[[Vector2; 3]],
 ) -> (Vec<Vector2>, Vec<[usize; 3]>) {
     const EPS: f64 = 1e-6; // Round coordinates to this size, then merge them.
     let up0 = |x| (x / EPS) as u64;
@@ -167,7 +198,7 @@ fn resolve_gutter_source(emask: &EmptinessMask) -> Vec<(u32, u32, u32, u32)> {
     idxs
 }
 
-fn dbg_dummy_image_source(color: Rgb<u8>) -> RgbImage {
+fn dummy_image_source(color: Rgb<u8>) -> RgbImage {
     let mut img = RgbImage::new(1, 1);
     img[(0, 0)] = color;
     img

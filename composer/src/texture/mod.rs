@@ -1,3 +1,4 @@
+mod color_correction;
 mod input_selection;
 mod output_baking;
 mod output_packing;
@@ -11,15 +12,12 @@ use std::ops::Sub;
 
 use image::io::Reader as ImageReader;
 use image::{Rgb, RgbImage};
-use nalgebra::{ArrayStorage, Const, Matrix, Matrix3, SVD, vector};
+use nalgebra::{vector, ArrayStorage, Const, Matrix, Matrix3, SVD};
 
 use crate::mesh::Mesh;
 pub use crate::texture::{
-    input_selection::*,
-    output_baking::*,
-    output_packing::*,
-    output_patching::*,
-    textured_mesh::*,
+    color_correction::*, input_selection::*, output_baking::*,
+    output_packing::*, output_patching::*, textured_mesh::*,
 };
 use base::fm;
 
@@ -174,7 +172,10 @@ pub struct Rectangle<T> {
 
 type Comparator<T> = fn(&T, &T) -> Ordering;
 
-pub fn extremum<T: Copy+PartialOrd+Sub<Output = T>, I: Iterator<Item = T>>(
+pub fn extremum<
+    T: Copy + PartialOrd + Sub<Output = T>,
+    I: Iterator<Item = T>,
+>(
     it: I,
     f: fn(I, Comparator<T>) -> Option<T>,
 ) -> T {
@@ -184,15 +185,15 @@ pub fn extremum<T: Copy+PartialOrd+Sub<Output = T>, I: Iterator<Item = T>>(
 impl<T> Rectangle<T> {
     pub fn bounding(ijs: &[[T; 2]]) -> Rectangle<T>
     where
-        T: Copy+PartialOrd+Sub<Output = T>
-    {    
+        T: Copy + PartialOrd + Sub<Output = T>,
+    {
         let ijs_coord = |k: usize| ijs.iter().map(move |ij| ij[k]);
-        
+
         let imin = extremum(ijs_coord(0), Iterator::min_by);
         let imax = extremum(ijs_coord(0), Iterator::max_by);
         let jmin = extremum(ijs_coord(1), Iterator::min_by);
         let jmax = extremum(ijs_coord(1), Iterator::max_by);
-        
+
         Rectangle {
             pos: [imin, jmin],
             size: [imax - imin, jmax - jmin],

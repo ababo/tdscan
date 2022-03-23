@@ -1,3 +1,5 @@
+use std::f64::consts::PI;
+
 use indexmap::IndexMap;
 use structopt::StructOpt;
 
@@ -65,6 +67,13 @@ pub struct TextureParams {
         long
     )]
     pub color_correction_final_offset: bool,
+
+    #[structopt(
+        help = "Maximum angle of input patch formation (measured in degrees)",
+        long,
+        default_value = "66.0"
+    )]
+    pub input_patching_max_angle_degrees: f64,
 }
 
 fn parse_color_into_vector3(src: &str) -> Result<Vector3> {
@@ -86,6 +95,8 @@ impl TexturedMesh {
         mesh: Mesh,
         params: &TextureParams,
     ) -> Result<TexturedMesh> {
+        let topo = BasicMeshTopology::new(&mesh);
+        
         let VertexAndFaceMetricsOfAllFrames {
             vertex_metrics,
             face_metrics,
@@ -96,10 +107,16 @@ impl TexturedMesh {
             params.background_color,
             params.background_deviation,
         );
-        let chosen_cameras =
+        let mut chosen_cameras =
             select_cameras(&face_metrics, &mesh, params.selection_cost_limit);
-
-        let topo = BasicMeshTopology::new(&mesh);
+        form_patches(
+            &mut chosen_cameras,
+            &face_metrics,
+            &mesh,
+            &topo,
+            params.input_patching_max_angle_degrees * (PI / 180.0)
+        );
+        
         let local_patches: Vec<LocalPatch> = choose_uv_patches(&mesh, &topo)
             .iter()
             .map(|(chunk, major)| {

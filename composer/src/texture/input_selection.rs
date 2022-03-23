@@ -223,6 +223,9 @@ fn make_frame_metrics(
             ramp_penalty: 0.0,
         });
     }
+    unsafe {
+        dbg!(dbg_bg, dbg_nobg, dbg_bg as f64 / dbg_nobg as f64);
+    }
     let face_metrics = mesh
         .faces
         .iter()
@@ -321,6 +324,9 @@ pub fn select_cameras(
     chosen
 }
 
+pub static mut dbg_bg: usize = 0;
+pub static mut dbg_nobg: usize = 0;
+
 fn detect_background(
     pixel: Vector2,
     image: &RgbImage,
@@ -335,6 +341,14 @@ fn detect_background(
         .transpose()
         / f64::sqrt(3.0);
     let diff2 = orthonormal_basis * diff3;
+
+    unsafe {
+        if diff2.norm() < background_deviation {
+            dbg_bg += 1;
+        } else {
+            dbg_nobg += 1;
+        }
+    }
 
     diff2.norm() < background_deviation
 }

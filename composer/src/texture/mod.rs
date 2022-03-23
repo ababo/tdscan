@@ -1,4 +1,5 @@
 mod color_correction;
+mod input_patching;
 mod input_selection;
 mod output_baking;
 mod output_packing;
@@ -16,7 +17,7 @@ use nalgebra::{vector, ArrayStorage, Const, Matrix, Matrix3, SVD};
 
 use crate::mesh::Mesh;
 pub use crate::texture::{
-    color_correction::*, input_selection::*, output_baking::*,
+    color_correction::*, input_patching::*, input_selection::*, output_baking::*,
     output_packing::*, output_patching::*, textured_mesh::*,
 };
 use base::fm;

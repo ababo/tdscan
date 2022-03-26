@@ -1,6 +1,6 @@
 mod build_view;
 mod combine;
-mod export_obj;
+mod export_to_obj;
 mod export_to_json;
 mod import_obj;
 mod mesh;
@@ -30,7 +30,8 @@ enum Command {
     BuildView(Box<build_view::BuildViewCommand>),
     Combine(Box<combine::CombineCommand>),
     ExportToJson(Box<export_to_json::ExportToJsonCommand>),
-    ImportObj(Box<import_obj::ImportObjCommand>),
+    ExportToObj(Box<export_to_obj::ExportToObjCommand>),
+    ImportFromObj(Box<import_obj::ImportObjCommand>),
     OptimizeScanGeometry(
         Box<optimize_scan_geometry::OptimizeScanGeometryCommand>,
     ),
@@ -53,7 +54,8 @@ fn main() {
         BuildView(cmd) => cmd.run(),
         Combine(cmd) => cmd.run(),
         ExportToJson(cmd) => cmd.run(),
-        ImportObj(cmd) => cmd.run(),
+        ExportToObj(cmd) => cmd.run(),
+        ImportFromObj(cmd) => cmd.run(),
         OptimizeScanGeometry(cmd) => cmd.run(),
         Select(cmd) => cmd.run(),
     };

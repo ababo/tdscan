@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 use std::io;
-use std::io::{stdin, BufRead, BufReader};
+use std::io::{BufRead, BufReader};
 use std::mem::take;
 use std::path::{Path, PathBuf};
 

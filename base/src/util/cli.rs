@@ -149,7 +149,7 @@ macro_rules! define_raw_input {
                 Ok(if let Some(path) = &self.path {
                     Box::new(fs::open_file(path)?) as Box<dyn io::Read>
                 } else {
-                    Box::new(stdin()) as Box<dyn io::Read>
+                    Box::new(std::io::stdin()) as Box<dyn io::Read>
                 })
             }
         }
@@ -159,10 +159,6 @@ macro_rules! define_raw_input {
 #[macro_export]
 macro_rules! define_raw_output {
     ($name: ident, $ext: expr) => {
-        use std::path::PathBuf;
-        use std::io::{stdout, BufWriter};
-        use base::util::fs;
-
         #[derive(StructOpt)]
         pub struct $name {
             #[structopt(
@@ -170,16 +166,17 @@ macro_rules! define_raw_output {
                 long = "out-file",
                 short = "o"
             )]
-            pub path: Option<PathBuf>,
+            pub path: Option<std::path::PathBuf>,
         }
 
-        impl JsonOutput {
+        impl $name {
             pub fn get(&self) -> Result<Box<dyn io::Write>> {
                 Ok(if let Some(path) = &self.path {
-                    let writer = BufWriter::new(fs::create_file(path)?);
+                    let writer = std::io::BufWriter::new(
+                        base::util::fs::create_file(path)?);
                     Box::new(writer) as Box<dyn io::Write>
                 } else {
-                    Box::new(stdout()) as Box<dyn io::Write>
+                    Box::new(std::io::stdout()) as Box<dyn io::Write>
                 })
             }
         }

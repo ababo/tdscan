@@ -1,6 +1,6 @@
-use std::io::Cursor;
-
-use image::ImageOutputFormat;
+use image::codecs::jpeg::JpegEncoder;
+use image::codecs::png::{CompressionType, FilterType, PngEncoder};
+use image::ImageEncoder;
 use log::info;
 use structopt::StructOpt;
 use uuid::Uuid;
@@ -76,6 +76,16 @@ pub struct BuildViewParams {
 
     #[structopt(flatten)]
     pub texture: TextureParams,
+
+    #[structopt(help = "Texture image type", long, default_value = "jpeg")]
+    pub texture_image_type: fm::image::Type,
+
+    #[structopt(
+        help = "Texture JPEG quality (1-100)",
+        long,
+        default_value = "80" // TODO: Make it conflicting with non-jpeg.
+    )]
+    pub texture_jpeg_quality: u8,
 }
 
 pub fn build_view(
@@ -241,15 +251,49 @@ fn create_textured_element(
 ) -> Result<(fm::ElementView, fm::ElementViewState)> {
     let (mut view, state) = create_non_textured_element(params, &mesh.mesh)?;
 
-    let mut png = Cursor::new(Vec::new());
-    mesh.image
-        .write_to(&mut png, ImageOutputFormat::Png)
-        .unwrap();
-
-    view.texture = Some(fm::Image {
-        r#type: fm::image::Type::Png as i32,
-        data: png.into_inner(),
-    });
+    let mut data = Vec::new();
+    match params.texture_image_type {
+        fm::image::Type::Png => {
+            let encoder = PngEncoder::new_with_quality(
+                &mut data,
+                CompressionType::Best,
+                FilterType::default(),
+            );
+            encoder
+                .write_image(
+                    mesh.image.as_ref(),
+                    mesh.image.width(),
+                    mesh.image.height(),
+                    image::ColorType::Rgb8,
+                )
+                .unwrap();
+            view.texture = Some(fm::Image {
+                r#type: fm::image::Type::Png as i32,
+                data,
+            });
+        }
+        fm::image::Type::Jpeg => {
+            let encoder = JpegEncoder::new_with_quality(
+                &mut data,
+                params.texture_jpeg_quality,
+            );
+            encoder
+                .write_image(
+                    mesh.image.as_ref(),
+                    mesh.image.width(),
+                    mesh.image.height(),
+                    image::ColorType::Rgb8,
+                )
+                .unwrap();
+            view.texture = Some(fm::Image {
+                r#type: fm::image::Type::Jpeg as i32,
+                data,
+            });
+        }
+        fm::image::Type::None => {
+            panic!("unsupported texture image type");
+        }
+    }
 
     view.texture_points = mesh
         .uv_coords

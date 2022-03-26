@@ -39,6 +39,21 @@ impl FromStr for Compression {
     }
 }
 
+impl FromStr for image::Type {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        match s {
+            "png" => Ok(image::Type::Png),
+            "jpeg" => Ok(image::Type::Jpeg),
+            _ => Err(Error::new(
+                MalformedData,
+                "unknown image type (can be 'png' or 'jpeg')".to_string(),
+            )),
+        }
+    }
+}
+
 pub const DEFAULT_COMPRESSION: &str = "gzip";
 pub const DEFAULT_GZIP_LEVEL: &str = "6";
 

@@ -29,3 +29,4 @@ simplelog = "^0.10.0"
 structopt = "0.3"
 image = "0.24"
 rectangle-pack = "0.4.2"
+uuid = { version = "1.0.0-alpha.1", features = ["v4"] }

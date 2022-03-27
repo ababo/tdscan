@@ -159,6 +159,13 @@ fn read_element(
         }
     }
 
+    if state.is_none() {
+        return Err(Error::new(
+            InconsistentState,
+            "missing element state".to_string(),
+        ));
+    }
+
     Ok((view.unwrap(), state.unwrap()))
 }
 
@@ -169,6 +176,21 @@ mod tests {
 
     use super::*;
     use base::util::test::*;
+
+    #[test]
+    fn test_read_missing_element_state() {
+        let mut reader =
+            create_reader_with_records(&vec![new_element_view_rec(
+                fm::ElementView {
+                    element: "element".to_string(),
+                    ..Default::default()
+                },
+            )]);
+        let res = read_element(&mut reader);
+        let err = res.unwrap_err();
+        assert_eq!(err.kind, InconsistentState);
+        assert_eq!(&err.description, "missing element state");
+    }
 
     #[test]
     fn test_read_multiple_element_views() {

@@ -1,11 +1,12 @@
 use std::f64::INFINITY;
 
+use indexmap::IndexMap;
 use kiddo::distance::squared_euclidean;
 use kiddo::KdTree;
 use rand::rngs::StdRng;
 use rand::SeedableRng;
+use rayon::prelude::*;
 use structopt::StructOpt;
-use indexmap::IndexMap;
 
 use crate::misc::select_random;
 use base::defs::{Error, ErrorKind::*, Result};
@@ -332,23 +333,27 @@ fn remove_outliers(
         kdtree.add(point.0.coords.as_ref(), ()).unwrap();
     }
 
-    let mut avgs = Vec::with_capacity(num_points);
-    for points in clouds.iter() {
-        for point in points {
-            let nearest = kdtree
-                .nearest(
-                    point.0.coords.as_ref(),
-                    1 + num_neighbors,
-                    &squared_euclidean,
-                )
-                .unwrap();
+    let avgs: Vec<f64> = (0..clouds.len())
+        .into_par_iter()
+        .map(|i| {
+            clouds[i]
+                .iter()
+                .map(|point| {
+                    let nearest = kdtree
+                        .nearest(
+                            point.0.coords.as_ref(),
+                            1 + num_neighbors,
+                            &squared_euclidean,
+                        )
+                        .unwrap();
 
-            avgs.push(
-                nearest.iter().map(|p| p.0.sqrt()).sum::<f64>()
-                    / num_neighbors as f64,
-            );
-        }
-    }
+                    nearest.iter().map(|p| p.0.sqrt()).sum::<f64>()
+                        / num_neighbors as f64
+                })
+                .collect::<Vec<f64>>()
+        })
+        .flatten()
+        .collect();
 
     let avg = avgs.iter().sum::<f64>() / avgs.len() as f64;
     let std = (avgs.iter().map(|d| (d - avg) * (d - avg)).sum::<f64>()

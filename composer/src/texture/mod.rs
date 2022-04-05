@@ -7,18 +7,20 @@ mod output_patching;
 mod textured_mesh;
 
 use std::cmp::Ordering;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::io::Cursor;
 use std::ops::Sub;
 
 use image::io::Reader as ImageReader;
 use image::{Rgb, RgbImage};
-use nalgebra::{vector, ArrayStorage, Const, Matrix, Matrix3, SVD};
+use nalgebra::{
+    vector, ArrayStorage, Const, Dim, Dynamic, Matrix, Matrix3, OMatrix, SVD,
+};
 
 use crate::mesh::Mesh;
 pub use crate::texture::{
-    color_correction::*, input_patching::*, input_selection::*, output_baking::*,
-    output_packing::*, output_patching::*, textured_mesh::*,
+    color_correction::*, input_patching::*, input_selection::*,
+    output_baking::*, output_packing::*, output_patching::*, textured_mesh::*,
 };
 use base::fm;
 
@@ -31,6 +33,8 @@ pub type Matrix2 = nalgebra::Matrix2<f64>;
 pub type Matrix3x2 = nalgebra::Matrix3x2<f64>;
 pub type Vector<const D: usize> =
     nalgebra::Vector<f64, Const<D>, ArrayStorage<f64, D, 1>>;
+
+pub type ImageMask = OMatrix<bool, Dynamic, Dynamic>;
 
 pub struct ProjectedPoint {
     pub point: Vector2,
@@ -94,6 +98,7 @@ pub fn set_pixel_ij_as_vector3(
 pub struct BasicMeshTopology {
     pub faces_around_vertex: Vec<HashSet<usize>>,
     pub faces_around_edge: HashMap<[usize; 2], Vec<usize>>,
+    pub neighbouring_vertices: Vec<HashSet<usize>>,
     pub neighbouring_faces: Vec<HashSet<usize>>,
 }
 
@@ -114,6 +119,15 @@ impl BasicMeshTopology {
             }
         }
 
+        let mut neighbouring_vertices =
+            vec![HashSet::new(); mesh.vertices.len()];
+        for &[v0, v1, v2] in mesh.faces.iter() {
+            for e in [[v0, v1], [v0, v2], [v1, v2]] {
+                neighbouring_vertices[e[0]].insert(e[1]);
+                neighbouring_vertices[e[1]].insert(e[0]);
+            }
+        }
+
         let mut neighbouring_faces = vec![HashSet::new(); mesh.faces.len()];
         for (f_idx, &[v0, v1, v2]) in mesh.faces.iter().enumerate() {
             for e in [[v0, v1], [v0, v2], [v1, v2]] {
@@ -127,6 +141,7 @@ impl BasicMeshTopology {
         BasicMeshTopology {
             faces_around_vertex,
             faces_around_edge,
+            neighbouring_vertices,
             neighbouring_faces,
         }
     }
@@ -286,4 +301,60 @@ pub fn ij_to_uv(ij: Vector2, img: &RgbImage) -> Vector2 {
     let (dimx, dimy) = img.dimensions(); // Beware that x comes before y here.
     let [i, j] = ij.as_ref();
     Vector2::new(i / dimy as f64, j / dimx as f64)
+}
+
+fn mesh_fill<T>(
+    known: &Vec<Option<T>>,
+    mesh: &Mesh,
+    topo: &BasicMeshTopology,
+    default: T,
+) -> Vec<T>
+where
+    T: Copy,
+{
+    let mut visited = vec![false; mesh.vertices.len()];
+    let mut output = vec![default; mesh.vertices.len()];
+
+    let mut queue = VecDeque::new();
+    for vertex_idx in 0..mesh.vertices.len() {
+        if let Some(t) = known[vertex_idx] {
+            queue.push_back((t, vertex_idx));
+            visited[vertex_idx] = true;
+        }
+    }
+    while !queue.is_empty() {
+        let (t, front_idx) = queue.pop_front().unwrap();
+        output[front_idx] = t;
+        for &other_vertex in &topo.neighbouring_vertices[front_idx] {
+            if !visited[other_vertex] {
+                queue.push_back((t, other_vertex));
+                visited[other_vertex] = true;
+            }
+        }
+    }
+
+    output
+}
+
+fn set_mesh_face_value_with_radius<T>(
+    array: &mut [T],
+    face_idx: usize,
+    value: T,
+    radius: usize, // The current implementation has exponential complexity.
+    topo: &BasicMeshTopology,
+) where
+    T: Copy,
+{
+    array[face_idx] = value;
+    if radius > 0 {
+        for &other_face in &topo.neighbouring_faces[face_idx] {
+            set_mesh_face_value_with_radius(
+                array,
+                other_face,
+                value,
+                radius - 1,
+                topo,
+            );
+        }
+    }
 }

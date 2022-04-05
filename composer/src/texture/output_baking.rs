@@ -1,7 +1,7 @@
 use std::collections::hash_map::Entry::Vacant;
 
 use image::{Rgb, RgbImage};
-use nalgebra::{Dim, Dynamic, OMatrix};
+use nalgebra::Dim;
 
 use crate::texture::{
     input_selection::{FrameMetrics, Metrics},
@@ -13,7 +13,7 @@ fn copy_triangle(
     uv_coords0: [Vector2; 3],
     image1: &mut RgbImage,
     uv_coords1: [Vector2; 3],
-    emptiness_mask: &mut EmptinessMask,
+    emptiness_mask: &mut ImageMask,
     face_idx: usize,
     color_correction: &ColorCorrection,
 ) -> Option<()> {
@@ -44,7 +44,7 @@ fn copy_triangle(
 
             let sampled_color = sample_pixel(uv0, image0);
             let offset = color_correction.sample_color_offset(face_idx, bary);
-            let color = sampled_color + offset;
+            let color = sampled_color + 1.0 * offset;
 
             if all_nonneg(bary) && i1 < image1.height() && j1 < image1.width() {
                 set_pixel_ij_as_vector3(i1, j1, color, image1);
@@ -62,7 +62,7 @@ fn copy_triangle(
 
 // Rectangular, image-shaped grid of booleans, that represents whether
 // any given pixel has not been written to yet during baking.
-pub type EmptinessMask = OMatrix<bool, Dynamic, Dynamic>;
+//pub type ImageMask = OMatrix<bool, Dynamic, Dynamic>;
 
 pub fn bake_texture(
     mesh: &Mesh,
@@ -72,10 +72,10 @@ pub fn bake_texture(
     uv_coords_tri: &[[Vector2; 3]],
     image_res: usize,
     color_correction: &ColorCorrection,
-) -> (RgbImage, EmptinessMask) {
+) -> (RgbImage, ImageMask) {
     let mut buffer = RgbImage::new(image_res as u32, image_res as u32);
     let dim = Dim::from_usize(image_res);
-    let mut emask = EmptinessMask::from_element_generic(dim, dim, true);
+    let mut emask = ImageMask::from_element_generic(dim, dim, true);
 
     let dummy_image_source_black = dummy_image_source(Rgb([0, 0, 0]));
 
@@ -163,7 +163,7 @@ pub fn compress_uv_coords(
 
 pub fn extrapolate_gutter(
     buffer: &mut RgbImage,
-    emask: &mut EmptinessMask,
+    emask: &mut ImageMask,
     gutter_size: usize,
 ) {
     for _ in 0..gutter_size {
@@ -175,7 +175,7 @@ pub fn extrapolate_gutter(
     }
 }
 
-fn resolve_gutter_source(emask: &EmptinessMask) -> Vec<(u32, u32, u32, u32)> {
+fn resolve_gutter_source(emask: &ImageMask) -> Vec<(u32, u32, u32, u32)> {
     let mut idxs = vec![];
     let (height, width) = emask.shape();
     for i in 0..height as i32 {

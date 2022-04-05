@@ -96,7 +96,7 @@ impl TexturedMesh {
         params: &TextureParams,
     ) -> Result<TexturedMesh> {
         let topo = BasicMeshTopology::new(&mesh);
-        
+
         let VertexAndFaceMetricsOfAllFrames {
             vertex_metrics,
             face_metrics,
@@ -109,14 +109,29 @@ impl TexturedMesh {
         );
         let mut chosen_cameras =
             select_cameras(&face_metrics, &mesh, params.selection_cost_limit);
-        form_patches(
+        /*form_patches(
             &mut chosen_cameras,
             &face_metrics,
             &mesh,
             &topo,
             params.input_patching_max_angle_degrees * (PI / 180.0)
         );
-        
+
+        for i in 0..mesh.faces.len() {
+            chosen_cameras[i] = Some(0);
+        }*/
+
+        /*for face_idx in 0..mesh.faces.len() {
+            if let Some(frame_idx) = chosen_cameras[face_idx] {
+                if face_metrics[frame_idx].as_ref().unwrap()[face_idx]
+                    .is_background
+                {
+                    chosen_cameras[face_idx] = None;
+                    //changed += 1;
+                }
+            }
+        }*/
+
         let local_patches: Vec<LocalPatch> = choose_uv_patches(&mesh, &topo)
             .iter()
             .map(|(chunk, major)| {

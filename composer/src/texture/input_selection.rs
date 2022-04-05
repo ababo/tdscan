@@ -1,6 +1,7 @@
 use indexmap::IndexMap;
 use kiddo::distance::squared_euclidean;
 use kiddo::KdTree;
+use rayon::prelude::*;
 
 use crate::mesh::Mesh;
 use crate::texture::*;
@@ -197,6 +198,8 @@ fn make_frame_metrics(
     let camera = time_rot * eye;
 
     let occlusions = compute_occlusion_for_all_vertices(&vertices_proj, mesh);
+    let background =
+        BackgroundDetector::new(&image, background_color, background_deviation);
 
     let mut vertex_metrics = vec![];
     for i in 0..mesh.vertices.len() {
@@ -214,17 +217,9 @@ fn make_frame_metrics(
                 && 0.01 <= pixel[1]
                 && pixel[1] <= 0.99,
             is_occluded: occlusions[i],
-            is_background: detect_background(
-                pixel,
-                &image,
-                background_color,
-                background_deviation,
-            ),
+            is_background: background.detect(pixel),
             ramp_penalty: 0.0,
         });
-    }
-    unsafe {
-        dbg!(dbg_bg, dbg_nobg, dbg_bg as f64 / dbg_nobg as f64);
     }
     let face_metrics = mesh
         .faces
@@ -255,7 +250,30 @@ pub fn make_all_frame_metrics(
 ) -> VertexAndFaceMetricsOfAllFrames {
     let mut vertex_metrics = vec![];
     let mut face_metrics = vec![];
-    for frame in scan_frames {
+
+    let results: Vec<(FrameMetrics, FrameMetrics)> = (0..scan_frames.len())
+        .into_par_iter()
+        .map(|frame_idx| {
+            let frame = &scan_frames[frame_idx];
+            let scan = scans.get(&frame.scan).unwrap();
+            if let Some(m) = make_frame_metrics(
+                scan,
+                frame,
+                mesh,
+                background_color,
+                background_deviation,
+            ) {
+                (Some(m.vertex_metrics), Some(m.face_metrics))
+            } else {
+                (None, None)
+            }
+        })
+        .collect();
+    for (vm, fm) in results {
+        vertex_metrics.push(vm);
+        face_metrics.push(fm);
+    }
+    /*for frame in scan_frames {
         let scan = scans.get(&frame.scan).unwrap();
         let (vm, fm) = if let Some(m) = make_frame_metrics(
             scan,
@@ -270,7 +288,10 @@ pub fn make_all_frame_metrics(
         };
         vertex_metrics.push(vm);
         face_metrics.push(fm);
-    }
+    }*/
+    /*unsafe {
+        dbg!(dbg_bg, dbg_nobg, dbg_bg as f64 / dbg_nobg as f64);
+    }*/
     VertexAndFaceMetricsOfAllFrames {
         vertex_metrics,
         face_metrics,
@@ -280,7 +301,7 @@ pub fn make_all_frame_metrics(
 pub fn build_cost_for_single_face(metrics: &Metrics) -> f64 {
     if metrics.within_bounds
         && !metrics.is_occluded
-        && !metrics.is_background
+        //&& !metrics.is_background
         && metrics.depth > 0.0
         && metrics.dot_product > 0.0
     {
@@ -327,7 +348,8 @@ pub fn select_cameras(
 pub static mut dbg_bg: usize = 0;
 pub static mut dbg_nobg: usize = 0;
 
-fn detect_background(
+// TODO rename?
+pub fn detect_background(
     pixel: Vector2,
     image: &RgbImage,
     background_color: Vector3,
@@ -336,19 +358,169 @@ fn detect_background(
     let diff3 = sample_pixel(pixel, image) - background_color;
 
     // Remove the grayscale component from the color difference vector.
-    let s = (1.0 + f64::sqrt(3.0)) / 2.0;
-    let orthonormal_basis = Matrix3x2::new(1.0, -s, s - 1.0, 1.0, s - 1.0, -s)
-        .transpose()
-        / f64::sqrt(3.0);
-    let diff2 = orthonormal_basis * diff3;
+    let gray = diff3.iter().sum::<f64>() / 3.0;
+    let diff2 = diff3 - gray * Vector3::new(1.0, 1.0, 1.0);
 
-    unsafe {
-        if diff2.norm() < background_deviation {
-            dbg_bg += 1;
-        } else {
-            dbg_nobg += 1;
+    diff2.norm() < background_deviation
+}
+
+use image::{Rgb, RgbImage}; // TODO move
+
+pub fn erode(mask: &ImageMask, radius: f64) -> ImageMask {
+    let mut output = mask.clone();
+
+    for i in 0..mask.nrows() as isize {
+        for j in 0..mask.ncols() as isize {
+            output[(i as usize, j as usize)] = true;
+            'check: for di in -(radius as isize)..radius as isize {
+                for dj in -(radius as isize)..radius as isize {
+                    let i1 = i + di;
+                    let j1 = j + dj;
+                    if Vector2::new(di as f64, dj as f64).norm() <= radius
+                        && 0 <= i1
+                        && (i1 as usize) < mask.nrows()
+                        && 0 <= j1
+                        && (j1 as usize) < mask.ncols()
+                        && !mask[(i1 as usize, j1 as usize)]
+                    {
+                        output[(i as usize, j as usize)] = false;
+                        break 'check;
+                    }
+                }
+            }
         }
     }
 
-    diff2.norm() < background_deviation
+    output
+}
+
+pub fn dilate(mask: &ImageMask, radius: f64) -> ImageMask {
+    let mut output = mask.clone();
+
+    for i in 0..mask.nrows() as isize {
+        for j in 0..mask.ncols() as isize {
+            output[(i as usize, j as usize)] = false;
+            'check: for di in -(radius as isize)..radius as isize {
+                for dj in -(radius as isize)..radius as isize {
+                    let i1 = i + di;
+                    let j1 = j + dj;
+                    if Vector2::new(di as f64, dj as f64).norm() <= radius
+                        && 0 <= i1
+                        && (i1 as usize) < mask.nrows()
+                        && 0 <= j1
+                        && (j1 as usize) < mask.ncols()
+                        && mask[(i1 as usize, j1 as usize)]
+                    {
+                        output[(i as usize, j as usize)] = true;
+                        break 'check;
+                    }
+                }
+            }
+        }
+    }
+
+    output
+}
+
+pub struct BackgroundDetector {
+    pub image: RgbImage,
+    pub bgmask: ImageMask,
+    // TODO: Make these private once code is stable.
+}
+
+type V3Matrix = OMatrix<Vector3, Dynamic, Dynamic>;
+
+fn blur1(image: &V3Matrix) -> V3Matrix {
+    let mut output = image.clone();
+
+    for i in 1..image.nrows() - 1 {
+        for j in 1..image.ncols() - 1 {
+            output[(i, j)] = Vector3::zeros();
+            for ia in [0, 1, 2] {
+                for ja in [0, 1, 2] {
+                    let i1 = i - 1 + ia;
+                    let j1 = j - 1 + ja;
+                    let z = [1.0 / 4.0, 2.0 / 4.0, 1.0 / 4.0];
+                    output[(i, j)] += z[ia] * z[ja] * image[(i1, j1)];
+                }
+            }
+        }
+    }
+
+    output
+}
+
+pub fn rgb_to_vector3(rgb: Rgb<u8>) -> Vector3 {
+    Vector3::new(rgb[0] as f64, rgb[1] as f64, rgb[2] as f64)
+}
+
+pub fn vector3_to_rgb(v: Vector3) -> Rgb<u8> {
+    let f = |i: usize| v[i].clamp(0.0, 255.0) as u8;
+    Rgb([f(0), f(1), f(2)])
+}
+
+// Has not proven itself useful yet.
+pub fn blur(image: &RgbImage, steps: usize) -> RgbImage {
+    let (w, h) = image.dimensions();
+    let f = |i: u32| Dim::from_usize(i as usize);
+    let mut matrix =
+        V3Matrix::from_element_generic(f(h), f(w), Vector3::zeros());
+    for i in 0..matrix.nrows() {
+        for j in 0..matrix.ncols() {
+            matrix[(i, j)] = rgb_to_vector3(image[(j as u32, i as u32)]);
+        }
+    }
+
+    for _ in 0..steps {
+        matrix = blur1(&matrix);
+    }
+
+    let mut image = image.clone();
+    for i in 0..matrix.nrows() {
+        for j in 0..matrix.ncols() {
+            image[(j as u32, i as u32)] = vector3_to_rgb(matrix[(i, j)]);
+        }
+    }
+
+    image
+}
+
+impl BackgroundDetector {
+    pub fn new(
+        image: &RgbImage,
+        background_color: Vector3,
+        background_deviation: f64,
+    ) -> BackgroundDetector {
+        let image = image.clone();
+        //let image = blur(image, 3);
+        let (w, h) = image.dimensions();
+        let (w, h) = (Dim::from_usize(w as usize), Dim::from_usize(h as usize));
+        let mut bgmask = ImageMask::from_element_generic(h, w, true);
+        for i in 0..bgmask.nrows() {
+            for j in 0..bgmask.ncols() {
+                let pixel = ij_to_uv(Vector2::new(i as f64, j as f64), &image);
+                bgmask[(i, j)] = detect_background(
+                    pixel,
+                    &image,
+                    background_color,
+                    background_deviation,
+                );
+            }
+        }
+
+        BackgroundDetector {
+            // TODO: Make configurable.
+            bgmask: dilate(&erode(&bgmask, 5.0), 10.0),
+            image,
+        }
+    }
+
+    pub fn detect(&self, pixel: Vector2) -> bool {
+        let &[i, j] = uv_to_ij(pixel, &self.image).as_ref();
+        0.0 <= i
+            && i < self.bgmask.nrows() as f64
+            && 0.0 <= j
+            && j < self.bgmask.ncols() as f64
+            && self.bgmask[(i as usize, j as usize)]
+    }
 }

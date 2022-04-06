@@ -7,9 +7,9 @@
 
 pub mod build_view;
 pub mod combine;
-pub mod export_obj;
+pub mod export_to_obj;
 pub mod export_to_json;
-pub mod import_obj;
+pub mod import_from_obj;
 pub mod mesh;
 pub mod misc;
 pub mod optimize_scan_geometry;

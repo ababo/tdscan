@@ -14,7 +14,7 @@ zip = "0.5"
 argmin = "0.4.7"
 base = { path = "../base" }
 derive_more = "0.99.17"
-image = "0.23.6"
+image = "0.24"
 indexmap = "1.8.0"
 kiddo = "0.1.7"
 log = "0.4"
@@ -30,3 +30,4 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 simplelog = "^0.10.0"
 structopt = "0.3"
+uuid = { version = "1.0.0-alpha.1", features = ["v4"] }

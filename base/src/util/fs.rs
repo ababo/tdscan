@@ -1,4 +1,4 @@
-use std::fs::{read, read_to_string, File};
+use std::fs::{read, read_to_string, File, write};
 use std::path::Path;
 
 use crate::defs::{IntoResult, Result};
@@ -43,6 +43,17 @@ pub fn read_file_to_string<P: AsRef<Path>>(path: P) -> Result<String> {
             format!("failed to read file '{}' into string", path)
         } else {
             "failed to read file into string".to_string()
+        }
+    })
+}
+
+pub fn write_file<P: AsRef<Path>>(path: P, data: &[u8]) -> Result<()> {
+    let path = path.as_ref();
+    write(path, data).into_result(|| {
+        if let Some(path) = path.to_str() {
+            format!("failed to write file '{}'", path)
+        } else {
+            "failed to write file".to_string()
         }
     })
 }

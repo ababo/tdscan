@@ -94,7 +94,7 @@ mod tests {
     fn export(truncate_len: Option<usize>, pretty: bool) -> String {
         let mut reader = create_reader_with_records(&vec![
             new_element_view_rec(fm::ElementView {
-                element: format!("element"),
+                element: "element".to_string(),
                 texture_points: vec![
                     new_point2(1.0, 2.0),
                     new_point2(3.0, 4.0),
@@ -102,7 +102,7 @@ mod tests {
                 ..Default::default()
             }),
             new_element_view_state_rec(fm::ElementViewState {
-                element: format!("element"),
+                element: "element".to_string(),
                 vertices: vec![
                     new_point3(5.0, 6.0, 7.0),
                     new_point3(8.0, 9.0, 10.0),

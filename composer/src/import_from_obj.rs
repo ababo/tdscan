@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 use std::io;
-use std::io::{stdin, BufRead, BufReader};
+use std::io::{BufRead, BufReader};
 use std::mem::take;
 use std::path::{Path, PathBuf};
 
@@ -18,7 +18,7 @@ const MAX_NUM_FACE_VERTICES: usize = 10;
 
 #[derive(StructOpt)]
 #[structopt(about = "Import data from Wavefront .obj file")]
-pub struct ImportObjCommand {
+pub struct ImportFromObjCommand {
     #[structopt(flatten)]
     input: ObjInput,
 
@@ -29,7 +29,7 @@ pub struct ImportObjCommand {
     output: cli::FmOutput,
 }
 
-impl ImportObjCommand {
+impl ImportFromObjCommand {
     pub fn run(&self) -> Result<()> {
         let mut reader = self.input.get()?;
         let mut writer = self.output.get()?;

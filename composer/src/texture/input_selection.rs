@@ -386,10 +386,10 @@ impl BackgroundDetector {
         let image = image.clone();
         let (w, h) = image.dimensions();
         let (w, h) = (Dim::from_usize(w as usize), Dim::from_usize(h as usize));
-        let mut bgmask = ImageMask::from_element_generic(h, w, true);
+        let mut bgmask = ImageMask::from_element_generic(h, w, false);
 
         // Short-circuit when possible.
-        if 0.0 <= background_deviation {
+        if 0.0 < background_deviation {
             // Pixel-by-pixel detection.
             for i in 0..bgmask.nrows() {
                 for j in 0..bgmask.ncols() {
@@ -419,7 +419,7 @@ impl BackgroundDetector {
 
     pub fn detect(&self, pixel: Vector2) -> bool {
         let &[i, j] = uv_to_ij(pixel, &self.image).as_ref();
-        *self.bgmask.get((i as usize, j as usize)).unwrap_or(&false)
+        self.bgmask.get((i as usize, j as usize)).cloned().unwrap_or(false)
     }
 }
 

@@ -386,17 +386,20 @@ pub fn erode(mask: &ImageMask, radius: f64) -> ImageMask {
 
     for i in 0..mask.nrows() as isize {
         for j in 0..mask.ncols() as isize {
-            output[(i as usize, j as usize)] = true;
+            output[(i as usize, j as usize)] = mask[(i as usize, j as usize)];
+
+            // Short-circuit when possible.
+            if !output[(i as usize, j as usize)] {
+                continue;
+            }
+
             'check: for di in -(radius as isize)..radius as isize {
                 for dj in -(radius as isize)..radius as isize {
-                    let i1 = i + di;
-                    let j1 = j + dj;
                     if Vector2::new(di as f64, dj as f64).norm() <= radius
-                        && 0 <= i1
-                        && (i1 as usize) < mask.nrows()
-                        && 0 <= j1
-                        && (j1 as usize) < mask.ncols()
-                        && !mask[(i1 as usize, j1 as usize)]
+                        && !mask
+                            .get(((i + di) as usize, (j + dj) as usize))
+                            .cloned()
+                            .unwrap_or(true)
                     {
                         output[(i as usize, j as usize)] = false;
                         break 'check;
@@ -414,17 +417,20 @@ pub fn dilate(mask: &ImageMask, radius: f64) -> ImageMask {
 
     for i in 0..mask.nrows() as isize {
         for j in 0..mask.ncols() as isize {
-            output[(i as usize, j as usize)] = false;
+            output[(i as usize, j as usize)] = mask[(i as usize, j as usize)];
+
+            // Short-circuit when possible.
+            if output[(i as usize, j as usize)] {
+                continue;
+            }
+
             'check: for di in -(radius as isize)..radius as isize {
                 for dj in -(radius as isize)..radius as isize {
-                    let i1 = i + di;
-                    let j1 = j + dj;
                     if Vector2::new(di as f64, dj as f64).norm() <= radius
-                        && 0 <= i1
-                        && (i1 as usize) < mask.nrows()
-                        && 0 <= j1
-                        && (j1 as usize) < mask.ncols()
-                        && mask[(i1 as usize, j1 as usize)]
+                        && mask
+                            .get(((i + di) as usize, (j + dj) as usize))
+                            .cloned()
+                            .unwrap_or(false)
                     {
                         output[(i as usize, j as usize)] = true;
                         break 'check;

@@ -80,7 +80,6 @@ fn face_is_acceptable(
     face_metrics: &[FrameMetrics],
     all_costs: &[Option<Vec<f64>>],
     chosen_cameras: &[Option<usize>],
-    mesh: &Mesh,
     patching_threshold: f64,
 ) -> bool {
     if let Some(old_frame_idx) = chosen_cameras[face_idx] {
@@ -126,7 +125,6 @@ fn build_acceptability_record(
                                 face_metrics,
                                 all_costs,
                                 chosen_cameras,
-                                mesh,
                                 patching_threshold,
                             )
                         })

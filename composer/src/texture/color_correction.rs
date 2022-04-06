@@ -137,7 +137,7 @@ fn build_initial_guess(
     color_samples: &[[Vector3; 3]],
     color_idx: usize,
 ) -> DVector {
-    let mut guess: Vec<Option<f64>> = (0..mesh.vertices.len())
+    let guess: Vec<Option<f64>> = (0..mesh.vertices.len())
         .map(|vertex_idx| {
             build_initial_guess_for_single_vertex(
                 mesh,

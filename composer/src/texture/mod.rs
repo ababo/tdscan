@@ -30,7 +30,6 @@ pub type Quaternion = nalgebra::UnitQuaternion<f64>;
 pub type Matrix4 = nalgebra::Matrix4<f64>;
 pub type Vector2 = nalgebra::Vector2<f64>;
 pub type Matrix2 = nalgebra::Matrix2<f64>;
-pub type Matrix3x2 = nalgebra::Matrix3x2<f64>;
 pub type Vector<const D: usize> =
     nalgebra::Vector<f64, Const<D>, ArrayStorage<f64, D, 1>>;
 
@@ -304,7 +303,7 @@ pub fn ij_to_uv(ij: Vector2, img: &RgbImage) -> Vector2 {
 }
 
 fn mesh_fill<T>(
-    known: &Vec<Option<T>>,
+    known: &[Option<T>],
     mesh: &Mesh,
     topo: &BasicMeshTopology,
     default: T,
@@ -361,12 +360,12 @@ fn set_mesh_face_value_with_radius<T>(
 
 fn mesh_faces_spread_infinity(
     array: Vec<f64>,
-    mesh: &Mesh,
+    _mesh: &Mesh,
     topo: &BasicMeshTopology,
 ) -> Vec<f64> {
     let mut result = array.clone();
-    for face_idx in 0..mesh.faces.len() {
-        if array[face_idx] == f64::INFINITY {
+    for (face_idx, &value) in array.iter().enumerate() {
+        if value == f64::INFINITY {
             for &other_face in &topo.neighbouring_faces[face_idx] {
                 result[other_face] = f64::INFINITY;
             }

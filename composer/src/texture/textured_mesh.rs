@@ -1,5 +1,3 @@
-use std::f64::consts::PI;
-
 use indexmap::IndexMap;
 use structopt::StructOpt;
 
@@ -159,9 +157,11 @@ impl TexturedMesh {
             &all_costs,
             &mesh,
             &topo,
-            params.selection_cost_limit,
-            params.background_consensus_threshold,
-            params.background_consensus_spread,
+            BackgroundDisqualificationParams {
+                cost_limit: params.selection_cost_limit,
+                consensus_threshold: params.background_consensus_threshold,
+                consensus_spread: params.background_consensus_spread,
+            },
         );
 
         let local_patches: Vec<LocalPatch> = choose_uv_patches(&mesh, &topo)

@@ -339,8 +339,8 @@ pub fn select_cameras(
 ) -> Vec<Option<usize>> {
     let mut chosen = vec![None; mesh.faces.len()];
     let mut costs = vec![f64::INFINITY; mesh.faces.len()];
-    for frame_idx in 0..all_costs.len() {
-        if let Some(alt_costs) = &all_costs[frame_idx] {
+    for (frame_idx, all_costs_option) in all_costs.iter().enumerate() {
+        if let Some(alt_costs) = all_costs_option {
             for face_idx in 0..mesh.faces.len() {
                 if alt_costs[face_idx] > selection_cost_limit {
                     // Skip option which is too expensive to be sensible.
@@ -355,9 +355,6 @@ pub fn select_cameras(
     }
     chosen
 }
-
-pub static mut dbg_bg: usize = 0;
-pub static mut dbg_nobg: usize = 0;
 
 pub fn detect_background_static(
     pixel: Vector2,
@@ -426,15 +423,19 @@ impl BackgroundDetector {
     }
 }
 
+pub struct BackgroundDisqualificationParams {
+    pub cost_limit: f64,
+    pub consensus_threshold: f64,
+    pub consensus_spread: usize,
+}
+
 pub fn disqualify_background_faces(
     chosen_cameras: &mut [Option<usize>],
     face_metrics: &[FrameMetrics],
     all_costs: &[Option<Vec<f64>>],
     mesh: &Mesh,
     topo: &BasicMeshTopology,
-    selection_cost_limit: f64,
-    background_consensus_threshold: f64,
-    background_consensus_spread: usize,
+    params: BackgroundDisqualificationParams,
 ) {
     for face_idx in 0..mesh.faces.len() {
         if let Some(_frame_idx) = chosen_cameras[face_idx] {
@@ -446,7 +447,7 @@ pub fn disqualify_background_faces(
                     face_metrics[other_frame_idx].as_ref()
                 {
                     if all_costs[other_frame_idx].as_ref().unwrap()[face_idx]
-                        < selection_cost_limit
+                        < params.cost_limit
                     {
                         if other_frame[face_idx].is_background {
                             bg_count_true += 1;
@@ -460,15 +461,15 @@ pub fn disqualify_background_faces(
             // If a big enough proportion say that the face is indeed
             // background, disqualify it and a few surrounding faces.
             if bg_count_true as f64
-                > background_consensus_threshold
+                > params.consensus_threshold
                     * (bg_count_true + bg_count_false) as f64
             {
                 set_mesh_face_value_with_radius(
                     chosen_cameras,
                     face_idx,
                     None,
-                    background_consensus_spread,
-                    &topo,
+                    params.consensus_spread,
+                    topo,
                 );
             }
         }

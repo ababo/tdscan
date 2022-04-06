@@ -374,8 +374,6 @@ pub fn detect_background_static(
     diff2.norm() < background_deviation
 }
 
-use image::{Rgb, RgbImage}; // TODO move
-
 pub struct BackgroundDetector {
     image: RgbImage,
     bgmask: ImageMask,
@@ -386,30 +384,36 @@ impl BackgroundDetector {
         image: &RgbImage,
         background_color: Vector3,
         background_deviation: f64,
-        background_dilations: &[f64], // e.g. [-5.0, 10.0]
+        background_dilations: &[f64],
     ) -> BackgroundDetector {
         let image = image.clone();
         let (w, h) = image.dimensions();
         let (w, h) = (Dim::from_usize(w as usize), Dim::from_usize(h as usize));
         let mut bgmask = ImageMask::from_element_generic(h, w, true);
-        for i in 0..bgmask.nrows() {
-            for j in 0..bgmask.ncols() {
-                let pixel = ij_to_uv(Vector2::new(i as f64, j as f64), &image);
-                bgmask[(i, j)] = detect_background_static(
-                    pixel,
-                    &image,
-                    background_color,
-                    background_deviation,
-                );
-            }
-        }
 
-        // Remove noise.
-        for &r in background_dilations {
-            if r > 0.0 {
-                bgmask = dilate(&bgmask, r);
-            } else {
-                bgmask = erode(&bgmask, -r);
+        // Short-circuit when possible.
+        if 0.0 <= background_deviation {
+            // Pixel-by-pixel detection.
+            for i in 0..bgmask.nrows() {
+                for j in 0..bgmask.ncols() {
+                    let pixel =
+                        ij_to_uv(Vector2::new(i as f64, j as f64), &image);
+                    bgmask[(i, j)] = detect_background_static(
+                        pixel,
+                        &image,
+                        background_color,
+                        background_deviation,
+                    );
+                }
+            }
+
+            // Remove noise.
+            for &r in background_dilations {
+                if r > 0.0 {
+                    bgmask = dilate(&bgmask, r);
+                } else {
+                    bgmask = erode(&bgmask, -r);
+                }
             }
         }
 
@@ -418,11 +422,7 @@ impl BackgroundDetector {
 
     pub fn detect(&self, pixel: Vector2) -> bool {
         let &[i, j] = uv_to_ij(pixel, &self.image).as_ref();
-        0.0 <= i
-            && i < self.bgmask.nrows() as f64
-            && 0.0 <= j
-            && j < self.bgmask.ncols() as f64
-            && self.bgmask[(i as usize, j as usize)] // TODO: use .get()
+        *self.bgmask.get((i as usize, j as usize)).unwrap_or(&false)
     }
 }
 
@@ -430,24 +430,25 @@ pub fn disqualify_background_faces(
     chosen_cameras: &mut [Option<usize>],
     face_metrics: &[FrameMetrics],
     all_costs: &[Option<Vec<f64>>],
-    selection_cost_limit: f64,
     mesh: &Mesh,
     topo: &BasicMeshTopology,
+    selection_cost_limit: f64,
+    background_consensus_threshold: f64,
+    background_consensus_spread: usize,
 ) {
     for face_idx in 0..mesh.faces.len() {
         if let Some(_frame_idx) = chosen_cameras[face_idx] {
-            // TODO remove?
+            // Count how many reasonable frames say that the face is background.
             let mut bg_count_true = 0;
             let mut bg_count_false = 0;
             for other_frame_idx in 0..face_metrics.len() {
                 if let Some(other_frame) =
                     face_metrics[other_frame_idx].as_ref()
                 {
-                    let met = other_frame[face_idx]; // TODO inline
                     if all_costs[other_frame_idx].as_ref().unwrap()[face_idx]
                         < selection_cost_limit
                     {
-                        if met.is_background {
+                        if other_frame[face_idx].is_background {
                             bg_count_true += 1;
                         } else {
                             bg_count_false += 1;
@@ -455,15 +456,18 @@ pub fn disqualify_background_faces(
                     }
                 }
             }
-            let threshold = 0.5; // TODO expose
+
+            // If a big enough proportion say that the face is indeed
+            // background, disqualify it and a few surrounding faces.
             if bg_count_true as f64
-                > threshold * (bg_count_true + bg_count_false) as f64
+                > background_consensus_threshold
+                    * (bg_count_true + bg_count_false) as f64
             {
                 set_mesh_face_value_with_radius(
                     chosen_cameras,
                     face_idx,
                     None,
-                    2,
+                    background_consensus_spread,
                     &topo,
                 );
             }

@@ -42,7 +42,7 @@ fn make_provisory_partition(
     chosen_cameras: &[Option<usize>],
     force_camera: Option<usize>,
 ) -> Vec<TmpPatch> {
-    let carrier = face_idxs; //mask_to_idxs(faces_mask);
+    let carrier = face_idxs;
     let carrier_inv = vec_inv(carrier);
     let mut partition = UnionFind::new(carrier.len());
 
@@ -81,6 +81,7 @@ fn face_is_acceptable(
     all_costs: &[Option<Vec<f64>>],
     chosen_cameras: &[Option<usize>],
     mesh: &Mesh,
+    patching_threshold: f64,
 ) -> bool {
     if let Some(old_frame_idx) = chosen_cameras[face_idx] {
         let f = |frame_idx: usize| {
@@ -90,16 +91,14 @@ fn face_is_acceptable(
             if let Some(costs) = &all_costs[frame_idx] {
                 costs[face_idx]
             } else {
-                f64::INFINITY // TODO: Remove check if redundant.
+                f64::INFINITY
             }
         };
-        let old_cost = g(old_frame_idx); //build_cost_for_single_face(&f(old_frame_idx));
+        let old_cost = g(old_frame_idx);
         let old_is_bg = f(old_frame_idx).is_background;
-        let alt_cost = g(frame_idx); //build_cost_for_single_face(&f(frame_idx));
+        let alt_cost = g(frame_idx);
         let alt_is_bg = f(frame_idx).is_background;
-        let threshold = 2.0;
-        //let threshold = 1.0;
-        (threshold * old_cost > alt_cost || old_is_bg) && !alt_is_bg
+        (patching_threshold * old_cost > alt_cost || old_is_bg) && !alt_is_bg
     } else {
         false
     }
@@ -110,26 +109,29 @@ fn build_acceptability_record(
     face_metrics: &[FrameMetrics],
     all_costs: &[Option<Vec<f64>>],
     chosen_cameras: &[Option<usize>],
-    angle_limit: f64,
+    patching_threshold: f64,
 ) -> Vec<Option<Vec<usize>>> {
     face_metrics
         .iter()
         .enumerate()
-        .map(|(frame_idx, face_metrics2)| {
-            face_metrics2.as_ref().map(|face_metrics3| {
-                (0..mesh.faces.len())
-                    .filter(|&face_idx| {
-                        face_is_acceptable(
-                            face_idx,
-                            frame_idx,
-                            face_metrics,
-                            all_costs,
-                            chosen_cameras,
-                            mesh,
-                        )
-                    })
-                    .collect::<Vec<usize>>()
-            })
+        .map(|(frame_idx, face_metrics_option)| {
+            face_metrics_option
+                .as_ref()
+                .map(|_face_metrics_single_frame| {
+                    (0..mesh.faces.len())
+                        .filter(|&face_idx| {
+                            face_is_acceptable(
+                                face_idx,
+                                frame_idx,
+                                face_metrics,
+                                all_costs,
+                                chosen_cameras,
+                                mesh,
+                                patching_threshold,
+                            )
+                        })
+                        .collect::<Vec<usize>>()
+                })
         })
         .collect()
 }
@@ -140,7 +142,7 @@ pub fn form_patches(
     all_costs: &[Option<Vec<f64>>],
     mesh: &Mesh,
     topo: &BasicMeshTopology,
-    angle_limit: f64,
+    patching_threshold: f64,
 ) {
     // For each image frame and each mesh face,
     // record whether it is acceptably well-visible.
@@ -149,7 +151,7 @@ pub fn form_patches(
         face_metrics,
         all_costs,
         chosen_cameras,
-        angle_limit,
+        patching_threshold,
     );
 
     // Collection of available faces that have only been assigned

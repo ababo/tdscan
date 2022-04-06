@@ -336,8 +336,7 @@ where
     output
 }
 
-pub fn set_mesh_face_value_with_radius<T>(
-    // TODO: Make private once stable.
+fn set_mesh_face_value_with_radius<T>(
     array: &mut [T],
     face_idx: usize,
     value: T,

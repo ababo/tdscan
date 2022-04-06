@@ -69,11 +69,40 @@ pub struct TextureParams {
     pub color_correction_final_offset: bool,
 
     #[structopt(
-        help = "Maximum angle of input patch formation (measured in degrees)",
+        help = "Maximum cost ratio during input patch formation",
         long,
-        default_value = "66.0"
+        default_value = "2.0"
     )]
-    pub input_patching_max_angle_degrees: f64,
+    pub input_patching_threshold: f64,
+
+    #[structopt(
+        help = "Denoising for background detection (measured in pixels)",
+        long,
+        default_value = "-5.0,10.0",
+        use_delimiter = true
+    )]
+    pub background_dilations: Vec<f64>,
+
+    #[structopt(
+        help = "Radius for avoiding corners when choosing texture source",
+        long,
+        default_value = "0"
+    )]
+    pub selection_corner_radius: usize,
+
+    #[structopt(
+        help = "Threshold for background detection consensus",
+        long,
+        default_value = "0.5"
+    )]
+    pub background_consensus_threshold: f64,
+
+    #[structopt(
+        help = "Radius of spread of background detection consensus",
+        long,
+        default_value = "2"
+    )]
+    pub background_consensus_spread: usize,
 }
 
 fn parse_color_into_vector3(src: &str) -> Result<Vector3> {
@@ -106,13 +135,13 @@ impl TexturedMesh {
             &mesh,
             params.background_color,
             params.background_deviation,
-            &[-5.0, 10.0], // params.background_dilations, TODO
+            &params.background_dilations,
         );
         let all_costs = build_all_costs(
             &face_metrics,
             &mesh,
             &topo,
-            0, //selection_corner_radius, TODO
+            params.selection_corner_radius,
         );
         let mut chosen_cameras =
             select_cameras(&all_costs, &mesh, params.selection_cost_limit);
@@ -122,15 +151,17 @@ impl TexturedMesh {
             &all_costs,
             &mesh,
             &topo,
-            params.input_patching_max_angle_degrees * (PI / 180.0),
+            params.input_patching_threshold,
         );
         disqualify_background_faces(
             &mut chosen_cameras,
             &face_metrics,
             &all_costs,
-            params.selection_cost_limit,
             &mesh,
             &topo,
+            params.selection_cost_limit,
+            params.background_consensus_threshold,
+            params.background_consensus_spread,
         );
 
         let local_patches: Vec<LocalPatch> = choose_uv_patches(&mesh, &topo)

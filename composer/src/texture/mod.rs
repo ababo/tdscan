@@ -336,7 +336,8 @@ where
     output
 }
 
-fn set_mesh_face_value_with_radius<T>(
+pub fn set_mesh_face_value_with_radius<T>(
+    // TODO: Make private once stable.
     array: &mut [T],
     face_idx: usize,
     value: T,
@@ -357,4 +358,83 @@ fn set_mesh_face_value_with_radius<T>(
             );
         }
     }
+}
+
+fn mesh_faces_spread_infinity(
+    array: Vec<f64>,
+    mesh: &Mesh,
+    topo: &BasicMeshTopology,
+) -> Vec<f64> {
+    let mut result = array.clone();
+    for face_idx in 0..mesh.faces.len() {
+        if array[face_idx] == f64::INFINITY {
+            for &other_face in &topo.neighbouring_faces[face_idx] {
+                result[other_face] = f64::INFINITY;
+            }
+        }
+    }
+    result
+}
+
+fn map_vec_option<T, U>(
+    v: &[Option<T>],
+    f: &impl Fn(&T) -> U,
+) -> Vec<Option<U>> {
+    v.iter().map(|i| i.as_ref().map(f)).collect()
+}
+
+pub fn erode(mask: &ImageMask, radius: f64) -> ImageMask {
+    let mut output = mask.clone();
+
+    for i in 0..mask.nrows() as isize {
+        for j in 0..mask.ncols() as isize {
+            output[(i as usize, j as usize)] = true;
+            'check: for di in -(radius as isize)..radius as isize {
+                for dj in -(radius as isize)..radius as isize {
+                    let i1 = i + di;
+                    let j1 = j + dj;
+                    if Vector2::new(di as f64, dj as f64).norm() <= radius
+                        && 0 <= i1
+                        && (i1 as usize) < mask.nrows()
+                        && 0 <= j1
+                        && (j1 as usize) < mask.ncols()
+                        && !mask[(i1 as usize, j1 as usize)]
+                    {
+                        output[(i as usize, j as usize)] = false;
+                        break 'check;
+                    }
+                }
+            }
+        }
+    }
+
+    output
+}
+
+pub fn dilate(mask: &ImageMask, radius: f64) -> ImageMask {
+    let mut output = mask.clone();
+
+    for i in 0..mask.nrows() as isize {
+        for j in 0..mask.ncols() as isize {
+            output[(i as usize, j as usize)] = false;
+            'check: for di in -(radius as isize)..radius as isize {
+                for dj in -(radius as isize)..radius as isize {
+                    let i1 = i + di;
+                    let j1 = j + dj;
+                    if Vector2::new(di as f64, dj as f64).norm() <= radius
+                        && 0 <= i1
+                        && (i1 as usize) < mask.nrows()
+                        && 0 <= j1
+                        && (j1 as usize) < mask.ncols()
+                        && mask[(i1 as usize, j1 as usize)]
+                    {
+                        output[(i as usize, j as usize)] = true;
+                        break 'check;
+                    }
+                }
+            }
+        }
+    }
+
+    output
 }

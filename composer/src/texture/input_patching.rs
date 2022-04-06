@@ -78,6 +78,7 @@ fn face_is_acceptable(
     face_idx: usize,
     frame_idx: usize,
     face_metrics: &[FrameMetrics],
+    all_costs: &[Option<Vec<f64>>],
     chosen_cameras: &[Option<usize>],
     mesh: &Mesh,
 ) -> bool {
@@ -85,11 +86,19 @@ fn face_is_acceptable(
         let f = |frame_idx: usize| {
             face_metrics[frame_idx].as_ref().unwrap()[face_idx]
         };
-        let old_cost = build_cost_for_single_face(&f(old_frame_idx));
+        let g = |frame_idx: usize| {
+            if let Some(costs) = &all_costs[frame_idx] {
+                costs[face_idx]
+            } else {
+                f64::INFINITY // TODO: Remove check if redundant.
+            }
+        };
+        let old_cost = g(old_frame_idx); //build_cost_for_single_face(&f(old_frame_idx));
         let old_is_bg = f(old_frame_idx).is_background;
-        let alt_cost = build_cost_for_single_face(&f(frame_idx));
+        let alt_cost = g(frame_idx); //build_cost_for_single_face(&f(frame_idx));
         let alt_is_bg = f(frame_idx).is_background;
         let threshold = 2.0;
+        //let threshold = 1.0;
         (threshold * old_cost > alt_cost || old_is_bg) && !alt_is_bg
     } else {
         false
@@ -99,6 +108,7 @@ fn face_is_acceptable(
 fn build_acceptability_record(
     mesh: &Mesh,
     face_metrics: &[FrameMetrics],
+    all_costs: &[Option<Vec<f64>>],
     chosen_cameras: &[Option<usize>],
     angle_limit: f64,
 ) -> Vec<Option<Vec<usize>>> {
@@ -113,6 +123,7 @@ fn build_acceptability_record(
                             face_idx,
                             frame_idx,
                             face_metrics,
+                            all_costs,
                             chosen_cameras,
                             mesh,
                         )
@@ -126,6 +137,7 @@ fn build_acceptability_record(
 pub fn form_patches(
     chosen_cameras: &mut [Option<usize>],
     face_metrics: &[FrameMetrics],
+    all_costs: &[Option<Vec<f64>>],
     mesh: &Mesh,
     topo: &BasicMeshTopology,
     angle_limit: f64,
@@ -135,6 +147,7 @@ pub fn form_patches(
     let mut acceptable = build_acceptability_record(
         mesh,
         face_metrics,
+        all_costs,
         chosen_cameras,
         angle_limit,
     );

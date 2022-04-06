@@ -106,31 +106,32 @@ impl TexturedMesh {
             &mesh,
             params.background_color,
             params.background_deviation,
+            &[-5.0, 10.0], // params.background_dilations, TODO
         );
-        let mut chosen_cameras =
-            select_cameras(&face_metrics, &mesh, params.selection_cost_limit);
-        /*form_patches(
-            &mut chosen_cameras,
+        let all_costs = build_all_costs(
             &face_metrics,
             &mesh,
             &topo,
-            params.input_patching_max_angle_degrees * (PI / 180.0)
+            0, //selection_corner_radius, TODO
         );
-
-        for i in 0..mesh.faces.len() {
-            chosen_cameras[i] = Some(0);
-        }*/
-
-        /*for face_idx in 0..mesh.faces.len() {
-            if let Some(frame_idx) = chosen_cameras[face_idx] {
-                if face_metrics[frame_idx].as_ref().unwrap()[face_idx]
-                    .is_background
-                {
-                    chosen_cameras[face_idx] = None;
-                    //changed += 1;
-                }
-            }
-        }*/
+        let mut chosen_cameras =
+            select_cameras(&all_costs, &mesh, params.selection_cost_limit);
+        form_patches(
+            &mut chosen_cameras,
+            &face_metrics,
+            &all_costs,
+            &mesh,
+            &topo,
+            params.input_patching_max_angle_degrees * (PI / 180.0),
+        );
+        disqualify_background_faces(
+            &mut chosen_cameras,
+            &face_metrics,
+            &all_costs,
+            params.selection_cost_limit,
+            &mesh,
+            &topo,
+        );
 
         let local_patches: Vec<LocalPatch> = choose_uv_patches(&mesh, &topo)
             .iter()

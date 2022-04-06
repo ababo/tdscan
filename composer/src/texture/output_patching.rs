@@ -19,12 +19,9 @@ fn vertex_aligned(vertex_idx: usize, major_axis: Vector3, mesh: &Mesh) -> bool {
 
 fn face_aligned(face_idx: usize, major_axis: Vector3, mesh: &Mesh) -> bool {
     let [v0, v1, v2] = mesh.faces[face_idx];
-    //let diff1 = mesh.vertices[1] - mesh.vertices[0];
-    //let diff2 = mesh.vertices[2] - mesh.vertices[0];
     vertex_aligned(v0, major_axis, mesh)
         && vertex_aligned(v1, major_axis, mesh)
         && vertex_aligned(v2, major_axis, mesh)
-    //&& diff1.cross(&diff2).dot(&major_axis) >= 0
 }
 
 fn count_aligned_faces(

@@ -44,7 +44,7 @@ fn copy_triangle(
 
             let sampled_color = sample_pixel(uv0, image0);
             let offset = color_correction.sample_color_offset(face_idx, bary);
-            let color = sampled_color + 1.0 * offset;
+            let color = sampled_color + offset;
 
             if all_nonneg(bary) && i1 < image1.height() && j1 < image1.width() {
                 set_pixel_ij_as_vector3(i1, j1, color, image1);
@@ -59,10 +59,6 @@ fn copy_triangle(
         None
     }
 }
-
-// Rectangular, image-shaped grid of booleans, that represents whether
-// any given pixel has not been written to yet during baking.
-//pub type ImageMask = OMatrix<bool, Dynamic, Dynamic>;
 
 pub fn bake_texture(
     mesh: &Mesh,

@@ -143,7 +143,11 @@ impl TexturedMesh {
             params.selection_corner_radius,
         );
         let mut chosen_cameras =
-            select_cameras(&all_costs, &mesh, params.selection_cost_limit);
+            select_cameras(
+                &all_costs,
+                &face_metrics,
+                &mesh,
+                params.selection_cost_limit);
         if params.input_patching_threshold > 1.0 {
             if params.background_deviation >= 0.0 {
                 form_patches(

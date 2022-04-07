@@ -331,6 +331,7 @@ pub fn build_all_costs(
 
 pub fn select_cameras(
     all_costs: &[Option<Vec<f64>>],
+    metrics: &[FrameMetrics],
     mesh: &Mesh,
     selection_cost_limit: f64,
 ) -> Vec<Option<usize>> {
@@ -339,8 +340,12 @@ pub fn select_cameras(
     for (frame_idx, all_costs_option) in all_costs.iter().enumerate() {
         if let Some(alt_costs) = all_costs_option {
             for face_idx in 0..mesh.faces.len() {
-                if alt_costs[face_idx] > selection_cost_limit {
+                if alt_costs[face_idx] > selection_cost_limit
+                    || metrics[frame_idx].as_ref().unwrap()[face_idx]
+                        .is_background
+                {
                     // Skip option which is too expensive to be sensible.
+                    // Also skip option which is part of the background.
                     continue;
                 }
                 if costs[face_idx] > alt_costs[face_idx] {

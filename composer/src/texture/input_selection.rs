@@ -301,7 +301,6 @@ pub fn build_cost_for_single_face(metrics: &Metrics) -> f64 {
 
 fn build_costs_for_single_frame(
     metrics: &[Metrics],
-    mesh: &Mesh,
     topo: &BasicMeshTopology,
     selection_corner_radius: usize,
 ) -> Vec<f64> {
@@ -310,7 +309,7 @@ fn build_costs_for_single_frame(
 
     // Avoid corners.
     for _ in 0..selection_corner_radius {
-        costs = mesh_faces_spread_infinity(costs, mesh, topo);
+        costs = mesh_faces_spread_infinity(costs, topo);
     }
 
     costs
@@ -318,14 +317,12 @@ fn build_costs_for_single_frame(
 
 pub fn build_all_costs(
     metrics: &[FrameMetrics],
-    mesh: &Mesh,
     topo: &BasicMeshTopology,
     selection_corner_radius: usize,
 ) -> Vec<Option<Vec<f64>>> {
     map_vec_option(metrics, &|single_frame_metrics| {
         build_costs_for_single_frame(
             single_frame_metrics,
-            mesh,
             topo,
             selection_corner_radius,
         )
@@ -406,11 +403,11 @@ impl BackgroundDetector {
 
             // Remove noise.
             for &r in background_dilations {
-                if r > 0.0 {
-                    bgmask = dilate(&bgmask, r);
+                bgmask = if r > 0.0 {
+                    dilate(&bgmask, r)
                 } else {
-                    bgmask = erode(&bgmask, -r);
-                }
+                    erode(&bgmask, -r)
+                };
             }
         }
 
@@ -419,7 +416,10 @@ impl BackgroundDetector {
 
     pub fn detect(&self, pixel: Vector2) -> bool {
         let &[i, j] = uv_to_ij(pixel, &self.image).as_ref();
-        self.bgmask.get((i as usize, j as usize)).cloned().unwrap_or(false)
+        self.bgmask
+            .get((i as usize, j as usize))
+            .cloned()
+            .unwrap_or_default()
     }
 }
 

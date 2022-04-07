@@ -1,4 +1,5 @@
 use indexmap::IndexMap;
+use log::warn;
 use structopt::StructOpt;
 
 use crate::mesh::Mesh;
@@ -74,7 +75,8 @@ pub struct TextureParams {
     pub input_patching_threshold: f64,
 
     #[structopt(
-        help = "Denoising for background detection (measured in pixels)",
+        help = "Amount of dilation/erosion to apply \
+                when denoising the background detection (measured in pixels)",
         long,
         default_value = "-5.0,10.0",
         use_delimiter = true
@@ -137,20 +139,28 @@ impl TexturedMesh {
         );
         let all_costs = build_all_costs(
             &face_metrics,
-            &mesh,
             &topo,
             params.selection_corner_radius,
         );
         let mut chosen_cameras =
             select_cameras(&all_costs, &mesh, params.selection_cost_limit);
-        form_patches(
-            &mut chosen_cameras,
-            &face_metrics,
-            &all_costs,
-            &mesh,
-            &topo,
-            params.input_patching_threshold,
-        );
+        if params.input_patching_threshold > 1.0 {
+            if params.background_deviation >= 0.0 {
+                form_patches(
+                    &mut chosen_cameras,
+                    &face_metrics,
+                    &all_costs,
+                    &mesh,
+                    &topo,
+                    params.input_patching_threshold,
+                );
+            } else {
+                warn!(
+                    "Input patching was disabled because \
+                       background_deviation < 0."
+                )
+            }
+        }
         disqualify_background_faces(
             &mut chosen_cameras,
             &face_metrics,

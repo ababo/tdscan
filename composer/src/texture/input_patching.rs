@@ -7,6 +7,7 @@ use crate::mesh::Mesh;
 use crate::misc::{vec_inv, vec_inv_many};
 use crate::texture::*;
 
+#[derive(Eq)]
 struct TmpPatch {
     face_idxs: Vec<usize>,
     frame_idx: usize,
@@ -33,8 +34,6 @@ impl PartialEq for TmpPatch {
     }
 }
 
-impl Eq for TmpPatch {}
-
 fn make_provisory_partition(
     face_idxs: &[usize],
     _mesh: &Mesh,
@@ -49,13 +48,12 @@ fn make_provisory_partition(
     for &f0 in carrier {
         if let Some(&c0) = carrier_inv.get(&f0) {
             for &f1 in &topo.neighbouring_faces[f0] {
-                if chosen_cameras[f0] != chosen_cameras[f1]
-                    && force_camera.is_none()
+                if chosen_cameras[f0] == chosen_cameras[f1]
+                    || force_camera.is_some()
                 {
-                    continue;
-                }
-                if let Some(&c1) = carrier_inv.get(&f1) {
-                    partition.union(c0, c1);
+                    if let Some(&c1) = carrier_inv.get(&f1) {
+                        partition.union(c0, c1);
+                    }
                 }
             }
         }
@@ -82,25 +80,21 @@ fn face_is_acceptable(
     chosen_cameras: &[Option<usize>],
     patching_threshold: f64,
 ) -> bool {
-    if let Some(old_frame_idx) = chosen_cameras[face_idx] {
+    chosen_cameras[face_idx].map_or(false, |old_frame_idx| {
         let f = |frame_idx: usize| {
             face_metrics[frame_idx].as_ref().unwrap()[face_idx]
         };
         let g = |frame_idx: usize| {
-            if let Some(costs) = &all_costs[frame_idx] {
-                costs[face_idx]
-            } else {
-                f64::INFINITY
-            }
+            (&all_costs[frame_idx])
+                .as_ref()
+                .map_or(f64::INFINITY, |costs| costs[face_idx])
         };
         let old_cost = g(old_frame_idx);
         let old_is_bg = f(old_frame_idx).is_background;
         let alt_cost = g(frame_idx);
         let alt_is_bg = f(frame_idx).is_background;
         (patching_threshold * old_cost > alt_cost || old_is_bg) && !alt_is_bg
-    } else {
-        false
-    }
+    })
 }
 
 fn build_acceptability_record(
@@ -110,6 +104,20 @@ fn build_acceptability_record(
     chosen_cameras: &[Option<usize>],
     patching_threshold: f64,
 ) -> Vec<Option<Vec<usize>>> {
+    let build_for_single_frame = |frame_idx| {
+        (0..mesh.faces.len())
+            .filter(|&face_idx| {
+                face_is_acceptable(
+                    face_idx,
+                    frame_idx,
+                    face_metrics,
+                    all_costs,
+                    chosen_cameras,
+                    patching_threshold,
+                )
+            })
+            .collect()
+    };
     face_metrics
         .iter()
         .enumerate()
@@ -117,18 +125,7 @@ fn build_acceptability_record(
             face_metrics_option
                 .as_ref()
                 .map(|_face_metrics_single_frame| {
-                    (0..mesh.faces.len())
-                        .filter(|&face_idx| {
-                            face_is_acceptable(
-                                face_idx,
-                                frame_idx,
-                                face_metrics,
-                                all_costs,
-                                chosen_cameras,
-                                patching_threshold,
-                            )
-                        })
-                        .collect::<Vec<usize>>()
+                    build_for_single_frame(frame_idx)
                 })
         })
         .collect()

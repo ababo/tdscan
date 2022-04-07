@@ -333,25 +333,20 @@ fn remove_outliers(
         kdtree.add(point.0.coords.as_ref(), ()).unwrap();
     }
 
+    let local_deviation = |point: &PointNormal| {
+        let nearest = kdtree
+            .nearest(
+                point.0.coords.as_ref(),
+                1 + num_neighbors,
+                &squared_euclidean,
+            )
+            .unwrap();
+
+        nearest.iter().map(|p| p.0.sqrt()).sum::<f64>() / num_neighbors as f64
+    };
     let avgs: Vec<f64> = (0..clouds.len())
         .into_par_iter()
-        .map(|i| {
-            clouds[i]
-                .iter()
-                .map(|point| {
-                    let nearest = kdtree
-                        .nearest(
-                            point.0.coords.as_ref(),
-                            1 + num_neighbors,
-                            &squared_euclidean,
-                        )
-                        .unwrap();
-
-                    nearest.iter().map(|p| p.0.sqrt()).sum::<f64>()
-                        / num_neighbors as f64
-                })
-                .collect::<Vec<f64>>()
-        })
+        .map(|i| clouds[i].iter().map(local_deviation).collect::<Vec<f64>>())
         .flatten()
         .collect();
 

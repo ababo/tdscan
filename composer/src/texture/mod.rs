@@ -360,7 +360,6 @@ fn set_mesh_face_value_with_radius<T>(
 
 fn mesh_faces_spread_infinity(
     array: Vec<f64>,
-    _mesh: &Mesh,
     topo: &BasicMeshTopology,
 ) -> Vec<f64> {
     let mut result = array.clone();

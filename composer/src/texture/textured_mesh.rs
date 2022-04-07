@@ -70,7 +70,7 @@ pub struct TextureParams {
     #[structopt(
         help = "Maximum cost ratio during input patch formation",
         long,
-        default_value = "2.0"
+        default_value = "1.0"
     )]
     pub input_patching_threshold: f64,
 
@@ -156,8 +156,8 @@ impl TexturedMesh {
                 );
             } else {
                 warn!(
-                    "Input patching was disabled because \
-                       background_deviation < 0."
+                    "input patching was disabled because \
+                       background_deviation < 0"
                 )
             }
         }

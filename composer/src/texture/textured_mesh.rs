@@ -1,4 +1,5 @@
 use indexmap::IndexMap;
+use log::warn;
 use structopt::StructOpt;
 
 use crate::mesh::Mesh;
@@ -65,6 +66,43 @@ pub struct TextureParams {
         long
     )]
     pub color_correction_final_offset: bool,
+
+    #[structopt(
+        help = "Maximum cost ratio during input patch formation",
+        long,
+        default_value = "1.0"
+    )]
+    pub input_patching_threshold: f64,
+
+    #[structopt(
+        help = "Amount of dilation/erosion to apply \
+                when denoising the background detection (measured in pixels)",
+        long,
+        default_value = "-5.0,10.0",
+        use_delimiter = true
+    )]
+    pub background_dilations: Vec<f64>,
+
+    #[structopt(
+        help = "Radius for avoiding corners when choosing texture source",
+        long,
+        default_value = "0"
+    )]
+    pub selection_corner_radius: usize,
+
+    #[structopt(
+        help = "Threshold for background detection consensus",
+        long,
+        default_value = "0.5"
+    )]
+    pub background_consensus_threshold: f64,
+
+    #[structopt(
+        help = "Radius of spread of background detection consensus",
+        long,
+        default_value = "2"
+    )]
+    pub background_consensus_spread: usize,
 }
 
 fn parse_color_into_vector3(src: &str) -> Result<Vector3> {
@@ -86,6 +124,8 @@ impl TexturedMesh {
         mesh: Mesh,
         params: &TextureParams,
     ) -> Result<TexturedMesh> {
+        let topo = BasicMeshTopology::new(&mesh);
+
         let VertexAndFaceMetricsOfAllFrames {
             vertex_metrics,
             face_metrics,
@@ -95,11 +135,49 @@ impl TexturedMesh {
             &mesh,
             params.background_color,
             params.background_deviation,
+            &params.background_dilations,
         );
-        let chosen_cameras =
-            select_cameras(&face_metrics, &mesh, params.selection_cost_limit);
+        let all_costs = build_all_costs(
+            &face_metrics,
+            &topo,
+            params.selection_corner_radius,
+        );
+        let mut chosen_cameras =
+            select_cameras(
+                &all_costs,
+                &face_metrics,
+                &mesh,
+                params.selection_cost_limit);
+        if params.input_patching_threshold > 1.0 {
+            if params.background_deviation >= 0.0 {
+                form_patches(
+                    &mut chosen_cameras,
+                    &face_metrics,
+                    &all_costs,
+                    &mesh,
+                    &topo,
+                    params.input_patching_threshold,
+                );
+            } else {
+                warn!(
+                    "input patching was disabled because \
+                       background_deviation < 0"
+                )
+            }
+        }
+        disqualify_background_faces(
+            &mut chosen_cameras,
+            &face_metrics,
+            &all_costs,
+            &mesh,
+            &topo,
+            BackgroundDisqualificationParams {
+                cost_limit: params.selection_cost_limit,
+                consensus_threshold: params.background_consensus_threshold,
+                consensus_spread: params.background_consensus_spread,
+            },
+        );
 
-        let topo = BasicMeshTopology::new(&mesh);
         let local_patches: Vec<LocalPatch> = choose_uv_patches(&mesh, &topo)
             .iter()
             .map(|(chunk, major)| {

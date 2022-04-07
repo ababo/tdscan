@@ -107,7 +107,7 @@ fn build_initial_guess_for_single_vertex(
     color_samples: &[[Vector3; 3]],
     color_idx: usize,
     vertex_idx: usize,
-) -> f64 {
+) -> Option<f64> {
     // Choose an initial guess at the solution, based on a simple color average.
     let known_values: Vec<f64> = topo.faces_around_vertex[vertex_idx]
         .iter()
@@ -124,9 +124,9 @@ fn build_initial_guess_for_single_vertex(
         })
         .collect();
     if !known_values.is_empty() {
-        known_values.iter().sum::<f64>() / known_values.len() as f64
+        Some(known_values.iter().sum::<f64>() / known_values.len() as f64)
     } else {
-        0.0
+        None
     }
 }
 
@@ -137,20 +137,23 @@ fn build_initial_guess(
     color_samples: &[[Vector3; 3]],
     color_idx: usize,
 ) -> DVector {
-    DVector::from_vec(
-        (0..mesh.vertices.len())
-            .map(|vertex_idx| {
-                build_initial_guess_for_single_vertex(
-                    mesh,
-                    topo,
-                    chosen_cameras,
-                    color_samples,
-                    color_idx,
-                    vertex_idx,
-                )
-            })
-            .collect(),
-    )
+    let guess: Vec<Option<f64>> = (0..mesh.vertices.len())
+        .map(|vertex_idx| {
+            build_initial_guess_for_single_vertex(
+                mesh,
+                topo,
+                chosen_cameras,
+                color_samples,
+                color_idx,
+                vertex_idx,
+            )
+        })
+        .collect();
+
+    // Fill missing data with nearby values to increase speed of convergence.
+    let guess_total = mesh_fill(&guess, mesh, topo, 0.0);
+
+    DVector::from_vec(guess_total)
 }
 
 fn conjugate_gradients_solve(
@@ -201,6 +204,15 @@ impl ColorCorrection {
         color_correction_steps: usize,
         color_correction_final_offset: bool,
     ) -> ColorCorrection {
+        if color_correction_steps == 0 {
+            return ColorCorrection {
+                face_vertex_color_offsets: vec![
+                    [Vector3::zeros(); 3];
+                    mesh.faces.len()
+                ],
+            };
+        }
+
         // Formulate a system of linear equations to minimize the
         // surface integral of the squared norm of the correction gradient.
         let discontinuous_laplacian = build_discontinuous_laplacian(mesh);
@@ -242,7 +254,7 @@ impl ColorCorrection {
                 &continuous_laplacian,
                 continuous_rhs,
                 x0,
-                color_correction_steps,
+                color_correction_steps - 1,
             );
             let discontinuous_lhs = &face_vertex_to_vertex * continuous_lhs;
 

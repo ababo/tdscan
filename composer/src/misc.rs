@@ -106,12 +106,7 @@ pub fn truncate_json_value(value: &mut JsonValue, max_len: usize) {
 pub fn extract_biggest_partition_component(
     partition: UnionFind<usize>,
 ) -> Vec<usize> {
-    let labeling = partition.into_labeling();
-    let mut family = HashMap::<usize, Vec<usize>>::new();
-    for (i, &j) in labeling.iter().enumerate() {
-        family.entry(j).or_insert_with(Vec::new);
-        family.get_mut(&j).unwrap().push(i);
-    }
+    let family = vec_inv_many(&partition.into_labeling());
     let biggest_idx =
         family.iter().map(|(&i, j)| (j.len(), i)).max().unwrap().1;
     family[&biggest_idx].clone()
@@ -119,7 +114,20 @@ pub fn extract_biggest_partition_component(
 
 pub fn vec_inv<T>(v: &[T]) -> HashMap<T, usize>
 where
-    T: Copy+Eq+Hash
+    T: Copy + Eq + Hash
 {
     HashMap::from_iter(v.iter().enumerate().map(|(i, &j)| (j, i)))
 }
+
+pub fn vec_inv_many<T>(labeling: &[T]) -> HashMap<T, Vec<usize>>
+where
+    T: Copy + Eq + Hash
+{
+    let mut family = HashMap::<T, Vec<usize>>::new();
+    for (i, &j) in labeling.iter().enumerate() {
+        family.entry(j).or_insert_with(Vec::new);
+        family.get_mut(&j).unwrap().push(i);
+    }
+    family
+}
+

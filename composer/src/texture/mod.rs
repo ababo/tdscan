@@ -1,4 +1,5 @@
 mod color_correction;
+mod input_patching;
 mod input_selection;
 mod output_baking;
 mod output_packing;
@@ -6,18 +7,20 @@ mod output_patching;
 mod textured_mesh;
 
 use std::cmp::Ordering;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::io::Cursor;
 use std::ops::Sub;
 
 use image::io::Reader as ImageReader;
 use image::{Rgb, RgbImage};
-use nalgebra::{vector, ArrayStorage, Const, Matrix, Matrix3, SVD};
+use nalgebra::{
+    vector, ArrayStorage, Const, Dim, Dynamic, Matrix, Matrix3, OMatrix, SVD,
+};
 
 use crate::mesh::Mesh;
 pub use crate::texture::{
-    color_correction::*, input_selection::*, output_baking::*,
-    output_packing::*, output_patching::*, textured_mesh::*,
+    color_correction::*, input_patching::*, input_selection::*,
+    output_baking::*, output_packing::*, output_patching::*, textured_mesh::*,
 };
 use base::fm;
 
@@ -27,9 +30,10 @@ pub type Quaternion = nalgebra::UnitQuaternion<f64>;
 pub type Matrix4 = nalgebra::Matrix4<f64>;
 pub type Vector2 = nalgebra::Vector2<f64>;
 pub type Matrix2 = nalgebra::Matrix2<f64>;
-pub type Matrix3x2 = nalgebra::Matrix3x2<f64>;
 pub type Vector<const D: usize> =
     nalgebra::Vector<f64, Const<D>, ArrayStorage<f64, D, 1>>;
+
+pub type ImageMask = OMatrix<bool, Dynamic, Dynamic>;
 
 pub struct ProjectedPoint {
     pub point: Vector2,
@@ -93,6 +97,7 @@ pub fn set_pixel_ij_as_vector3(
 pub struct BasicMeshTopology {
     pub faces_around_vertex: Vec<HashSet<usize>>,
     pub faces_around_edge: HashMap<[usize; 2], Vec<usize>>,
+    pub neighbouring_vertices: Vec<HashSet<usize>>,
     pub neighbouring_faces: Vec<HashSet<usize>>,
 }
 
@@ -113,6 +118,15 @@ impl BasicMeshTopology {
             }
         }
 
+        let mut neighbouring_vertices =
+            vec![HashSet::new(); mesh.vertices.len()];
+        for &[v0, v1, v2] in mesh.faces.iter() {
+            for e in [[v0, v1], [v0, v2], [v1, v2]] {
+                neighbouring_vertices[e[0]].insert(e[1]);
+                neighbouring_vertices[e[1]].insert(e[0]);
+            }
+        }
+
         let mut neighbouring_faces = vec![HashSet::new(); mesh.faces.len()];
         for (f_idx, &[v0, v1, v2]) in mesh.faces.iter().enumerate() {
             for e in [[v0, v1], [v0, v2], [v1, v2]] {
@@ -126,6 +140,7 @@ impl BasicMeshTopology {
         BasicMeshTopology {
             faces_around_vertex,
             faces_around_edge,
+            neighbouring_vertices,
             neighbouring_faces,
         }
     }
@@ -285,4 +300,144 @@ pub fn ij_to_uv(ij: Vector2, img: &RgbImage) -> Vector2 {
     let (dimx, dimy) = img.dimensions(); // Beware that x comes before y here.
     let [i, j] = ij.as_ref();
     Vector2::new(i / dimy as f64, j / dimx as f64)
+}
+
+fn mesh_fill<T>(
+    known: &[Option<T>],
+    mesh: &Mesh,
+    topo: &BasicMeshTopology,
+    default: T,
+) -> Vec<T>
+where
+    T: Copy,
+{
+    let mut visited = vec![false; mesh.vertices.len()];
+    let mut output = vec![default; mesh.vertices.len()];
+
+    let mut queue = VecDeque::new();
+    for vertex_idx in 0..mesh.vertices.len() {
+        if let Some(t) = known[vertex_idx] {
+            queue.push_back((t, vertex_idx));
+            visited[vertex_idx] = true;
+        }
+    }
+    while !queue.is_empty() {
+        let (t, front_idx) = queue.pop_front().unwrap();
+        output[front_idx] = t;
+        for &other_vertex in &topo.neighbouring_vertices[front_idx] {
+            if !visited[other_vertex] {
+                queue.push_back((t, other_vertex));
+                visited[other_vertex] = true;
+            }
+        }
+    }
+
+    output
+}
+
+fn set_mesh_face_value_with_radius<T>(
+    array: &mut [T],
+    face_idx: usize,
+    value: T,
+    radius: usize, // The current implementation has exponential complexity.
+    topo: &BasicMeshTopology,
+) where
+    T: Copy,
+{
+    array[face_idx] = value;
+    if radius > 0 {
+        for &other_face in &topo.neighbouring_faces[face_idx] {
+            set_mesh_face_value_with_radius(
+                array,
+                other_face,
+                value,
+                radius - 1,
+                topo,
+            );
+        }
+    }
+}
+
+fn mesh_faces_spread_infinity(
+    array: Vec<f64>,
+    topo: &BasicMeshTopology,
+) -> Vec<f64> {
+    let mut result = array.clone();
+    for (face_idx, &value) in array.iter().enumerate() {
+        if value == f64::INFINITY {
+            for &other_face in &topo.neighbouring_faces[face_idx] {
+                result[other_face] = f64::INFINITY;
+            }
+        }
+    }
+    result
+}
+
+fn map_vec_option<T, U>(
+    v: &[Option<T>],
+    f: &impl Fn(&T) -> U,
+) -> Vec<Option<U>> {
+    v.iter().map(|i| i.as_ref().map(f)).collect()
+}
+
+pub fn erode(mask: &ImageMask, radius: f64) -> ImageMask {
+    let mut output = mask.clone();
+
+    for i in 0..mask.nrows() as isize {
+        for j in 0..mask.ncols() as isize {
+            output[(i as usize, j as usize)] = mask[(i as usize, j as usize)];
+
+            // Short-circuit when possible.
+            if !output[(i as usize, j as usize)] {
+                continue;
+            }
+
+            'check: for di in -(radius as isize)..radius as isize {
+                for dj in -(radius as isize)..radius as isize {
+                    if Vector2::new(di as f64, dj as f64).norm() <= radius
+                        && !mask
+                            .get(((i + di) as usize, (j + dj) as usize))
+                            .cloned()
+                            .unwrap_or(true)
+                    {
+                        output[(i as usize, j as usize)] = false;
+                        break 'check;
+                    }
+                }
+            }
+        }
+    }
+
+    output
+}
+
+pub fn dilate(mask: &ImageMask, radius: f64) -> ImageMask {
+    let mut output = mask.clone();
+
+    for i in 0..mask.nrows() as isize {
+        for j in 0..mask.ncols() as isize {
+            output[(i as usize, j as usize)] = mask[(i as usize, j as usize)];
+
+            // Short-circuit when possible.
+            if output[(i as usize, j as usize)] {
+                continue;
+            }
+
+            'check: for di in -(radius as isize)..radius as isize {
+                for dj in -(radius as isize)..radius as isize {
+                    if Vector2::new(di as f64, dj as f64).norm() <= radius
+                        && mask
+                            .get(((i + di) as usize, (j + dj) as usize))
+                            .cloned()
+                            .unwrap_or(false)
+                    {
+                        output[(i as usize, j as usize)] = true;
+                        break 'check;
+                    }
+                }
+            }
+        }
+    }
+
+    output
 }

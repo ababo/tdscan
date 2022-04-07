@@ -1,6 +1,7 @@
 use indexmap::IndexMap;
 use kiddo::distance::squared_euclidean;
 use kiddo::KdTree;
+use rayon::prelude::*;
 
 use crate::mesh::Mesh;
 use crate::texture::*;
@@ -183,6 +184,7 @@ fn make_frame_metrics(
     mesh: &Mesh,
     background_color: Vector3,
     background_deviation: f64,
+    background_dilations: &[f64],
 ) -> Option<VertexAndFaceMetricsOfSingleFrame> {
     let image = load_frame_image(frame)?;
 
@@ -197,6 +199,12 @@ fn make_frame_metrics(
     let camera = time_rot * eye;
 
     let occlusions = compute_occlusion_for_all_vertices(&vertices_proj, mesh);
+    let background = BackgroundDetector::new(
+        &image,
+        background_color,
+        background_deviation,
+        background_dilations,
+    );
 
     let mut vertex_metrics = vec![];
     for i in 0..mesh.vertices.len() {
@@ -214,12 +222,7 @@ fn make_frame_metrics(
                 && 0.01 <= pixel[1]
                 && pixel[1] <= 0.99,
             is_occluded: occlusions[i],
-            is_background: detect_background(
-                pixel,
-                &image,
-                background_color,
-                background_deviation,
-            ),
+            is_background: background.detect(pixel),
             ramp_penalty: 0.0,
         });
     }
@@ -249,22 +252,31 @@ pub fn make_all_frame_metrics(
     mesh: &Mesh,
     background_color: Vector3,
     background_deviation: f64,
+    background_dilations: &[f64],
 ) -> VertexAndFaceMetricsOfAllFrames {
     let mut vertex_metrics = vec![];
     let mut face_metrics = vec![];
-    for frame in scan_frames {
-        let scan = scans.get(&frame.scan).unwrap();
-        let (vm, fm) = if let Some(m) = make_frame_metrics(
-            scan,
-            frame,
-            mesh,
-            background_color,
-            background_deviation,
-        ) {
-            (Some(m.vertex_metrics), Some(m.face_metrics))
-        } else {
-            (None, None)
-        };
+
+    let results: Vec<(FrameMetrics, FrameMetrics)> = (0..scan_frames.len())
+        .into_par_iter()
+        .map(|frame_idx| {
+            let frame = &scan_frames[frame_idx];
+            let scan = scans.get(&frame.scan).unwrap();
+            if let Some(m) = make_frame_metrics(
+                scan,
+                frame,
+                mesh,
+                background_color,
+                background_deviation,
+                background_dilations,
+            ) {
+                (Some(m.vertex_metrics), Some(m.face_metrics))
+            } else {
+                (None, None)
+            }
+        })
+        .collect();
+    for (vm, fm) in results {
         vertex_metrics.push(vm);
         face_metrics.push(fm);
     }
@@ -277,7 +289,7 @@ pub fn make_all_frame_metrics(
 pub fn build_cost_for_single_face(metrics: &Metrics) -> f64 {
     if metrics.within_bounds
         && !metrics.is_occluded
-        && !metrics.is_background
+        // There is no `&& !metrics.is_background` clause.
         && metrics.depth > 0.0
         && metrics.dot_product > 0.0
     {
@@ -288,40 +300,65 @@ pub fn build_cost_for_single_face(metrics: &Metrics) -> f64 {
 }
 
 fn build_costs_for_single_frame(
-    frame_idx: usize,
-    metrics: &[FrameMetrics],
-    mesh: &Mesh,
+    metrics: &[Metrics],
+    topo: &BasicMeshTopology,
+    selection_corner_radius: usize,
 ) -> Vec<f64> {
-    if let Some(mets) = &metrics[frame_idx] {
-        mets.iter().map(build_cost_for_single_face).collect()
-    } else {
-        vec![f64::INFINITY; mesh.faces.len()]
+    let mut costs: Vec<f64> =
+        metrics.iter().map(build_cost_for_single_face).collect();
+
+    // Avoid corners.
+    for _ in 0..selection_corner_radius {
+        costs = mesh_faces_spread_infinity(costs, topo);
     }
+
+    costs
+}
+
+pub fn build_all_costs(
+    metrics: &[FrameMetrics],
+    topo: &BasicMeshTopology,
+    selection_corner_radius: usize,
+) -> Vec<Option<Vec<f64>>> {
+    map_vec_option(metrics, &|single_frame_metrics| {
+        build_costs_for_single_frame(
+            single_frame_metrics,
+            topo,
+            selection_corner_radius,
+        )
+    })
 }
 
 pub fn select_cameras(
+    all_costs: &[Option<Vec<f64>>],
     metrics: &[FrameMetrics],
     mesh: &Mesh,
     selection_cost_limit: f64,
 ) -> Vec<Option<usize>> {
     let mut chosen = vec![None; mesh.faces.len()];
     let mut costs = vec![f64::INFINITY; mesh.faces.len()];
-    for frame_idx in 0..metrics.len() {
-        let alt_costs = build_costs_for_single_frame(frame_idx, metrics, mesh);
-        for face_idx in 0..mesh.faces.len() {
-            if alt_costs[face_idx] > selection_cost_limit {
-                continue; // Skip option which is too expensive to be sensible.
-            }
-            if costs[face_idx] > alt_costs[face_idx] {
-                costs[face_idx] = alt_costs[face_idx];
-                chosen[face_idx] = Some(frame_idx);
+    for (frame_idx, all_costs_option) in all_costs.iter().enumerate() {
+        if let Some(alt_costs) = all_costs_option {
+            for face_idx in 0..mesh.faces.len() {
+                if alt_costs[face_idx] > selection_cost_limit
+                    || metrics[frame_idx].as_ref().unwrap()[face_idx]
+                        .is_background
+                {
+                    // Skip option which is too expensive to be sensible.
+                    // Also skip option which is part of the background.
+                    continue;
+                }
+                if costs[face_idx] > alt_costs[face_idx] {
+                    costs[face_idx] = alt_costs[face_idx];
+                    chosen[face_idx] = Some(frame_idx);
+                }
             }
         }
     }
     chosen
 }
 
-fn detect_background(
+pub fn detect_background_static(
     pixel: Vector2,
     image: &RgbImage,
     background_color: Vector3,
@@ -330,11 +367,116 @@ fn detect_background(
     let diff3 = sample_pixel(pixel, image) - background_color;
 
     // Remove the grayscale component from the color difference vector.
-    let s = (1.0 + f64::sqrt(3.0)) / 2.0;
-    let orthonormal_basis = Matrix3x2::new(1.0, -s, s - 1.0, 1.0, s - 1.0, -s)
-        .transpose()
-        / f64::sqrt(3.0);
-    let diff2 = orthonormal_basis * diff3;
+    let gray = diff3.iter().sum::<f64>() / 3.0;
+    let diff2 = diff3 - gray * Vector3::new(1.0, 1.0, 1.0);
 
     diff2.norm() < background_deviation
+}
+
+pub struct BackgroundDetector {
+    image: RgbImage,
+    bgmask: ImageMask,
+}
+
+impl BackgroundDetector {
+    pub fn new(
+        image: &RgbImage,
+        background_color: Vector3,
+        background_deviation: f64,
+        background_dilations: &[f64],
+    ) -> BackgroundDetector {
+        let image = image.clone();
+        let (w, h) = image.dimensions();
+        let (w, h) = (Dim::from_usize(w as usize), Dim::from_usize(h as usize));
+        let mut bgmask = ImageMask::from_element_generic(h, w, false);
+
+        // Short-circuit when possible.
+        if 0.0 < background_deviation {
+            // Pixel-by-pixel detection.
+            for i in 0..bgmask.nrows() {
+                for j in 0..bgmask.ncols() {
+                    let pixel =
+                        ij_to_uv(Vector2::new(i as f64, j as f64), &image);
+                    bgmask[(i, j)] = detect_background_static(
+                        pixel,
+                        &image,
+                        background_color,
+                        background_deviation,
+                    );
+                }
+            }
+
+            // Remove noise.
+            for &r in background_dilations {
+                bgmask = if r > 0.0 {
+                    dilate(&bgmask, r)
+                } else {
+                    erode(&bgmask, -r)
+                };
+            }
+        }
+
+        BackgroundDetector { bgmask, image }
+    }
+
+    pub fn detect(&self, pixel: Vector2) -> bool {
+        let &[i, j] = uv_to_ij(pixel, &self.image).as_ref();
+        self.bgmask
+            .get((i as usize, j as usize))
+            .cloned()
+            .unwrap_or_default()
+    }
+}
+
+pub struct BackgroundDisqualificationParams {
+    pub cost_limit: f64,
+    pub consensus_threshold: f64,
+    pub consensus_spread: usize,
+}
+
+pub fn disqualify_background_faces(
+    chosen_cameras: &mut [Option<usize>],
+    face_metrics: &[FrameMetrics],
+    all_costs: &[Option<Vec<f64>>],
+    mesh: &Mesh,
+    topo: &BasicMeshTopology,
+    params: BackgroundDisqualificationParams,
+) {
+    for face_idx in 0..mesh.faces.len() {
+        if let Some(_frame_idx) = chosen_cameras[face_idx] {
+            // Count how many reasonable frames say that the face is background.
+            let mut bg_count_true = 0;
+            let mut bg_count_false = 0;
+            for other_frame_idx in 0..face_metrics.len() {
+                if let Some(other_frame) =
+                    face_metrics[other_frame_idx].as_ref()
+                {
+                    if all_costs[other_frame_idx].as_ref().unwrap()[face_idx]
+                        < params.cost_limit
+                    {
+                        if other_frame[face_idx].is_background {
+                            bg_count_true += 1;
+                        } else {
+                            bg_count_false += 1;
+                        }
+                    }
+                }
+            }
+
+            // If a big enough proportion say that the face is indeed
+            // background, disqualify it and a few surrounding faces.
+            if bg_count_true as f64
+                > params.consensus_threshold
+                    * (bg_count_true + bg_count_false) as f64
+            {
+                set_mesh_face_value_with_radius(
+                    chosen_cameras,
+                    face_idx,
+                    None,
+                    params.consensus_spread,
+                    topo,
+                );
+            }
+        }
+    }
 }

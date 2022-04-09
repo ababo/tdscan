@@ -69,12 +69,8 @@ pub fn export_to_obj<F: Fn(&Path, &[u8]) -> Result<()>>(
 
     let textured = view.texture.is_some() && !skip_texture;
     if textured {
-        use fm::image::Type::*;
-        let ext = match view.texture.as_ref().unwrap().r#type() {
-            Png => "png",
-            Jpeg => "jpg",
-            None => panic!("unsupported texture image type"),
-        };
+        let ext =
+            fm::image_type_extension(view.texture.as_ref().unwrap().r#type());
         let txr_filename = mtl_dir.join(&view.element).with_extension(ext);
         write_file(&txr_filename, &view.texture.unwrap().data)?;
 

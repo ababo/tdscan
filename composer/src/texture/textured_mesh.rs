@@ -39,20 +39,8 @@ pub struct TextureParams {
     )]
     pub selection_cost_limit: f64,
 
-    #[structopt(
-        help = "Mean color for background detection",
-        long,
-        parse(try_from_str = parse_color_into_vector3),
-        default_value = "#00b140" // Common chroma key green color.
-    )]
-    pub background_color: Vector3,
-
-    #[structopt(
-        help = "Allowed color deviation for background detection",
-        long,
-        default_value = "-1.0" // Disable background extraction by default.
-    )]
-    pub background_deviation: f64,
+    #[structopt(flatten)]
+    pub background: BackgroundParams,
 
     #[structopt(
         help = "Number of steps of color correction",
@@ -73,15 +61,6 @@ pub struct TextureParams {
         default_value = "1.0"
     )]
     pub input_patching_threshold: f64,
-
-    #[structopt(
-        help = "Amount of dilation/erosion to apply \
-                when denoising the background detection (measured in pixels)",
-        long,
-        default_value = "-5.0,10.0",
-        use_delimiter = true
-    )]
-    pub background_dilations: Vec<f64>,
 
     #[structopt(
         help = "Radius for avoiding corners when choosing texture source",
@@ -105,7 +84,7 @@ pub struct TextureParams {
     pub background_consensus_spread: usize,
 }
 
-fn parse_color_into_vector3(src: &str) -> Result<Vector3> {
+pub fn parse_color_into_vector3(src: &str) -> Result<Vector3> {
     let [r, g, b] = parse_color(src)?;
     Ok(Vector3::new(r as f64, g as f64, b as f64))
 }
@@ -133,9 +112,7 @@ impl TexturedMesh {
             scans,
             scan_frames,
             &mesh,
-            params.background_color,
-            params.background_deviation,
-            &params.background_dilations,
+            &params.background,
         );
         let all_costs = build_all_costs(
             &face_metrics,
@@ -149,7 +126,7 @@ impl TexturedMesh {
                 &mesh,
                 params.selection_cost_limit);
         if params.input_patching_threshold > 1.0 {
-            if params.background_deviation >= 0.0 {
+            if params.background.deviation >= 0.0 {
                 form_patches(
                     &mut chosen_cameras,
                     &face_metrics,

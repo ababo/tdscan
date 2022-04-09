@@ -2,6 +2,7 @@ use indexmap::IndexMap;
 use kiddo::distance::squared_euclidean;
 use kiddo::KdTree;
 use rayon::prelude::*;
+use structopt::StructOpt;
 
 use crate::mesh::Mesh;
 use crate::texture::*;
@@ -182,9 +183,7 @@ fn make_frame_metrics(
     scan: &fm::Scan,
     frame: &fm::ScanFrame,
     mesh: &Mesh,
-    background_color: Vector3,
-    background_deviation: f64,
-    background_dilations: &[f64],
+    background_params: &BackgroundParams,
 ) -> Option<VertexAndFaceMetricsOfSingleFrame> {
     let image = load_frame_image(frame)?;
 
@@ -201,9 +200,7 @@ fn make_frame_metrics(
     let occlusions = compute_occlusion_for_all_vertices(&vertices_proj, mesh);
     let background = BackgroundDetector::new(
         &image,
-        background_color,
-        background_deviation,
-        background_dilations,
+       background_params
     );
 
     let mut vertex_metrics = vec![];
@@ -250,9 +247,7 @@ pub fn make_all_frame_metrics(
     scans: &IndexMap<String, fm::Scan>,
     scan_frames: &[fm::ScanFrame],
     mesh: &Mesh,
-    background_color: Vector3,
-    background_deviation: f64,
-    background_dilations: &[f64],
+    background_params: &BackgroundParams,
 ) -> VertexAndFaceMetricsOfAllFrames {
     let mut vertex_metrics = vec![];
     let mut face_metrics = vec![];
@@ -266,9 +261,7 @@ pub fn make_all_frame_metrics(
                 scan,
                 frame,
                 mesh,
-                background_color,
-                background_deviation,
-                background_dilations,
+                background_params,
             ) {
                 (Some(m.vertex_metrics), Some(m.face_metrics))
             } else {
@@ -373,6 +366,33 @@ pub fn detect_background_static(
     diff2.norm() < background_deviation
 }
 
+#[derive(Clone, StructOpt)]
+pub struct BackgroundParams {
+    #[structopt(
+        help = "Mean color for background detection",
+        long = "background-color",
+        parse(try_from_str = parse_color_into_vector3),
+        default_value = "#00b140" // Common chroma key green color.
+    )]
+    pub color: Vector3,
+
+    #[structopt(
+        help = "Allowed color deviation for background detection",
+        long = "background-deviation",
+        default_value = "-1.0" // Disable background extraction by default.
+    )]
+    pub deviation: f64,
+
+    #[structopt(
+        help = "Amount of dilation/erosion to apply \
+                when denoising the background detection (measured in pixels)",
+        long = "background-dilations",
+        default_value = "-5.0,10.0",
+        use_delimiter = true
+    )]
+    pub dilations: Vec<f64>,
+}
+
 pub struct BackgroundDetector {
     image: RgbImage,
     bgmask: ImageMask,
@@ -381,9 +401,7 @@ pub struct BackgroundDetector {
 impl BackgroundDetector {
     pub fn new(
         image: &RgbImage,
-        background_color: Vector3,
-        background_deviation: f64,
-        background_dilations: &[f64],
+        params: &BackgroundParams,
     ) -> BackgroundDetector {
         let image = image.clone();
         let (w, h) = image.dimensions();
@@ -391,7 +409,7 @@ impl BackgroundDetector {
         let mut bgmask = ImageMask::from_element_generic(h, w, false);
 
         // Short-circuit when possible.
-        if 0.0 < background_deviation {
+        if 0.0 <= params.deviation {
             // Pixel-by-pixel detection.
             for i in 0..bgmask.nrows() {
                 for j in 0..bgmask.ncols() {
@@ -400,18 +418,18 @@ impl BackgroundDetector {
                     bgmask[(i, j)] = detect_background_static(
                         pixel,
                         &image,
-                        background_color,
-                        background_deviation,
+                        params.color,
+                        params.deviation,
                     );
                 }
             }
 
             // Remove noise.
-            for &r in background_dilations {
-                bgmask = if r > 0.0 {
-                    dilate(&bgmask, r)
+            for r in &params.dilations {
+                bgmask = if *r > 0.0 {
+                    dilate(&bgmask, *r)
                 } else {
-                    erode(&bgmask, -r)
+                    erode(&bgmask, -*r)
                 };
             }
         }

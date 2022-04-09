@@ -89,3 +89,12 @@ impl<'a> RawRecord<'a> {
             .into_result(|| "failed to decode .fm record".to_string())
     }
 }
+
+pub fn image_type_extension(r#type: image::Type) -> &'static str {
+    use image::Type::*;
+    match r#type {
+        Png => "png",
+        Jpeg => "jpg",
+        None => panic!("unsupported image type"),
+    }
+}

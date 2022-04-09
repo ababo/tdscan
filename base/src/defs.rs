@@ -22,6 +22,7 @@ pub enum ErrorKind {
     JsonError = 10,
     ArgminError = 11,
     PoissonError = 12,
+    ImageError = 13,
 }
 
 #[derive(Debug)]

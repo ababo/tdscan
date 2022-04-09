@@ -85,19 +85,16 @@ impl<R: io::Read> Reader<R> {
 impl<R: io::Read> Read for Reader<R> {
     fn read_raw_record(&mut self) -> Result<Option<RawRecord>> {
         let mut buf = [0; 4];
-        match self.reader.read_exact(&mut buf) {
-            Err(e) => {
-                return if e.kind() == io::ErrorKind::UnexpectedEof {
-                    Ok(None)
-                } else {
-                    Err(Error::with_source(
-                        MalformedData,
-                        "failed to read .fm record size".to_string(),
-                        e,
-                    ))
-                }
-            }
-            Ok(()) => (),
+        if let Err(e) = self.reader.read_exact(&mut buf) {
+            return if e.kind() == io::ErrorKind::UnexpectedEof {
+                Ok(None)
+            } else {
+                Err(Error::with_source(
+                    MalformedData,
+                    "failed to read .fm record size".to_string(),
+                    e,
+                ))
+            };
         }
 
         let size = u32::from_le_bytes(buf) as usize;

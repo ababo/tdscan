@@ -453,13 +453,14 @@ pub struct BackgroundDisqualificationParams {
 }
 
 pub fn disqualify_background_faces(
-    chosen_cameras: &mut [Option<usize>],
+    chosen_cameras: &mut Vec<Option<usize>>,
     face_metrics: &[FrameMetrics],
     all_costs: &[Option<Vec<f64>>],
     mesh: &Mesh,
     topo: &BasicMeshTopology,
     params: BackgroundDisqualificationParams,
 ) {
+    let mut chosen_cameras_result = chosen_cameras.clone();
     for face_idx in 0..mesh.faces.len() {
         if let Some(_frame_idx) = chosen_cameras[face_idx] {
             // Count how many reasonable frames say that the face is background.
@@ -488,7 +489,7 @@ pub fn disqualify_background_faces(
                     * (bg_count_true + bg_count_false) as f64
             {
                 set_mesh_face_value_with_radius(
-                    chosen_cameras,
+                    &mut chosen_cameras_result,
                     face_idx,
                     None,
                     params.consensus_spread,
@@ -497,4 +498,5 @@ pub fn disqualify_background_faces(
             }
         }
     }
+    *chosen_cameras = chosen_cameras_result;
 }

@@ -50,12 +50,6 @@ pub struct TextureParams {
     pub color_correction_steps: usize,
 
     #[structopt(
-        help = "Whether to apply a constant offset after color correction",
-        long
-    )]
-    pub color_correction_final_offset: bool,
-
-    #[structopt(
         help = "Maximum cost ratio during input patch formation",
         long,
         default_value = "1.0"
@@ -180,7 +174,6 @@ impl TexturedMesh {
             &chosen_cameras,
             &images,
             params.color_correction_steps,
-            params.color_correction_final_offset,
         );
         let (mut buffer, mut emask) = bake_texture(
             &mesh,

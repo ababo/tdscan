@@ -10,7 +10,6 @@ x1# Documentation for the texturing procedure
 | --background-deviation           | f64            |          | 0.0 <= _ <= 255*sqrt(8/3) | -1.0 (= disabled)
 | --background-dilations           | Vec&lt;f64&gt; | pixels   | _ < 0.0 or 0.0 < _        | -5.0,10.0 (disabled = 0.0)
 | --color-correction-steps         | usize          |          |                           | 10 (disabled = 0)
-| --color-correction-final-offset  | bool           |          |                           | (unset, so disabled)
 | --input-patching-threshold       | f64            | old cost | 1.0 <= _                  | 1.0 (= disabled)
 | --selection-corner-radius        | usize          | edges    |                           | 0 (= disabled)
 | --background-consensus-threshold | f64            |          | 0.0 <= _ <= 1.0           | 0.5 (disabled = 1.0)
@@ -28,7 +27,7 @@ Since input patching has a tendency to leak some **background color** into the t
 
 ## Color correction
 
-Now that faces have been assigned their image source, there remains to hide the visible seams resulting from an image source difference. Conceptually, this is done by replacing the texture `img` by `img' := img + u` where `u` is a certain correction term. This term is chosen so as to make neighbouring face colors coincide at face boundaries, and subject to this constraint, a secondary condition is to minimize the surface integral of `||grad(u)||^2`. A piecewise linear discretization is performed, whose level of detail is the same as the given mesh. The resulting sparse linear system of equations is solved by `--color-correction-steps` steps of the conjugate gradients method. (When this parameter value is set to 0 color correction is disabled altogether. When it is set to >= 1 the initial guess counts as the first step.) If there are faces that are without image source, the initial guess at the solution amounts to a simple imputation of missing data. Since the linear operator `grad` has uniform brightness as part of its nullspace, an optional step `--color-correction-final-offset` may be enabled to adjust the average brightness of the result to be as close to that of the original as possible.
+Now that faces have been assigned their image source, there remains to hide the visible seams resulting from an image source difference. Conceptually, this is done by replacing the texture `img` by `img' := img + u` where `u` is a certain correction term. This term is chosen so as to make neighbouring face colors coincide at face boundaries, and subject to this constraint, a secondary condition is to minimize the surface integral of `||grad(u)||^2`. A piecewise linear discretization is performed, whose level of detail is the same as the given mesh. The resulting sparse linear system of equations is solved by `--color-correction-steps` steps of the conjugate gradients method. (When this parameter value is set to 0 color correction is disabled altogether. When it is set to >= 1 the initial guess counts as the first step.) If there are faces that are without image source, the initial guess at the solution amounts to a simple imputation of missing data.
 
 ## Texture atlas baking
 

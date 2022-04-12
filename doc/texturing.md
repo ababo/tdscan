@@ -1,25 +1,27 @@
-x1# Documentation for the texturing procedure
+# Documentation for the texturing procedure
 
-| Name                             | Type           | Units    | Valid range               | Default value             | 
-| :------------------------------- | :------------- | :------- | :------------------------ | :------------------------ |
-| --patch-spacing                  | f64            | images   | 0.0 <= _ <= 1.0           | 0.005
-| --gutter-size                    | usize          | pixels   |                           | 3
-| --image-resolution               | usize          | pixels   |                           | 4096
-| --selection-cost-limit           | f64            |          | 0.0 <= _                  | 10.0
-| --background-color               | color          |          | 0..=255                   | #00b140
-| --background-deviation           | f64            |          | 0.0 <= _ <= 255*sqrt(8/3) | -1.0 (= disabled)
-| --background-dilations           | Vec&lt;f64&gt; | pixels   | _ < 0.0 or 0.0 < _        | -5.0,10.0 (disabled = 0.0)
-| --color-correction-steps         | usize          |          |                           | 10 (disabled = 0)
-| --input-patching-threshold       | f64            | old cost | 1.0 <= _                  | 1.0 (= disabled)
-| --selection-corner-radius        | usize          | edges    |                           | 0 (= disabled)
-| --background-consensus-threshold | f64            |          | 0.0 <= _ <= 1.0           | 0.5 (disabled = 1.0)
-| --background-consensus-spread    | usize          | edges    |                           | 2
+| Name                             | Type                | Units    | Valid range               | Default value             | 
+| :------------------------------- | :------------------ | :------- | :------------------------ | :------------------------ |
+| --patch-spacing                  | f64                 | images   | 0.0 <= _ <= 1.0           | 0.005
+| --gutter-size                    | usize               | pixels   |                           | 3
+| --image-resolution               | usize               | pixels   |                           | 4096
+| --selection-cost-limit           | f64                 |          | 0.0 <= _                  | 10.0
+| --background-color               | color               |          | 0..=255                   | #00b140
+| --background-deviation           | f64                 |          | 0.0 <= _ <= 255*sqrt(8/3) | -1.0 (= disabled)
+| --background-dilations           | Vec&lt;f64&gt;      | pixels   | _ < 0.0 or 0.0 < _        | -5.0,10.0 (disabled = 0.0)
+| --color-correction-steps         | usize               |          |                           | 10 (disabled = 0)
+| --input-patching-threshold       | f64                 | old cost | 1.0 <= _                  | 1.0 (= disabled)
+| --selection-corner-radius        | usize               | edges    |                           | 0 (= disabled)
+| --background-consensus-threshold | f64                 |          | 0.0 <= _ <= 1.0           | 0.5 (disabled = 1.0)
+| --background-consensus-spread    | usize               | edges    |                           | 2
+| --missing-data-color             | Option&lt;color&gt; |          | 0..=255                   | none
+
 
 ## Input selection
 
 The **background detection** step measures the magnitude of the difference between `--background-color` and the color of a given image pixel, modulo the brightness component. If the result is below `--background-deviation` then the pixel counts preliminarily as part of the background. Since this result may be a little noisy and not perfectly reliable either right at the edge of a scanned object or in certain regions with otherwise confusing colors, morphology operations can be applied to the preliminary results. These are specified as a list of `--background.dilations`, in which negative values mean _erosion_: spots of background color that are smaller than a certain radius will not be counted as background; and _dilation_: pixels within a certain radius from the background will be counted as part of it. For instance if `--background.dilations=-1.0,3.0,-5.0,10.0` this means to erode by 1 pixel, then dilate by 3 pixels, then erode by 5 pixels, then dilate by 10 pixels. (If you are not familiar with the operations of erosion and dilation, consult https://en.wikipedia.org/wiki/Mathematical_morphology and in particular the images https://commons.wikimedia.org/wiki/File:Erosion.png and https://commons.wikimedia.org/wiki/File:Dilation.png shown on that page. You can also use the `composer extract-scan-images` command in conjunction with these options to see the effects and experiment a little.) Finally, a mesh face is classified as being part of the background in a particular image, precisely when the pixel of at least one of its vertices is classified as being part of the background.
 
-Using the background detection results and various other metrics having to do with orientation and alignment with the camera view axis, a **selection cost** is then calculated for each `(image, face)` pair. This cost, when it is not infinite due to hard constraints (i.e., face must be in front of the camera, and must not be occluded), is the cosecant of the angle formed between a face normal and the camera view axis. An optional step is then performed, which rules a pair `(image, face)` as impossible (i.e. having infinite cost) if `(image, face')` is impossible for some `face'` less than `--selection-corner-radius` steps (i.e. crossings from face to face via an edge) from `face`. This can be useful when the geometry parameters have some error in them. Finally, **the best image source is chosen for each face**, as determined by the costs just calculated. If the minimum cost of a face exceeds `--selection-cost-limit` then the face won't get its texture from any image (so it will filled in the color correction step below), because they are all considered too low quality.
+Using the background detection results and various other metrics having to do with orientation and alignment with the camera view axis, a **selection cost** is then calculated for each `(image, face)` pair. This cost, when it is not infinite due to hard constraints (i.e., face must be in front of the camera, and must not be occluded), is the cosecant of the angle formed between a face normal and the camera view axis. An optional step is then performed, which rules a pair `(image, face)` as impossible (i.e. having infinite cost) if `(image, face')` is impossible for some `face'` less than `--selection-corner-radius` steps (i.e. crossings from face to face via an edge) from `face`. This can be useful when the geometry parameters have some error in them. Finally, **the best image source is chosen for each face**, as determined by the costs just calculated. If the minimum cost of a face exceeds `--selection-cost-limit` then the face won't get its texture from any image (so it will be filled in naturally in the color correction step below, or optionally with an artificial color as specified by `--missing-data-color`), because they are all considered too low quality.
 
 Next **input patching** is performed, in order to make it more common for neighbouring faces to have the exact same image source. The mechanisn for this is as follows: Pre-existing patches of faces with a common image source are allowed to steal nearby faces, as long as the cost ratio incurred by this is below `--input-patching-threshold`. In other words, when there is a patch of neighbouring faces `A1, A2, A3, ..., An` that all have a common image source `im1` already, and a face `B` neighbouring any one of these, with a texture source `im2`, then input patching will typically change the source of `B` to be `im1` if this is possible without incurring too great a cost. The bigger patches get to act first, and successively smaller patches get their chance to steal from their neighbours until the whole mesh has been traversed. The same face cannot be stolen twice.
 

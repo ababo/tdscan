@@ -8,30 +8,48 @@ use crate::texture::{
     *,
 };
 
+pub struct ImageTriangleMut<'a> {
+    pub image: &'a mut RgbImage,
+    pub uv_coords: [Vector2; 3],
+}
+
+pub struct ImageTriangle<'a> {
+    pub image: &'a RgbImage,
+    pub uv_coords: [Vector2; 3],
+}
+
+fn uv3_to_ij3(uv_coords: [Vector2; 3], image: &RgbImage) -> [Vector2; 3] {
+    [
+        uv_to_ij(uv_coords[0], image),
+        uv_to_ij(uv_coords[1], image),
+        uv_to_ij(uv_coords[2], image),
+    ]
+}
+
 fn copy_triangle(
-    image0: &RgbImage,
-    uv_coords0: [Vector2; 3],
-    image1: &mut RgbImage,
-    uv_coords1: [Vector2; 3],
+    input: &Result<ImageTriangle, Vector3>,
+    output: &mut ImageTriangleMut,
     emptiness_mask: &mut ImageMask,
     face_idx: usize,
     color_correction: &ColorCorrection,
 ) -> Option<()> {
     // Rescale coordinates 0 <= [u,v] <= 1 to 0 <= [i,j] <= [h,w].
-    let ij00 = uv_to_ij(uv_coords0[0], image0);
-    let ij01 = uv_to_ij(uv_coords0[1], image0);
-    let ij02 = uv_to_ij(uv_coords0[2], image0);
-    let ij10 = uv_to_ij(uv_coords1[0], image1);
-    let ij11 = uv_to_ij(uv_coords1[1], image1);
-    let ij12 = uv_to_ij(uv_coords1[2], image1);
+    let ijs0 = match input {
+        Ok(input1) => Some(uv3_to_ij3(input1.uv_coords, input1.image)),
+        Err(_) => None,
+    };
+    let ijs1 = uv3_to_ij3(output.uv_coords, output.image);
 
     // Create local coordinate systems in both source and target images.
-    let bcs0 = BarycentricCoordinateSystem::new([ij00, ij01, ij02])?;
-    let bcs1 = BarycentricCoordinateSystem::new([ij10, ij11, ij12])?;
+    let bcs0 = match input {
+        Ok(_) => Some(BarycentricCoordinateSystem::new(ijs0.unwrap()))?,
+        Err(_) => None,
+    };
+    let bcs1 = BarycentricCoordinateSystem::new(ijs1)?;
 
     // Create a bounding box for the triangle in the target image.
     let g = |ij: Vector2| [ij[0] as u32, ij[1] as u32];
-    let rect1 = Rectangle::bounding(&[g(ij10), g(ij11), g(ij12)]);
+    let rect1 = Rectangle::bounding(&[g(ijs1[0]), g(ijs1[1]), g(ijs1[2])]);
 
     // Iterate over pixels inside the bounding box and fetch color values.
     let mut dbg_any = false;
@@ -39,15 +57,26 @@ fn copy_triangle(
         for j1 in rect1.pos[1]..=rect1.pos[1] + rect1.size[1] {
             let ij1 = Vector2::new(i1 as f64, j1 as f64);
             let bary = bcs1.infer(ij1);
-            let ij0 = bcs0.apply(bary);
-            let uv0 = ij_to_uv(ij0, image0);
+            let color = match input {
+                // Sample color value and apply color correction.
+                Ok(input1) => {
+                    let ij0 = bcs0.as_ref().unwrap().apply(bary);
+                    let uv0 = ij_to_uv(ij0, input1.image);
 
-            let sampled_color = sample_pixel(uv0, image0);
-            let offset = color_correction.sample_color_offset(face_idx, bary);
-            let color = sampled_color + offset;
+                    let sampled_color = sample_pixel(uv0, input1.image);
+                    let offset =
+                        color_correction.sample_color_offset(face_idx, bary);
+                    sampled_color + offset
+                }
+                // Allow missing data to be filled in with user-specified color.
+                Err(color) => *color,
+            };
 
-            if all_nonneg(bary) && i1 < image1.height() && j1 < image1.width() {
-                set_pixel_ij_as_vector3(i1, j1, color, image1);
+            if all_nonneg(bary)
+                && i1 < output.image.height()
+                && j1 < output.image.width()
+            {
+                set_pixel_ij_as_vector3(i1, j1, color, output.image);
                 emptiness_mask[(i1 as usize, j1 as usize)] = false;
                 dbg_any = true;
             }
@@ -60,53 +89,64 @@ fn copy_triangle(
     }
 }
 
+pub struct BakingParams {
+    pub image_res: usize,
+    pub missing_data_color: Option<Vector3>,
+}
+
 pub fn bake_texture(
     mesh: &Mesh,
     images: &[Option<RgbImage>],
     chosen_cameras: &[Option<usize>],
     vertex_metrics: &[FrameMetrics],
     uv_coords_tri: &[[Vector2; 3]],
-    image_res: usize,
     color_correction: &ColorCorrection,
+    params: &BakingParams,
 ) -> (RgbImage, ImageMask) {
-    let mut buffer = RgbImage::new(image_res as u32, image_res as u32);
-    let dim = Dim::from_usize(image_res);
+    let mut buffer =
+        RgbImage::new(params.image_res as u32, params.image_res as u32);
+    let dim = Dim::from_usize(params.image_res);
     let mut emask = ImageMask::from_element_generic(dim, dim, true);
 
     let dummy_image_source_black = dummy_image_source(Rgb([0, 0, 0]));
 
     for face_idx in 0..mesh.faces.len() {
-        let img0;
-        let uvs0;
-        if let Some(frame_idx) = chosen_cameras[face_idx] {
-            // Load image source.
-            img0 = images[frame_idx].as_ref().unwrap();
+        let input_triangle = if let Some(frame_idx) = chosen_cameras[face_idx] {
+            Ok(ImageTriangle {
+                // Load image source.
+                image: images[frame_idx].as_ref().unwrap(),
 
-            // Define coordinates for image source.
-            uvs0 = uv_coords_from_metrics(
-                face_idx,
-                frame_idx,
-                vertex_metrics,
-                mesh,
-            );
+                // Define coordinates for image source.
+                uv_coords: uv_coords_from_metrics(
+                    face_idx,
+                    frame_idx,
+                    vertex_metrics,
+                    mesh,
+                ),
+            })
+        } else if let Some(color) = params.missing_data_color {
+            Err(color)
         } else {
-            img0 = &dummy_image_source_black;
-            uvs0 = [
-                Vector2::new(0.0, 0.0),
-                Vector2::new(1.0, 0.0),
-                Vector2::new(0.0, 1.0),
-            ];
-        }
+            Ok(ImageTriangle {
+                image: &dummy_image_source_black,
+                uv_coords: [
+                    Vector2::new(0.0, 0.0),
+                    Vector2::new(1.0, 0.0),
+                    Vector2::new(0.0, 1.0),
+                ],
+            })
+        };
 
         // Define coordinates for output buffer.
-        let uvs1 = uv_coords_tri[face_idx];
+        let mut output_triangle = ImageTriangleMut {
+            image: &mut buffer,
+            uv_coords: uv_coords_tri[face_idx],
+        };
 
         // Copy triangle.
         copy_triangle(
-            img0,
-            uvs0,
-            &mut buffer,
-            uvs1,
+            &input_triangle,
+            &mut output_triangle,
             &mut emask,
             face_idx,
             color_correction,

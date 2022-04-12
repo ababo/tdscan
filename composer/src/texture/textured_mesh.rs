@@ -76,6 +76,13 @@ pub struct TextureParams {
         default_value = "2"
     )]
     pub background_consensus_spread: usize,
+
+    #[structopt(
+        help = "Artificial color to be used to mark missing data",
+        long,
+        parse(try_from_str = parse_color_into_vector3),
+    )]
+    missing_data_color: Option<Vector3>,
 }
 
 pub fn parse_color_into_vector3(src: &str) -> Result<Vector3> {
@@ -181,8 +188,11 @@ impl TexturedMesh {
             &chosen_cameras,
             &vertex_metrics,
             &uv_coords_tri,
-            params.image_resolution,
             &color_correction,
+            &BakingParams {
+                image_res: params.image_resolution,
+                missing_data_color: params.missing_data_color,
+            },
         );
         extrapolate_gutter(&mut buffer, &mut emask, params.gutter_size);
 

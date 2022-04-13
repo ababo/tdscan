@@ -42,7 +42,7 @@ fn copy_triangle(
 
     // Create local coordinate systems in both source and target images.
     let bcs0 = match input {
-        Ok(_) => Some(BarycentricCoordinateSystem::new(ijs0.unwrap()))?,
+        Ok(_) => Some(BarycentricCoordinateSystem::new(ijs0.unwrap())?),
         Err(_) => None,
     };
     let bcs1 = BarycentricCoordinateSystem::new(ijs1)?;

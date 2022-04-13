@@ -202,7 +202,6 @@ impl ColorCorrection {
         chosen_cameras: &[Option<usize>],
         images: &[Option<RgbImage>],
         color_correction_steps: usize,
-        color_correction_final_offset: bool,
     ) -> ColorCorrection {
         if color_correction_steps == 0 {
             return ColorCorrection {
@@ -265,31 +264,6 @@ impl ColorCorrection {
                         discontinuous_lhs[face_idx * 3 + local_idx]
                             - color_samples[face_idx][local_idx][color_idx];
                 }
-            }
-        }
-
-        // Offset the solution to be maximally consistent with the samples.
-        if color_correction_final_offset {
-            let known_color_offsets: Vec<Vector3> = face_vertex_color_offsets
-                .iter()
-                .enumerate()
-                .filter_map(|(face_idx, &colors)| {
-                    if chosen_cameras[face_idx].is_some() {
-                        Some(colors)
-                    } else {
-                        None
-                    }
-                })
-                .flatten()
-                .collect();
-            let average_color_offset =
-                known_color_offsets.iter().sum::<Vector3>()
-                    / f64::max(known_color_offsets.len() as f64, 1.0);
-            let average_color_offset_grayscale = Vector3::from_element(
-                average_color_offset.iter().sum::<f64>() / 3.0,
-            );
-            for i in face_vertex_color_offsets.iter_mut().flatten() {
-                *i -= average_color_offset_grayscale;
             }
         }
 

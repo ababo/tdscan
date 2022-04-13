@@ -50,12 +50,6 @@ pub struct TextureParams {
     pub color_correction_steps: usize,
 
     #[structopt(
-        help = "Whether to apply a constant offset after color correction",
-        long
-    )]
-    pub color_correction_final_offset: bool,
-
-    #[structopt(
         help = "Maximum cost ratio during input patch formation",
         long,
         default_value = "1.0"
@@ -82,6 +76,13 @@ pub struct TextureParams {
         default_value = "2"
     )]
     pub background_consensus_spread: usize,
+
+    #[structopt(
+        help = "Artificial color to be used to mark missing data",
+        long,
+        parse(try_from_str = parse_color_into_vector3),
+    )]
+    missing_data_color: Option<Vector3>,
 }
 
 pub fn parse_color_into_vector3(src: &str) -> Result<Vector3> {
@@ -180,7 +181,6 @@ impl TexturedMesh {
             &chosen_cameras,
             &images,
             params.color_correction_steps,
-            params.color_correction_final_offset,
         );
         let (mut buffer, mut emask) = bake_texture(
             &mesh,
@@ -188,8 +188,11 @@ impl TexturedMesh {
             &chosen_cameras,
             &vertex_metrics,
             &uv_coords_tri,
-            params.image_resolution,
             &color_correction,
+            &BakingParams {
+                image_res: params.image_resolution,
+                missing_data_color: params.missing_data_color,
+            },
         );
         extrapolate_gutter(&mut buffer, &mut emask, params.gutter_size);
 

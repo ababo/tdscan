@@ -77,7 +77,6 @@ pub struct Metrics {
     pub within_bounds: bool,
     pub is_occluded: bool,
     pub is_background: bool,
-    pub ramp_penalty: f64,
 }
 
 pub type FrameMetrics = Option<Vec<Metrics>>; // Either by vertex, or by face.
@@ -91,7 +90,6 @@ fn summarize_metrics(ms: &[Metrics]) -> Metrics {
         within_bounds: ms.iter().all(|m| m.within_bounds),
         is_occluded: ms.iter().any(|m| m.is_occluded),
         is_background: ms.iter().any(|m| m.is_background),
-        ramp_penalty: ms.iter().map(|m| m.ramp_penalty).sum::<f64>(),
     }
 }
 
@@ -220,7 +218,6 @@ fn make_frame_metrics(
                 && pixel[1] <= 0.99,
             is_occluded: occlusions[i],
             is_background: background.detect(pixel),
-            ramp_penalty: 0.0,
         });
     }
     let face_metrics = mesh
@@ -286,7 +283,7 @@ pub fn build_cost_for_single_face(metrics: &Metrics) -> f64 {
         && metrics.depth > 0.0
         && metrics.dot_product > 0.0
     {
-        1.0 / metrics.dot_product + metrics.ramp_penalty
+        1.0 / metrics.dot_product
     } else {
         f64::INFINITY
     }
@@ -453,13 +450,14 @@ pub struct BackgroundDisqualificationParams {
 }
 
 pub fn disqualify_background_faces(
-    chosen_cameras: &mut [Option<usize>],
+    chosen_cameras: &mut Vec<Option<usize>>,
     face_metrics: &[FrameMetrics],
     all_costs: &[Option<Vec<f64>>],
     mesh: &Mesh,
     topo: &BasicMeshTopology,
     params: BackgroundDisqualificationParams,
 ) {
+    let mut chosen_cameras_result = chosen_cameras.clone();
     for face_idx in 0..mesh.faces.len() {
         if let Some(_frame_idx) = chosen_cameras[face_idx] {
             // Count how many reasonable frames say that the face is background.
@@ -488,7 +486,7 @@ pub fn disqualify_background_faces(
                     * (bg_count_true + bg_count_false) as f64
             {
                 set_mesh_face_value_with_radius(
-                    chosen_cameras,
+                    &mut chosen_cameras_result,
                     face_idx,
                     None,
                     params.consensus_spread,
@@ -497,4 +495,5 @@ pub fn disqualify_background_faces(
             }
         }
     }
+    *chosen_cameras = chosen_cameras_result;
 }

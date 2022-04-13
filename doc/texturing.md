@@ -1,20 +1,20 @@
 # Documentation for the texturing procedure
 
-| Name                             | Type                | Units    | Valid range               | Default value             | 
-| :------------------------------- | :------------------ | :------- | :------------------------ | :------------------------ |
-| --patch-spacing                  | f64                 | images   | 0.0 <= _ <= 1.0           | 0.005
-| --gutter-size                    | usize               | pixels   |                           | 3
-| --image-resolution               | usize               | pixels   |                           | 4096
-| --selection-cost-limit           | f64                 |          | 0.0 <= _                  | 10.0
-| --background-color               | color               |          | 0..=255                   | #00b140
-| --background-deviation           | f64                 |          | 0.0 <= _ <= 255*sqrt(8/3) | -1.0 (= disabled)
-| --background-dilations           | Vec&lt;f64&gt;      | pixels   | _ < 0.0 or 0.0 < _        | -5.0,10.0 (disabled = 0.0)
-| --color-correction-steps         | usize               |          |                           | 10 (disabled = 0)
-| --input-patching-threshold       | f64                 | old cost | 1.0 <= _                  | 1.0 (= disabled)
-| --selection-corner-radius        | usize               | edges    |                           | 0 (= disabled)
-| --background-consensus-threshold | f64                 |          | 0.0 <= _ <= 1.0           | 0.5 (disabled = 1.0)
-| --background-consensus-spread    | usize               | edges    |                           | 2
-| --missing-data-color             | Option&lt;color&gt; |          | 0..=255                   | none
+| Name                             | Type                    | Units    | Valid range               | Default value              |
+| :------------------------------- | :---------------------- | :------- | :------------------------ | :------------------------- |
+| --patch-spacing                  | f64                     | images   | 0.0 <= _ <= 1.0           | 0.005                      |
+| --gutter-size                    | usize                   | pixels   |                           | 3                          |
+| --image-resolution               | usize                   | pixels   |                           | 4096                       |
+| --selection-cost-limit           | f64                     |          | 0.0 <= _                  | 10.0                       |
+| --background-color               | web-color               |          | web-color range           | #00b140                    |
+| --background-deviation           | f64                     |          | 0.0 <= _ <= 255*sqrt(8/3) | -1.0 (= disabled)          |
+| --background-dilations           | Vec&lt;f64&gt;          | pixels   | _ < 0.0 or 0.0 < _        | -5.0,10.0 (disabled = 0.0) |
+| --color-correction-steps         | usize                   |          |                           | 10 (disabled = 0)          |
+| --input-patching-threshold       | f64                     | old cost | 1.0 <= _                  | 1.0 (= disabled)           |
+| --selection-corner-radius        | usize                   | edges    |                           | 0 (= disabled)             |
+| --background-consensus-threshold | f64                     |          | 0.0 <= _ <= 1.0           | 0.5 (disabled = 1.0)       |
+| --background-consensus-spread    | usize                   | edges    |                           | 2                          |
+| --missing-data-color             | Option&lt;web-color&gt; |          | web-color range           | none                       |
 
 
 ## Input selection

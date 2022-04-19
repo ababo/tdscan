@@ -82,7 +82,7 @@ pub struct TextureParams {
         long,
         parse(try_from_str = parse_color_into_vector3),
     )]
-    missing_data_color: Option<Vector3>,
+    pub missing_data_color: Option<Vector3>,
 }
 
 pub fn parse_color_into_vector3(src: &str) -> Result<Vector3> {

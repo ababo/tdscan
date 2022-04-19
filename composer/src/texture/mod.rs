@@ -148,24 +148,20 @@ impl BasicMeshTopology {
 
 pub struct BarycentricCoordinateSystem {
     vs: [Vector2; 3],
-    n22: nalgebra::QR<f64, nalgebra::U2, nalgebra::U2>,
+    inv22: Matrix2,
 }
 
 impl BarycentricCoordinateSystem {
     pub fn new(vs: [Vector2; 3]) -> Option<Self> {
         let m22 = Matrix2::from_columns(&[vs[1] - vs[0], vs[2] - vs[0]]);
-        let n22 = m22.qr();
-        if n22.is_invertible() {
-            Some(Self { vs, n22 })
-        } else {
-            None // Vectors v[0] and v[1] are parallel.
-        }
+        // None is returned when the triangle is degenerate.
+        m22.try_inverse().map(|inv22| Self { vs, inv22 })
     }
 
     // The functions 'infer' and 'apply' are mutually inverse.
 
     pub fn infer(&self, v: Vector2) -> Vector3 {
-        let &[l1, l2] = self.n22.solve(&(v - self.vs[0])).unwrap().as_ref();
+        let &[l1, l2] = (self.inv22 * (v - self.vs[0])).as_ref();
         Vector3::new(1.0 - l1 - l2, l1, l2)
     }
 

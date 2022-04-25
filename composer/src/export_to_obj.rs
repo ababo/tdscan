@@ -22,6 +22,14 @@ pub struct ExportToObjCommand {
 
     #[structopt(help = "Skip texture output", long, short = "g")]
     skip_texture: bool,
+
+    #[structopt(
+        help = "Skip texture output",
+        long,
+        short = "m",
+        conflicts_with = "skip-texture"
+    )]
+    material_name: Option<String>,
 }
 
 impl ExportToObjCommand {
@@ -37,22 +45,51 @@ impl ExportToObjCommand {
             .parent()
             .unwrap_or_else(|| ".".as_ref());
 
-        export_to_obj(
-            reader.as_mut(),
-            &mut writer,
-            |p, d| fs::write_file(p, d),
-            mtl_dir,
-            self.skip_texture,
-        )
+        let material = if let Some(name) = &self.material_name {
+            name.clone()
+        } else {
+            const DEFAULT: &str = "material";
+            self.output
+                .path
+                .as_deref()
+                .unwrap_or_else(|| DEFAULT.as_ref())
+                .file_stem()
+                .unwrap_or_else(|| DEFAULT.as_ref())
+                .to_owned()
+                .into_string()
+                .unwrap_or_else(|_| DEFAULT.to_string())
+        };
+
+        let mtl = if self.skip_texture {
+            None
+        } else {
+            Some(MtlParams {
+                dir: mtl_dir,
+                name: material.as_str(),
+                write_file: |p, d| fs::write_file(p, d),
+            })
+        };
+
+        export_to_obj(reader.as_mut(), &mut writer, mtl)
     }
 }
 
+pub struct MtlParams<'a, F: Fn(&Path, &[u8]) -> Result<()>> {
+    pub dir: &'a Path,
+    pub name: &'a str,
+    pub write_file: F,
+}
+
+#[allow(dead_code)]
+#[allow(clippy::type_complexity)]
+pub const NO_MTL: Option<MtlParams<fn(&Path, &[u8]) -> Result<()>>> = None;
+
+// TODO: Rewrite when Rust issue #53667 is resolved.
+#[allow(clippy::unnecessary_unwrap)]
 pub fn export_to_obj<F: Fn(&Path, &[u8]) -> Result<()>>(
     reader: &mut dyn fm::Read,
     writer: &mut dyn io::Write,
-    write_file: F,
-    mtl_dir: &Path,
-    skip_texture: bool,
+    mtl_params: Option<MtlParams<F>>,
 ) -> Result<()> {
     let (view, state) = read_element(reader)?;
 
@@ -67,22 +104,22 @@ pub fn export_to_obj<F: Fn(&Path, &[u8]) -> Result<()>>(
             .into_result(write_err)?;
     }
 
-    let textured = view.texture.is_some() && !skip_texture;
-    if textured {
+    if view.texture.is_some() && mtl_params.is_some() {
+        let mtl = mtl_params.unwrap();
         let ext =
             fm::image_type_extension(view.texture.as_ref().unwrap().r#type());
-        let txr_filename = mtl_dir.join(&view.element).with_extension(ext);
-        write_file(&txr_filename, &view.texture.unwrap().data)?;
+        let txr_filename = mtl.dir.join(mtl.name).with_extension(ext);
+        (mtl.write_file)(&txr_filename, &view.texture.unwrap().data)?;
 
-        let mtl_filename = mtl_dir.join(&view.element).with_extension("mtl");
-        let mut mtl_content = format!("newmtl {}\n", &view.element);
-        mtl_content += format!("map_Ka {}.{}\n", &view.element, ext).as_str();
-        mtl_content += format!("map_Kd {}.{}\n", &view.element, ext).as_str();
-        write_file(&mtl_filename, mtl_content.as_bytes())?;
+        let mtl_filename = mtl.dir.join(mtl.name).with_extension("mtl");
+        let mut mtl_content = format!("newmtl {}\n", mtl.name);
+        mtl_content += format!("map_Ka {}.{}\n", mtl.name, ext).as_str();
+        mtl_content += format!("map_Kd {}.{}\n", mtl.name, ext).as_str();
+        (mtl.write_file)(&mtl_filename, mtl_content.as_bytes())?;
 
-        writeln!(writer, "mtllib {}.mtl", &view.element)
+        writeln!(writer, "mtllib {}.mtl", mtl.name)
             .into_result(write_err)?;
-        writeln!(writer, "usemtl {}", &view.element).into_result(write_err)?;
+        writeln!(writer, "usemtl {}", mtl.name).into_result(write_err)?;
 
         for p in view.texture_points {
             writeln!(writer, "vt {} {}", p.x, 1.0 - p.y)
@@ -294,12 +331,12 @@ mod tests {
         let mut reader = create_element();
 
         let write_file = |p: &Path, d: &[u8]| {
-            if p == &PathBuf::from("/some/path/element.mtl") {
+            if p == &PathBuf::from("/some/path/abc.mtl") {
                 assert_eq!(
                     str::from_utf8(d).unwrap(),
-                    "newmtl element\nmap_Ka element.jpg\nmap_Kd element.jpg\n"
+                    "newmtl abc\nmap_Ka abc.jpg\nmap_Kd abc.jpg\n"
                 );
-            } else if p == &PathBuf::from("/some/path/element.jpg") {
+            } else if p == &PathBuf::from("/some/path/abc.jpg") {
                 assert_eq!(d, &[1, 2, 3]);
             } else {
                 panic!("unexpected write_file path");
@@ -311,9 +348,11 @@ mod tests {
         export_to_obj(
             &mut reader,
             &mut writer,
-            write_file,
-            &PathBuf::from("/some/path"),
-            false,
+            Some(MtlParams {
+                dir: &PathBuf::from("/some/path"),
+                name: "abc",
+                write_file,
+            }),
         )
         .unwrap();
 
@@ -325,8 +364,8 @@ vn 2 3 4
 vn 3 4 5
 vn 4 5 6
 vn 5 6 7
-mtllib element.mtl
-usemtl element
+mtllib abc.mtl
+usemtl abc
 vt 1 -1
 vt 3 -3
 vt 5 -5
@@ -341,19 +380,8 @@ f 1/1/1 2/2/2 4/4/4
     fn test_export_non_textured_element() {
         let mut reader = create_element();
 
-        let write_file = |_p: &Path, _d: &[u8]| {
-            panic!("unexpected write_file call");
-        };
-
         let mut writer = Vec::new();
-        export_to_obj(
-            &mut reader,
-            &mut writer,
-            write_file,
-            &PathBuf::from("/some/path"),
-            true,
-        )
-        .unwrap();
+        export_to_obj(&mut reader, &mut writer, NO_MTL).unwrap();
 
         let expected = r#"v 1 2 3
 v 2 3 4

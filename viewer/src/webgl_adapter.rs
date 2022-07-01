@@ -11,13 +11,13 @@ use memoffset::offset_of;
 use wasm_bindgen::JsCast;
 use web_sys::{HtmlCanvasElement, WebGlProgram, WebGlRenderingContext};
 
-use crate::controller::{Adapter, Face, MouseEvent, VertexData};
+use crate::controller::{Adapter, Face, PointerEvent, VertexData};
 use crate::defs::IntoResult;
+use crate::util::glam::point3_to_vec3;
 use crate::util::web;
 use crate::util::webgl;
 use base::defs::Result;
 use base::fm;
-use crate::util::glam::point3_to_vec3;
 
 pub struct WebGlAdapter {
     canvas: HtmlCanvasElement,
@@ -276,13 +276,14 @@ impl Adapter for WebGlAdapter {
         webgl::set_uniform_mat4(&self.context, &self.program, "view", &view)
     }
 
-    fn subscribe_to_mouse_move<F: Fn(&MouseEvent) + 'static>(
+    fn subscribe_to_pointer_move<F: Fn(&PointerEvent) + 'static>(
         self: &Rc<Self>,
         handler: F,
     ) -> Result<Self::Subscription> {
-        let sub = web::subscribe(&self.canvas, "mousemove", move |e| {
-            let event = web_sys::MouseEvent::unchecked_from_js_ref(e.as_ref());
-            handler(&MouseEvent {
+        let sub = web::subscribe(&self.canvas, "pointermove", move |e| {
+            let event =
+                web_sys::PointerEvent::unchecked_from_js_ref(e.as_ref());
+            handler(&PointerEvent {
                 dx: event.movement_x() as f32,
                 dy: event.movement_y() as f32,
                 primary_button: event.buttons() & 1 != 0,
@@ -291,13 +292,13 @@ impl Adapter for WebGlAdapter {
         Ok(sub)
     }
 
-    fn subscribe_to_mouse_wheel<F: Fn(&MouseEvent) + 'static>(
+    fn subscribe_to_wheel<F: Fn(&PointerEvent) + 'static>(
         self: &Rc<Self>,
         handler: F,
     ) -> Result<Self::Subscription> {
         let sub = web::subscribe(&self.canvas, "wheel", move |e| {
             let event = web_sys::WheelEvent::unchecked_from_js_ref(e.as_ref());
-            handler(&MouseEvent {
+            handler(&PointerEvent {
                 dy: event.delta_y() as f32,
                 ..Default::default()
             });

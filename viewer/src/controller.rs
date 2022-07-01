@@ -19,8 +19,8 @@ const DEFAULT_EYE_POSITION: fm::Point3 = fm::Point3 {
     z: 1.0,
 };
 
-const MOUSE_MOVE_ANGLE_FACTOR: f32 = 0.01;
-const MOUSE_WHEEL_SCALE_FACTOR: f32 = -0.001;
+const POINTER_MOVE_ANGLE_FACTOR: f32 = 0.01;
+const WHEEL_SCALE_FACTOR: f32 = -0.001;
 
 #[derive(Clone, Copy, Default)]
 #[repr(C)]
@@ -40,7 +40,7 @@ pub struct Face {
 }
 
 #[derive(Debug, Default)]
-pub struct MouseEvent {
+pub struct PointerEvent {
     pub dx: f32,
     pub dy: f32,
     pub primary_button: bool,
@@ -70,12 +70,12 @@ pub trait Adapter {
 
     fn set_eye_position(self: &Rc<Self>, eye: &fm::Point3) -> Result<()>;
 
-    fn subscribe_to_mouse_move<F: Fn(&MouseEvent) + 'static>(
+    fn subscribe_to_pointer_move<F: Fn(&PointerEvent) + 'static>(
         self: &Rc<Self>,
         handler: F,
     ) -> Result<Self::Subscription>;
 
-    fn subscribe_to_mouse_wheel<F: Fn(&MouseEvent) + 'static>(
+    fn subscribe_to_wheel<F: Fn(&PointerEvent) + 'static>(
         self: &Rc<Self>,
         handler: F,
     ) -> Result<Self::Subscription>;
@@ -250,8 +250,8 @@ impl ControllerData {
 pub struct Controller<A: Adapter> {
     adapter: Rc<A>,
     data: RefCell<ControllerData>,
-    mouse_move_sub: RefCell<Option<A::Subscription>>,
-    mouse_wheel_sub: RefCell<Option<A::Subscription>>,
+    pointer_move_sub: RefCell<Option<A::Subscription>>,
+    wheel_sub: RefCell<Option<A::Subscription>>,
     state: LevelLock<ControllerState>,
     vertices: RefCell<Vec<VertexData>>,
 }
@@ -261,29 +261,29 @@ impl<A: Adapter + 'static> Controller<A> {
         let controller = Rc::new(Self {
             adapter: adapter.clone(),
             data: RefCell::new(ControllerData::default()),
-            mouse_move_sub: RefCell::new(None),
-            mouse_wheel_sub: RefCell::new(None),
+            pointer_move_sub: RefCell::new(None),
+            wheel_sub: RefCell::new(None),
             state: LevelLock::new(ControllerState::Idle),
             vertices: RefCell::new(Vec::new()),
         });
 
         let cloned = controller.clone();
-        let mouse_move_sub = adapter.subscribe_to_mouse_move(move |e| {
-            let _ = cloned.handle_mouse_move(e);
+        let pointer_move_sub = adapter.subscribe_to_pointer_move(move |e| {
+            let _ = cloned.handle_pointer_move(e);
         })?;
         controller
-            .mouse_move_sub
+            .pointer_move_sub
             .borrow_mut()
-            .get_or_insert(mouse_move_sub);
+            .get_or_insert(pointer_move_sub);
 
         let cloned = controller.clone();
-        let mouse_wheel_sub = adapter.subscribe_to_mouse_wheel(move |e| {
-            let _ = cloned.handle_mouse_wheel(e);
+        let wheel_sub = adapter.subscribe_to_wheel(move |e| {
+            let _ = cloned.handle_wheel(e);
         })?;
         controller
-            .mouse_wheel_sub
+            .wheel_sub
             .borrow_mut()
-            .get_or_insert(mouse_wheel_sub);
+            .get_or_insert(wheel_sub);
 
         {
             let mut data = controller.data.borrow_mut();
@@ -298,15 +298,15 @@ impl<A: Adapter + 'static> Controller<A> {
         let guard = self.state.try_lock(ControllerState::HandlingOp).unwrap();
         mem::forget(guard); // Make the object unusable.
 
-        self.mouse_move_sub.borrow_mut().take();
-        self.mouse_wheel_sub.borrow_mut().take();
+        self.pointer_move_sub.borrow_mut().take();
+        self.wheel_sub.borrow_mut().take();
 
         self.reset();
 
         self.adapter.destroy();
     }
 
-    fn handle_mouse_move(self: &Rc<Self>, event: &MouseEvent) -> Result<()> {
+    fn handle_pointer_move(self: &Rc<Self>, event: &PointerEvent) -> Result<()> {
         if !event.primary_button {
             return Ok(());
         }
@@ -315,7 +315,7 @@ impl<A: Adapter + 'static> Controller<A> {
 
         let mut data = self.data.borrow_mut();
 
-        let hor_rot_angle = -event.dx * MOUSE_MOVE_ANGLE_FACTOR;
+        let hor_rot_angle = -event.dx * POINTER_MOVE_ANGLE_FACTOR;
         let hor_rot = Quat::from_euler(EulerRot::YZX, 0.0, hor_rot_angle, 0.0);
         let eye_pos = point3_to_vec3(&data.eye_pos);
         data.eye_pos = vec3_to_point3(&hor_rot.mul_vec3(eye_pos));
@@ -330,7 +330,7 @@ impl<A: Adapter + 'static> Controller<A> {
         };
 
         let vert_rot_angle =
-            data.eye_pos.y.signum() * event.dy * MOUSE_MOVE_ANGLE_FACTOR;
+            data.eye_pos.y.signum() * event.dy * POINTER_MOVE_ANGLE_FACTOR;
         let vert_rot = Quat::from_axis_angle(vert_rot_axis, vert_rot_angle);
         let eye_pos = point3_to_vec3(&data.eye_pos);
         let eye_pos = vec3_to_point3(&vert_rot.mul_vec3(eye_pos));
@@ -350,12 +350,12 @@ impl<A: Adapter + 'static> Controller<A> {
         self.adapter.render_frame()
     }
 
-    fn handle_mouse_wheel(self: &Rc<Self>, event: &MouseEvent) -> Result<()> {
+    fn handle_wheel(self: &Rc<Self>, event: &PointerEvent) -> Result<()> {
         let _guard = self.state.try_lock(ControllerState::HandlingEvent)?;
 
         let mut data = self.data.borrow_mut();
 
-        let scale = 1.0 + event.dy * MOUSE_WHEEL_SCALE_FACTOR;
+        let scale = 1.0 + event.dy * WHEEL_SCALE_FACTOR;
         data.eye_pos.x *= scale;
         data.eye_pos.y *= scale;
         data.eye_pos.z *= scale;
@@ -714,10 +714,10 @@ mod tests {
         set_now_mock: MethodMock<fm::Time, ()>,
         set_texture_mock: MethodMock<(usize, fm::Image), Result<()>>,
         set_vertices_mock: MethodMock<Vec<VertexData>, Result<()>>,
-        subscribe_to_mouse_move_mock:
-            MethodMock<Box<dyn Fn(&MouseEvent)>, Result<String>>,
-        subscribe_to_mouse_wheel_mock:
-            MethodMock<Box<dyn Fn(&MouseEvent)>, Result<String>>,
+        subscribe_to_pointer_move_mock:
+            MethodMock<Box<dyn Fn(&PointerEvent)>, Result<String>>,
+        subscribe_to_wheel_mock:
+            MethodMock<Box<dyn Fn(&PointerEvent)>, Result<String>>,
     }
 
     struct TestAdapter {
@@ -736,8 +736,8 @@ mod tests {
                     set_now_mock: MethodMock::new(),
                     set_texture_mock: MethodMock::new(),
                     set_vertices_mock: MethodMock::new(),
-                    subscribe_to_mouse_move_mock: MethodMock::new(),
-                    subscribe_to_mouse_wheel_mock: MethodMock::new(),
+                    subscribe_to_pointer_move_mock: MethodMock::new(),
+                    subscribe_to_wheel_mock: MethodMock::new(),
                 }),
             })
         }
@@ -752,8 +752,8 @@ mod tests {
             data.set_now_mock.finish();
             data.set_texture_mock.finish();
             data.set_vertices_mock.finish();
-            data.subscribe_to_mouse_move_mock.finish();
-            data.subscribe_to_mouse_wheel_mock.finish();
+            data.subscribe_to_pointer_move_mock.finish();
+            data.subscribe_to_wheel_mock.finish();
         }
     }
 
@@ -806,20 +806,20 @@ mod tests {
                 .call(eye.clone())
         }
 
-        fn subscribe_to_mouse_move<F: Fn(&MouseEvent) + 'static>(
+        fn subscribe_to_pointer_move<F: Fn(&PointerEvent) + 'static>(
             self: &Rc<Self>,
             handler: F,
         ) -> Result<Self::Subscription> {
             let mut data = self.data.borrow_mut();
-            data.subscribe_to_mouse_move_mock.call(Box::new(handler))
+            data.subscribe_to_pointer_move_mock.call(Box::new(handler))
         }
 
-        fn subscribe_to_mouse_wheel<F: Fn(&MouseEvent) + 'static>(
+        fn subscribe_to_wheel<F: Fn(&PointerEvent) + 'static>(
             self: &Rc<Self>,
             handler: F,
         ) -> Result<Self::Subscription> {
             let mut data = self.data.borrow_mut();
-            data.subscribe_to_mouse_wheel_mock.call(Box::new(handler))
+            data.subscribe_to_wheel_mock.call(Box::new(handler))
         }
     }
 
@@ -828,10 +828,10 @@ mod tests {
 
         {
             let mut data = adapter.data.borrow_mut();
-            let ret = Ok(format!("mouse_move_sub"));
-            data.subscribe_to_mouse_move_mock.rets.push(ret);
-            let ret = Ok(format!("mouse_wheel_sub"));
-            data.subscribe_to_mouse_wheel_mock.rets.push(ret);
+            let ret = Ok(format!("pointer_move_sub"));
+            data.subscribe_to_pointer_move_mock.rets.push(ret);
+            let ret = Ok(format!("wheel_sub"));
+            data.subscribe_to_wheel_mock.rets.push(ret);
             data.set_eye_position_mock.rets.push(Ok(()));
         }
 
@@ -839,8 +839,8 @@ mod tests {
 
         {
             let mut data = controller.adapter.data.borrow_mut();
-            let _ = data.subscribe_to_mouse_move_mock.args.pop().unwrap();
-            let _ = data.subscribe_to_mouse_wheel_mock.args.pop().unwrap();
+            let _ = data.subscribe_to_pointer_move_mock.args.pop().unwrap();
+            let _ = data.subscribe_to_wheel_mock.args.pop().unwrap();
             let args = data.set_eye_position_mock.args.pop().unwrap();
             assert_eq!(args, DEFAULT_EYE_POSITION);
         }

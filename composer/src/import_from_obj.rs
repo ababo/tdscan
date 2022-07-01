@@ -87,7 +87,7 @@ pub fn import_obj<F: Fn(&Path) -> Result<Vec<u8>>>(
     for line in BufReader::new(reader).lines().flatten() {
         data.line += 1;
 
-        let parts: Vec<&str> = line.trim().split_whitespace().collect();
+        let parts: Vec<&str> = line.split_whitespace().collect();
         if !parts.is_empty() {
             match parts[0] {
                 "f" => import_f(&mut data, &parts)?,
@@ -227,7 +227,7 @@ fn import_mtllib<F: Fn(&Path) -> Result<Vec<u8>>>(
     for line in BufReader::new(mtl_data.as_slice()).lines().flatten() {
         data.mtl_line += 1;
 
-        let parts: Vec<&str> = line.trim().split_whitespace().collect();
+        let parts: Vec<&str> = line.split_whitespace().collect();
         if !parts.is_empty() {
             match parts[0] {
                 "map_Ka" => {

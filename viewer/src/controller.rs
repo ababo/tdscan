@@ -389,6 +389,7 @@ impl<A: Adapter + 'static> Controller<A> {
         Ok(())
     }
 
+    #[allow(clippy::await_holding_refcell_ref)]
     async fn load_element_view(
         self: &Rc<Self>,
         view: fm::ElementView,

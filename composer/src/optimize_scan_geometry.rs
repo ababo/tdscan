@@ -1,5 +1,6 @@
-use std::result::Result as StdResult;
 use std::collections::HashMap;
+use std::fmt::Write;
+use std::result::Result as StdResult;
 
 use argmin::core::{
     ArgminKV, ArgminOp, Error as ArgminError, Executor, IterState, Observe,
@@ -209,21 +210,25 @@ fn log_geometry_params(scans: &[String], iter: u64, best: f32, params: &[f32]) {
     let mut param_str = String::new();
     for (i, target) in scans.iter().enumerate() {
         let base = i * 7;
-        param_str += &format!(
+        write!(
+            &mut param_str,
             " -y {}={},{},{}",
             target,
             params[base],
             params[base + 1],
             params[base + 2]
-        );
-        param_str += &format!(
+        )
+        .unwrap();
+        write!(
+            &mut param_str,
             " -c {}={},{},{}",
             target,
             params[base + 3],
             params[base + 4],
             params[base + 5]
-        );
-        param_str += &format!(" -l {}={}", target, params[base + 6]);
+        )
+        .unwrap();
+        write!(&mut param_str, " -l {}={}", target, params[base + 6]).unwrap();
     }
     info!("iter {}, best {}, params{}", iter, best, param_str);
 }
@@ -454,7 +459,7 @@ impl ArgminOp for ScanOp {
 
 struct ScanObserver(Vec<String>, Vec<f32>);
 
-impl<'a> Observe<ScanOp> for ScanObserver {
+impl Observe<ScanOp> for ScanObserver {
     fn observe_iter(
         &mut self,
         state: &IterState<ScanOp>,
@@ -476,11 +481,11 @@ mod tests {
 
     #[test]
     fn test_icp_transform() {
-        let t = IcpTransform::new(PI/2.0, 1.0);
+        let t = IcpTransform::new(PI / 2.0, 1.0);
         let v = t.apply(&Vector3::new(2.0, 3.0, 4.0));
         assert_eq_point3!(v, &Vector3::new(-3.0, 2.0, 5.0));
 
-        let t = IcpTransform::new(-PI/2.0, -1.0);
+        let t = IcpTransform::new(-PI / 2.0, -1.0);
         let v = t.apply(&Vector3::new(2.0, 3.0, 4.0));
         assert_eq_point3!(v, &Vector3::new(3.0, -2.0, 3.0));
     }

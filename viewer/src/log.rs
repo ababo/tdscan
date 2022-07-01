@@ -20,13 +20,13 @@ extern "C" {
 
 #[macro_export]
 macro_rules! log {
-    ($($t:tt)*) => (crate::log::log(&format_args!($($t)*).to_string()))
+    ($($t:tt)*) => ($crate::log::log(&format_args!($($t)*).to_string()))
 }
 
 #[cfg(debug)]
 #[macro_export]
 macro_rules! debug {
-    ($($t:tt)*) => (crate::log::debug(&format_args!($($t)*).to_string()))
+    ($($t:tt)*) => ($crate::log::debug(&format_args!($($t)*).to_string()))
 }
 
 #[cfg(not(debug))]
@@ -37,15 +37,15 @@ macro_rules! debug {
 
 #[macro_export]
 macro_rules! info {
-    ($($t:tt)*) => (crate::log::info(&format_args!($($t)*).to_string()))
+    ($($t:tt)*) => ($crate::log::info(&format_args!($($t)*).to_string()))
 }
 
 #[macro_export]
 macro_rules! warn {
-    ($($t:tt)*) => (crate::log::warn(&format_args!($($t)*).to_string()))
+    ($($t:tt)*) => ($crate::log::warn(&format_args!($($t)*).to_string()))
 }
 
 #[macro_export]
 macro_rules! error {
-    ($($t:tt)*) => (crate::log::error(&format_args!($($t)*).to_string()))
+    ($($t:tt)*) => ($crate::log::error(&format_args!($($t)*).to_string()))
 }

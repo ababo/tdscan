@@ -6,10 +6,11 @@ use std::slice::from_raw_parts;
 
 use async_trait::async_trait;
 use glam::{Mat4, Vec3};
+use js_sys::Reflect::{get, set};
 use js_sys::{Uint16Array, Uint8Array};
 use memoffset::offset_of;
 use wasm_bindgen::JsCast;
-use web_sys::{HtmlCanvasElement, WebGlProgram, WebGlRenderingContext};
+use web_sys::{window, HtmlCanvasElement, WebGlProgram, WebGlRenderingContext};
 
 use crate::controller::{Adapter, Face, PointerEvent, VertexData};
 use crate::defs::IntoResult;
@@ -283,9 +284,27 @@ impl Adapter for WebGlAdapter {
         let sub = web::subscribe(&self.canvas, "pointermove", move |e| {
             let event =
                 web_sys::PointerEvent::unchecked_from_js_ref(e.as_ref());
+
+            // PointerEvent.movementX/Y properties are not available on iOS.
+            let name = js_sys::JsString::from("fitsmePrevPointerMove");
+            let prev_event = get(&window().unwrap(), &name).unwrap();
+            set(&window().unwrap(), &name, &e).unwrap();
+            if prev_event.is_undefined() {
+                return;
+            }
+            let prev_event = web_sys::PointerEvent::unchecked_from_js_ref(
+                prev_event.as_ref(),
+            );
+
+            let (mut dx, mut dy) = (event.movement_x(), event.movement_y());
+            if dx == 0 && dy == 0 {
+                dx = event.screen_x() - prev_event.screen_x();
+                dy = event.screen_y() - prev_event.screen_y();
+            }
+
             handler(&PointerEvent {
-                dx: event.movement_x() as f32,
-                dy: event.movement_y() as f32,
+                dx: dx as f32,
+                dy: dy as f32,
                 primary_button: event.buttons() & 1 != 0,
             });
         })?;
